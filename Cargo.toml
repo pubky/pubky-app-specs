@@ -1,0 +1,20 @@
+[package]
+name = "pubky-app-specs"
+version = "0.2.0"
+edition = "2021"
+description = "Pubky.app Data Model Specifications"
+homepage = "https://pubky.app"
+repository = "https://github.com/pubky/pubky-app-specs"
+license = "MIT"
+documentation = "https://github.com/pubky/pubky-app-specs"
+
+[dependencies]
+axum = "0.7.9"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
+utoipa = "5.2.0"
+pubky-common = "0.1.0"
+url = "2.5.4"
+base32 = "0.5.1"
+blake3 = "1.5.4"
+chrono = "0.4.38"
