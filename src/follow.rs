@@ -1,6 +1,6 @@
 use crate::traits::Validatable;
 use crate::types::DynError;
-use axum::async_trait;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// Represents raw homeserver follow object with timestamp

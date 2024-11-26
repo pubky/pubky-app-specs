@@ -1,6 +1,6 @@
 use crate::traits::{TimestampId, Validatable};
 use crate::types::DynError;
-use axum::async_trait;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
