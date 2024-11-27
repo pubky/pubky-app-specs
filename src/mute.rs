@@ -1,6 +1,4 @@
 use crate::traits::Validatable;
-use crate::types::DynError;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// Represents raw homeserver Mute object with timestamp
@@ -12,12 +10,11 @@ use serde::{Deserialize, Serialize};
 ///
 #[derive(Serialize, Deserialize, Default)]
 pub struct PubkyAppMute {
-    pub created_at: i64,
+    created_at: i64,
 }
 
-#[async_trait]
 impl Validatable for PubkyAppMute {
-    async fn validate(&self, _id: &str) -> Result<(), DynError> {
+    fn validate(&self, _id: &str) -> Result<(), String> {
         // TODO: additional Mute validation? E.g, validate `created_at` ?
         Ok(())
     }
