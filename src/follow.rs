@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 ///
 #[derive(Serialize, Deserialize, Default)]
 pub struct PubkyAppFollow {
-    pub created_at: i64,
+    created_at: i64,
 }
 
 #[async_trait]

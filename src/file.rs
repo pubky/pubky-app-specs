@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 /// Profile schema
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PubkyAppFile {
-    pub name: String,
-    pub created_at: i64,
-    pub src: String,
-    pub content_type: String,
-    pub size: i64,
+    name: String,
+    created_at: i64,
+    src: String,
+    content_type: String,
+    size: i64,
 }
 
 impl TimestampId for PubkyAppFile {}

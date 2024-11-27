@@ -1,6 +1,7 @@
-use crate::traits::{HashId, Validatable};
+use crate::traits::{HasPath, HashId, Validatable};
 use crate::types::DynError;
 use async_trait::async_trait;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -15,11 +16,33 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 /// `/pub/pubky.app/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct PubkyAppTag {
     pub uri: String,
     pub label: String,
     pub created_at: i64,
+}
+
+impl PubkyAppTag {
+    pub async fn new(uri: String, label: String) -> Self {
+        let created_at = Utc::now().timestamp_millis();
+        let tag = Self {
+            uri,
+            label,
+            created_at,
+        };
+
+        match tag.sanitize().await {
+            Ok(tag) => tag,
+            Err(_) => Self::default(),
+        }
+    }
+}
+
+impl HasPath for PubkyAppTag {
+    fn get_path(&self) -> String {
+        format!("pubky:///pub/pubky.app/tags/{}", self.create_id())
+    }
 }
 
 #[async_trait]
@@ -66,14 +89,155 @@ impl Validatable for PubkyAppTag {
     }
 }
 
-#[test]
-fn test_create_id() {
-    let tag = PubkyAppTag {
-        uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
-        created_at: 1627849723,
-        label: "cool".to_string(),
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::Validatable;
+    use bytes::Bytes;
+    use tokio;
 
-    let tag_id = tag.create_id();
-    println!("Generated Tag ID: {}", tag_id);
+    #[tokio::test]
+    async fn test_create_id() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            created_at: 1627849723000,
+            label: "cool".to_string(),
+        };
+
+        let tag_id = tag.create_id();
+        println!("Generated Tag ID: {}", tag_id);
+
+        // Assert that the tag ID is of expected length
+        // The length depends on your implementation of create_id
+        assert!(!tag_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_new() {
+        let uri = "https://example.com/post/1".to_string();
+        let label = "interesting".to_string();
+        let tag = PubkyAppTag::new(uri.clone(), label.clone()).await;
+
+        assert_eq!(tag.uri, uri);
+        assert_eq!(tag.label, label);
+        // Check that created_at is recent
+        let now = Utc::now().timestamp_millis();
+        assert!(tag.created_at <= now && tag.created_at >= now - 1000); // within 1 second
+    }
+
+    #[tokio::test]
+    async fn test_get_path() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            created_at: 1627849723000,
+            label: "cool".to_string(),
+        };
+
+        let expected_id = tag.create_id();
+        let expected_path = format!("pubky:///pub/pubky.app/tags/{}", expected_id);
+        let path = tag.get_path();
+
+        assert_eq!(path, expected_path);
+    }
+
+    #[tokio::test]
+    async fn test_sanitize() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            label: "   CoOl  ".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let sanitized_tag = tag.sanitize().await.unwrap();
+        assert_eq!(sanitized_tag.label, "cool");
+    }
+
+    #[tokio::test]
+    async fn test_validate_valid() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(&id).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_invalid_label_length() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            label: "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(&id).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Tag label exceeds maximum length"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_invalid_id() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let invalid_id = "INVALIDID";
+        let result = tag.validate(&invalid_id).await;
+        assert!(result.is_err());
+        // You can check the specific error message if necessary
+    }
+
+    #[tokio::test]
+    async fn test_try_from_valid() {
+        let tag_json = r#"
+        {
+            "uri": "pubky://user_pubky_id/pub/pubky.app/v1/profile.json",
+            "label": "Cool Tag",
+            "created_at": 1627849723000
+        }
+        "#;
+
+        let id = PubkyAppTag::new(
+            "pubky://user_pubky_id/pub/pubky.app/v1/profile.json".to_string(),
+            "Cool Tag".to_string(),
+        )
+        .await
+        .create_id();
+
+        let blob = Bytes::from(tag_json);
+        let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id)
+            .await
+            .unwrap();
+        assert_eq!(
+            tag.uri,
+            "pubky://user_pubky_id/pub/pubky.app/v1/profile.json"
+        );
+        assert_eq!(tag.label, "cool tag"); // After sanitization
+    }
+
+    #[tokio::test]
+    async fn test_try_from_invalid_uri() {
+        let tag_json = r#"
+        {
+            "uri": "invalid_uri",
+            "label": "Cool Tag",
+            "created_at": 1627849723000
+        }
+        "#;
+
+        let id = "SomeID"; // The ID doesn't matter here
+        let blob = Bytes::from(tag_json);
+        let result = <PubkyAppTag as Validatable>::try_from(&blob, &id).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Invalid URI in tag");
+    }
 }

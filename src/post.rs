@@ -14,7 +14,7 @@ const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, ToSchema, Default, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
-pub enum PostKind {
+pub enum PubkyAppPostKind {
     #[default]
     Short,
     Long,
@@ -24,7 +24,7 @@ pub enum PostKind {
     File,
 }
 
-impl fmt::Display for PostKind {
+impl fmt::Display for PubkyAppPostKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let string_repr = serde_json::to_value(self)
             .ok()
@@ -36,9 +36,9 @@ impl fmt::Display for PostKind {
 
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Clone)]
-pub struct PostEmbed {
-    pub kind: PostKind,
-    pub uri: String, // If a repost a `Short` and uri of the reposted post.
+pub struct PubkyAppPostEmbed {
+    kind: PubkyAppPostKind,
+    uri: String, // If a repost a `Short` and uri of the reposted post.
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -50,11 +50,11 @@ pub struct PostEmbed {
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PubkyAppPost {
-    pub content: String,
-    pub kind: PostKind,
-    pub parent: Option<String>, // If a reply, the URI of the parent post.
-    pub embed: Option<PostEmbed>,
-    pub attachments: Option<Vec<String>>,
+    content: String,
+    kind: PubkyAppPostKind,
+    parent: Option<String>, // If a reply, the URI of the parent post.
+    embed: Option<PubkyAppPostEmbed>,
+    attachments: Option<Vec<String>>,
 }
 
 impl TimestampId for PubkyAppPost {}
@@ -72,10 +72,10 @@ impl Validatable for PubkyAppPost {
             content = "empty".to_string()
         }
 
-        // Define content length limits based on PostKind
+        // Define content length limits based on PubkyAppPostKind
         let max_content_length = match self.kind {
-            PostKind::Short => MAX_SHORT_CONTENT_LENGTH,
-            PostKind::Long => MAX_LONG_CONTENT_LENGTH,
+            PubkyAppPostKind::Short => MAX_SHORT_CONTENT_LENGTH,
+            PubkyAppPostKind::Long => MAX_LONG_CONTENT_LENGTH,
             _ => MAX_SHORT_CONTENT_LENGTH, // Default limit for other kinds
         };
 
@@ -94,7 +94,7 @@ impl Validatable for PubkyAppPost {
         // Sanitize embed if present
         let embed = if let Some(embed) = &self.embed {
             match Url::parse(&embed.uri) {
-                Ok(url) => Some(PostEmbed {
+                Ok(url) => Some(PubkyAppPostEmbed {
                     kind: embed.kind.clone(),
                     uri: url.to_string(), // Use normalized version
                 }),
@@ -119,12 +119,12 @@ impl Validatable for PubkyAppPost {
 
         // Validate content length
         match self.kind {
-            PostKind::Short => {
+            PubkyAppPostKind::Short => {
                 if self.content.chars().count() > MAX_SHORT_CONTENT_LENGTH {
                     return Err("Post content exceeds maximum length for Short kind".into());
                 }
             }
-            PostKind::Long => {
+            PubkyAppPostKind::Long => {
                 if self.content.chars().count() > MAX_LONG_CONTENT_LENGTH {
                     return Err("Post content exceeds maximum length for Short kind".into());
                 }

@@ -118,3 +118,7 @@ pub trait Validatable: Sized + DeserializeOwned {
         Ok(self)
     }
 }
+
+pub trait HasPath {
+    fn get_path(&self) -> String;
+}

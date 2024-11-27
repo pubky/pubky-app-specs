@@ -19,18 +19,18 @@ const MAX_STATUS_LENGTH: usize = 50;
 /// URI: /pub/pubky.app/profile.json
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PubkyAppUser {
-    pub name: String,
-    pub bio: Option<String>,
-    pub image: Option<String>,
-    pub links: Option<Vec<UserLink>>,
-    pub status: Option<String>,
+    name: String,
+    bio: Option<String>,
+    image: Option<String>,
+    links: Option<Vec<PubkyAppUserLink>>,
+    status: Option<String>,
 }
 
 /// Represents a user's single link with a title and URL.
 #[derive(Serialize, Deserialize, ToSchema, Default, Clone, Debug)]
-pub struct UserLink {
-    pub title: String,
-    pub url: String,
+pub struct PubkyAppUserLink {
+    title: String,
+    url: String,
 }
 
 #[async_trait]
@@ -105,7 +105,7 @@ impl Validatable for PubkyAppUser {
                                 .collect::<String>();
 
                             // Only keep valid URLs
-                            Some(UserLink { title, url })
+                            Some(PubkyAppUserLink { title, url })
                         }
                         Err(_) => {
                             None // Discard invalid links
