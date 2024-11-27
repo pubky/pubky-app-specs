@@ -1,5 +1,6 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::traits::{HasPath, HashId, Validatable};
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -23,7 +24,11 @@ pub struct PubkyAppTag {
 
 impl PubkyAppTag {
     pub fn new(uri: String, label: String) -> Self {
-        let created_at = Utc::now().timestamp_millis();
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_micros() as i64;
+
         Self {
             uri,
             label,
@@ -124,8 +129,12 @@ mod tests {
         assert_eq!(tag.uri, uri);
         assert_eq!(tag.label, label);
         // Check that created_at is recent
-        let now = Utc::now().timestamp_millis();
-        assert!(tag.created_at <= now && tag.created_at >= now - 1000); // within 1 second
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_micros() as i64;
+
+        assert!(tag.created_at <= now && tag.created_at >= now - 1_000_000); // within 1 second
     }
 
     #[test]

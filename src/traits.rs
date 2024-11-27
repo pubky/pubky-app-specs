@@ -1,15 +1,23 @@
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
 use bytes::Bytes;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
-use pubky_common::timestamp::Timestamp;
 use serde::de::DeserializeOwned;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
     fn create_id(&self) -> String {
-        let timestamp = Timestamp::now();
-        timestamp.to_string()
+        // Get current time in microseconds since UNIX epoch
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_micros();
+
+        // Convert to big-endian bytes
+        let bytes = now.to_be_bytes();
+
+        // Encode the bytes using Base32 with the Crockford alphabet
+        encode(Alphabet::Crockford, &bytes)
     }
 
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
@@ -29,29 +37,29 @@ pub trait TimestampId {
         }
 
         // Convert the decoded bytes to a timestamp in microseconds
-        let timestamp_micros = i64::from_be_bytes(decoded_bytes.try_into().unwrap_or_default());
-        let timestamp: i64 = timestamp_micros / 1_000_000;
+        let timestamp_micros = u64::from_be_bytes(decoded_bytes.try_into().unwrap());
 
-        // Convert the timestamp to a DateTime<Utc>
-        let id_datetime = DateTime::from_timestamp(timestamp, 0)
-            .unwrap_or_default()
-            .date_naive();
+        // Get current time in microseconds
+        let now_micros = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_micros();
 
-        // Define October 1st, 2024, at 00:00:00 UTC
-        let oct_first_2024 = NaiveDate::from_ymd_opt(2024, 10, 1).expect("Invalid date");
+        // Define October 1st, 2024, in microseconds since UNIX epoch
+        let oct_first_2024_micros = 1727740800000000u64; // Timestamp for 2024-10-01 00:00:00 UTC
 
-        // Allowable future duration (2 hours)
-        let max_future = Utc::now().date_naive() + Duration::hours(2);
+        // Allowable future duration (2 hours) in microseconds
+        let max_future_micros = now_micros + 2 * 60 * 60 * 1_000_000;
 
         // Validate that the ID's timestamp is after October 1st, 2024
-        if id_datetime < oct_first_2024 {
+        if timestamp_micros < oct_first_2024_micros {
             return Err(
                 "Validation Error: Invalid ID, timestamp must be after October 1st, 2024".into(),
             );
         }
 
         // Validate that the ID's timestamp is not more than 2 hours in the future
-        if id_datetime > max_future {
+        if timestamp_micros as u128 > max_future_micros {
             return Err("Validation Error: Invalid ID, timestamp is too far in the future".into());
         }
 
