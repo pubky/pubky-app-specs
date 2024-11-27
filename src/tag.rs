@@ -1,6 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::traits::{HasPath, HashId, Validatable};
+use crate::{
+    traits::{HasPath, HashId, Validatable},
+    APP_PATH,
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -17,9 +20,9 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct PubkyAppTag {
-    pub uri: String,
-    pub label: String,
-    pub created_at: i64,
+    uri: String,
+    label: String,
+    created_at: i64,
 }
 
 impl PubkyAppTag {
@@ -40,7 +43,7 @@ impl PubkyAppTag {
 
 impl HasPath for PubkyAppTag {
     fn get_path(&self) -> String {
-        format!("pubky:///pub/pubky.app/tags/{}", self.create_id())
+        format!("{}tags/{}", APP_PATH, self.create_id())
     }
 }
 
@@ -101,7 +104,7 @@ impl Validatable for PubkyAppTag {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Validatable;
+    use crate::{traits::Validatable, APP_PATH};
     use bytes::Bytes;
 
     #[test]
@@ -133,6 +136,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_micros() as i64;
+        println!("TIMESTAMP {}", tag.created_at);
+        println!("TIMESTAMP {}", now);
 
         assert!(tag.created_at <= now && tag.created_at >= now - 1_000_000); // within 1 second
     }
@@ -140,13 +145,13 @@ mod tests {
     #[test]
     fn test_get_path() {
         let tag = PubkyAppTag {
-            uri: "https://example.com/post/1".to_string(),
+            uri: "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032FNCGXE3R0".to_string(),
             created_at: 1627849723000,
             label: "cool".to_string(),
         };
 
         let expected_id = tag.create_id();
-        let expected_path = format!("pubky:///pub/pubky.app/tags/{}", expected_id);
+        let expected_path = format!("{}tags/{}", APP_PATH, expected_id);
         let path = tag.get_path();
 
         assert_eq!(path, expected_path);
@@ -155,7 +160,7 @@ mod tests {
     #[test]
     fn test_sanitize() {
         let tag = PubkyAppTag {
-            uri: "https://example.com/post/1".to_string(),
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
             label: "   CoOl  ".to_string(),
             created_at: 1627849723000,
         };
@@ -167,7 +172,7 @@ mod tests {
     #[test]
     fn test_validate_valid() {
         let tag = PubkyAppTag {
-            uri: "https://example.com/post/1".to_string(),
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
             label: "cool".to_string(),
             created_at: 1627849723000,
         };
@@ -180,7 +185,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_label_length() {
         let tag = PubkyAppTag {
-            uri: "https://example.com/post/1".to_string(),
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
             label: "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
             created_at: 1627849723000,
         };
@@ -197,7 +202,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let tag = PubkyAppTag {
-            uri: "https://example.com/post/1".to_string(),
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
             label: "cool".to_string(),
             created_at: 1627849723000,
         };
@@ -212,24 +217,21 @@ mod tests {
     fn test_try_from_valid() {
         let tag_json = r#"
         {
-            "uri": "pubky://user_pubky_id/pub/pubky.app/v1/profile.json",
+            "uri": "pubky://user_pubky_id/pub/pubky.app/profile.json",
             "label": "Cool Tag",
             "created_at": 1627849723000
         }
         "#;
 
         let id = PubkyAppTag::new(
-            "pubky://user_pubky_id/pub/pubky.app/v1/profile.json".to_string(),
+            "pubky://user_pubky_id/pub/pubky.app/profile.json".to_string(),
             "Cool Tag".to_string(),
         )
         .create_id();
 
         let blob = Bytes::from(tag_json);
         let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id).unwrap();
-        assert_eq!(
-            tag.uri,
-            "pubky://user_pubky_id/pub/pubky.app/v1/profile.json"
-        );
+        assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
         assert_eq!(tag.label, "cool tag"); // After sanitization
     }
 

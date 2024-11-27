@@ -1,4 +1,7 @@
-use crate::traits::{TimestampId, Validatable};
+use crate::{
+    traits::{HasPath, TimestampId, Validatable},
+    APP_PATH,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
@@ -10,7 +13,7 @@ const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
-#[derive(Serialize, Deserialize, ToSchema, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, ToSchema, Default, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PubkyAppPostKind {
     #[default]
@@ -32,11 +35,11 @@ impl fmt::Display for PubkyAppPostKind {
     }
 }
 
-/// Used primarily to best display the content in UI
+/// Represents embedded content within a post
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PubkyAppPostEmbed {
-    kind: PubkyAppPostKind, // If a repost: `short`, and uri of the reposted post.
-    uri: String,
+    kind: PubkyAppPostKind, // Kind of the embedded content
+    uri: String,            // URI of the embedded content
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -55,7 +58,33 @@ pub struct PubkyAppPost {
     attachments: Option<Vec<String>>,
 }
 
+impl PubkyAppPost {
+    /// Creates a new `PubkyAppPost` instance and sanitizes it.
+    pub fn new(
+        content: String,
+        kind: PubkyAppPostKind,
+        parent: Option<String>,
+        embed: Option<PubkyAppPostEmbed>,
+        attachments: Option<Vec<String>>,
+    ) -> Self {
+        let post = PubkyAppPost {
+            content,
+            kind,
+            parent,
+            embed,
+            attachments,
+        };
+        post.sanitize()
+    }
+}
+
 impl TimestampId for PubkyAppPost {}
+
+impl HasPath for PubkyAppPost {
+    fn get_path(&self) -> String {
+        format!("{}posts/{}", APP_PATH, self.create_id())
+    }
+}
 
 impl Validatable for PubkyAppPost {
     fn sanitize(self) -> Self {
@@ -134,8 +163,162 @@ impl Validatable for PubkyAppPost {
             _ => (),
         };
 
-        // TODO: additional validation?
+        // TODO: additional validation. Attachement URLs...?
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::Validatable;
+    use bytes::Bytes;
+
+    #[test]
+    fn test_create_id() {
+        let post = PubkyAppPost::new(
+            "Hello World!".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let post_id = post.create_id();
+        println!("Generated Post ID: {}", post_id);
+
+        // Assert that the post ID is 13 characters long
+        assert_eq!(post_id.len(), 13);
+    }
+
+    #[test]
+    fn test_new() {
+        let content = "This is a test post".to_string();
+        let kind = PubkyAppPostKind::Short;
+        let post = PubkyAppPost::new(content.clone(), kind.clone(), None, None, None);
+
+        assert_eq!(post.content, content);
+        assert_eq!(post.kind, kind);
+        assert!(post.parent.is_none());
+        assert!(post.embed.is_none());
+        assert!(post.attachments.is_none());
+    }
+
+    #[test]
+    fn test_get_path() {
+        let post = PubkyAppPost::new(
+            "Test post".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let post_id = post.create_id();
+        let expected_path_len = format!("{}posts/{}", APP_PATH, post_id).len();
+        let path = post.get_path();
+
+        assert_eq!(path.len(), expected_path_len);
+    }
+
+    #[test]
+    fn test_sanitize() {
+        let content = "  This is a test post with extra whitespace   ".to_string();
+        let post = PubkyAppPost::new(
+            content.clone(),
+            PubkyAppPostKind::Short,
+            Some("invalid uri".to_string()),
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: "invalid uri".to_string(),
+            }),
+            None,
+        );
+
+        let sanitized_post = post.sanitize();
+        assert_eq!(sanitized_post.content, content.trim());
+        assert!(sanitized_post.parent.is_none());
+        assert!(sanitized_post.embed.is_none());
+    }
+
+    #[test]
+    fn test_validate_valid() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(&id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_id() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let invalid_id = "INVALIDID12345";
+        let result = post.validate(&invalid_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_try_from_valid() {
+        let post_json = r#"
+        {
+            "content": "Hello World!",
+            "kind": "short",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let id = PubkyAppPost::new(
+            "Hello World!".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        )
+        .create_id();
+
+        let blob = Bytes::from(post_json);
+        let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
+
+        assert_eq!(post.content, "Hello World!");
+    }
+
+    #[test]
+    fn test_try_from_invalid_content() {
+        let content = "[DELETED]".to_string();
+        let post_json = format!(
+            r#"{{
+                "content": "{}",
+                "kind": "short",
+                "parent": null,
+                "embed": null,
+                "attachments": null
+            }}"#,
+            content
+        );
+
+        let id = PubkyAppPost::new(content.clone(), PubkyAppPostKind::Short, None, None, None)
+            .create_id();
+
+        let blob = Bytes::from(post_json);
+        let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
+
+        assert_eq!(post.content, "empty"); // After sanitization
     }
 }

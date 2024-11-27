@@ -6,6 +6,7 @@ mod post;
 mod tag;
 pub mod traits;
 mod user;
+mod version;
 
 pub use bookmark::PubkyAppBookmark;
 pub use file::PubkyAppFile;
@@ -14,3 +15,4 @@ pub use mute::PubkyAppMute;
 pub use post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use tag::PubkyAppTag;
 pub use user::{PubkyAppUser, PubkyAppUserLink};
+pub use version::{APP_PATH, PROTOCOL, VERSION};

@@ -11,7 +11,7 @@ pub trait TimestampId {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_micros();
+            .as_micros() as u64;
 
         // Convert to big-endian bytes
         let bytes = now.to_be_bytes();
@@ -43,7 +43,7 @@ pub trait TimestampId {
         let now_micros = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_micros();
+            .as_micros() as u64;
 
         // Define October 1st, 2024, in microseconds since UNIX epoch
         let oct_first_2024_micros = 1727740800000000u64; // Timestamp for 2024-10-01 00:00:00 UTC
@@ -59,7 +59,7 @@ pub trait TimestampId {
         }
 
         // Validate that the ID's timestamp is not more than 2 hours in the future
-        if timestamp_micros as u128 > max_future_micros {
+        if timestamp_micros > max_future_micros {
             return Err("Validation Error: Invalid ID, timestamp is too far in the future".into());
         }
 
