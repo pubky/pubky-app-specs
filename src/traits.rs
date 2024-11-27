@@ -1,5 +1,3 @@
-use crate::types::DynError;
-use async_trait::async_trait;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
 use bytes::Bytes;
@@ -7,7 +5,6 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use pubky_common::timestamp::Timestamp;
 use serde::de::DeserializeOwned;
 
-#[async_trait]
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
     fn create_id(&self) -> String {
@@ -17,10 +14,10 @@ pub trait TimestampId {
 
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
     /// 13 characters long, and represents a reasonable timestamp.
-    async fn validate_id(&self, id: &str) -> Result<(), DynError> {
+    fn validate_id(&self, id: &str) -> Result<(), String> {
         // Ensure ID is 13 characters long
         if id.len() != 13 {
-            return Err("Invalid ID length: must be 13 characters".into());
+            return Err("Validation Error: Invalid ID length: must be 13 characters".into());
         }
 
         // Decode the Crockford Base32-encoded ID
@@ -28,7 +25,7 @@ pub trait TimestampId {
             decode(Alphabet::Crockford, id).ok_or("Failed to decode Crockford Base32 ID")?;
 
         if decoded_bytes.len() != 8 {
-            return Err("Invalid ID length after decoding".into());
+            return Err("Validation Error: Invalid ID length after decoding".into());
         }
 
         // Convert the decoded bytes to a timestamp in microseconds
@@ -48,12 +45,14 @@ pub trait TimestampId {
 
         // Validate that the ID's timestamp is after October 1st, 2024
         if id_datetime < oct_first_2024 {
-            return Err("Invalid ID: timestamp must be after October 1st, 2024".into());
+            return Err(
+                "Validation Error: Invalid ID, timestamp must be after October 1st, 2024".into(),
+            );
         }
 
         // Validate that the ID's timestamp is not more than 2 hours in the future
         if id_datetime > max_future {
-            return Err("Invalid ID: timestamp is too far in the future".into());
+            return Err("Validation Error: Invalid ID, timestamp is too far in the future".into());
         }
 
         Ok(())
@@ -61,7 +60,6 @@ pub trait TimestampId {
 }
 
 /// Trait for generating an ID based on the struct's data.
-#[async_trait]
 pub trait HashId {
     fn get_id_data(&self) -> String;
 
@@ -94,7 +92,7 @@ pub trait HashId {
     }
 
     /// Validates that the provided ID matches the generated ID.
-    async fn validate_id(&self, id: &str) -> Result<(), DynError> {
+    fn validate_id(&self, id: &str) -> Result<(), String> {
         let generated_id = self.create_id();
         if generated_id != id {
             return Err(format!("Invalid ID: expected {}, found {}", generated_id, id).into());
@@ -103,19 +101,18 @@ pub trait HashId {
     }
 }
 
-#[async_trait]
 pub trait Validatable: Sized + DeserializeOwned {
-    async fn try_from(blob: &Bytes, id: &str) -> Result<Self, DynError> {
-        let mut instance: Self = serde_json::from_slice(blob)?;
-        instance = instance.sanitize().await?;
-        instance.validate(id).await?;
+    fn try_from(blob: &Bytes, id: &str) -> Result<Self, String> {
+        let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
+        instance = instance.sanitize();
+        instance.validate(id)?;
         Ok(instance)
     }
 
-    async fn validate(&self, id: &str) -> Result<(), DynError>;
+    fn validate(&self, id: &str) -> Result<(), String>;
 
-    async fn sanitize(self) -> Result<Self, DynError> {
-        Ok(self)
+    fn sanitize(self) -> Self {
+        self
     }
 }
 

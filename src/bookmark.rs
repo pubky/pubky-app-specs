@@ -1,6 +1,4 @@
 use crate::traits::{HashId, Validatable};
-use crate::types::DynError;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// Represents raw homeserver bookmark with id
@@ -17,7 +15,6 @@ pub struct PubkyAppBookmark {
     created_at: i64,
 }
 
-#[async_trait]
 impl HashId for PubkyAppBookmark {
     /// Bookmark ID is created based on the hash of the URI bookmarked
     fn get_id_data(&self) -> String {
@@ -25,10 +22,9 @@ impl HashId for PubkyAppBookmark {
     }
 }
 
-#[async_trait]
 impl Validatable for PubkyAppBookmark {
-    async fn validate(&self, id: &str) -> Result<(), DynError> {
-        self.validate_id(id).await?;
+    fn validate(&self, id: &str) -> Result<(), String> {
+        self.validate_id(id)?;
         // TODO: more bookmarks validation?
         Ok(())
     }

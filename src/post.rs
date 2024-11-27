@@ -1,6 +1,4 @@
 use crate::traits::{TimestampId, Validatable};
-use crate::types::DynError;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
@@ -37,8 +35,8 @@ impl fmt::Display for PubkyAppPostKind {
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PubkyAppPostEmbed {
-    kind: PubkyAppPostKind,
-    uri: String, // If a repost a `Short` and uri of the reposted post.
+    kind: PubkyAppPostKind, // If a repost: `short`, and uri of the reposted post.
+    uri: String,
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -59,9 +57,8 @@ pub struct PubkyAppPost {
 
 impl TimestampId for PubkyAppPost {}
 
-#[async_trait]
 impl Validatable for PubkyAppPost {
-    async fn sanitize(self) -> Result<Self, DynError> {
+    fn sanitize(self) -> Self {
         // Sanitize content
         let mut content = self.content.trim().to_string();
 
@@ -104,29 +101,34 @@ impl Validatable for PubkyAppPost {
             None
         };
 
-        Ok(PubkyAppPost {
+        PubkyAppPost {
             content,
             kind: self.kind,
             parent,
             embed,
             attachments: self.attachments,
-        })
+        }
     }
 
-    //TODO: implement full validation rules. Min/Max lengths, post kinds, etc.
-    async fn validate(&self, id: &str) -> Result<(), DynError> {
-        self.validate_id(id).await?;
+    fn validate(&self, id: &str) -> Result<(), String> {
+        self.validate_id(id)?;
 
         // Validate content length
         match self.kind {
             PubkyAppPostKind::Short => {
                 if self.content.chars().count() > MAX_SHORT_CONTENT_LENGTH {
-                    return Err("Post content exceeds maximum length for Short kind".into());
+                    return Err(
+                        "Validation Error: Post content exceeds maximum length for Short kind"
+                            .into(),
+                    );
                 }
             }
             PubkyAppPostKind::Long => {
                 if self.content.chars().count() > MAX_LONG_CONTENT_LENGTH {
-                    return Err("Post content exceeds maximum length for Short kind".into());
+                    return Err(
+                        "Validation Error: Post content exceeds maximum length for Short kind"
+                            .into(),
+                    );
                 }
             }
             _ => (),

@@ -5,7 +5,6 @@ mod mute;
 mod post;
 mod tag;
 pub mod traits;
-mod types;
 mod user;
 
 pub use bookmark::PubkyAppBookmark;
