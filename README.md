@@ -1,12 +1,12 @@
 # Pubky.app Data Model Specification
 
-*Version 0.2.0*
+_Version 0.2.0_
 
 ## Introduction
 
 This document specifies the data models and validation rules for the Pubky.app client and homeserver interactions. It defines the structures of data entities, their properties, and the validation rules to ensure data integrity and consistency. This specification is intended for developers who wish to implement their own libraries or clients compatible with Pubky.app.
 
-This document intents to be a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-nexus/tree/main/src/models/pubky_app). If you intend to develop in Rust, use them directly. In case of disagreement between this document and the Rust implementation, the Rust implementation prevails.
+This document intents to be a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src). If you intend to develop in Rust, use them directly. In case of disagreement between this document and the Rust implementation, the Rust implementation prevails.
 
 ## Data Models
 
@@ -32,17 +32,21 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Validation Rules:**
 
 - **`name`:**
+
   - Must be at least **3** and at most **50** characters.
   - Cannot be the keyword `[DELETED]`; this is reserved for deleted profiles.
 
 - **`bio`:**
+
   - Maximum length of **160** characters if provided.
 
 - **`image`:**
+
   - If provided, must be a valid URL.
   - Maximum length of **300** characters.
 
 - **`links`:**
+
   - Maximum of **5** links.
   - Each `UserLink` must have:
     - `title`: Maximum length of **100** characters.
@@ -70,6 +74,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Validation Rules:**
 
 - **ID Validation:**
+
   - The `file_id` in the URI must be a valid **Timestamp ID** (see [ID Generation](#id-generation)).
 
 - **Additional Validation:**
@@ -87,6 +92,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 - `content` (string, required): The content of the post.
 - `kind` (string, required): The type of post. Possible values are:
+
   - `Short`
   - `Long`
   - `Image`
@@ -106,9 +112,11 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Validation Rules:**
 
 - **ID Validation:**
+
   - The `post_id` in the URI must be a valid **Timestamp ID** (see [ID Generation](#id-generation)).
 
 - **`content`:**
+
   - Must not be the keyword `[DELETED]`; this is reserved for deleted posts.
   - **For `kind` of `Short`:**
     - Maximum length of **1000** characters.
@@ -118,9 +126,11 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
     - Maximum length of **1000** characters.
 
 - **`parent`:**
+
   - If provided, must be a valid URI.
 
 - **`embed`:**
+
   - If provided:
     - `uri` must be a valid URI.
 
@@ -144,9 +154,11 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Validation Rules:**
 
 - **ID Validation:**
+
   - The `tag_id` in the URI must be a valid **Hash ID** generated from the `uri` and `label` (see [ID Generation](#id-generation)).
 
 - **`uri`:**
+
   - Must be a valid URI.
 
 - **`label`:**
@@ -169,6 +181,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Validation Rules:**
 
 - **ID Validation:**
+
   - The `bookmark_id` in the URI must be a valid **Hash ID** generated from the `uri` (see [ID Generation](#id-generation)).
 
 - **`uri`:**
@@ -217,6 +230,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 #### IDs
 
 - **Timestamp IDs**: IDs generated based on the current timestamp, encoded in Crockford Base32.
+
   - Must be **13** characters long.
   - Decoded ID must represent a valid timestamp after **October 1st, 2024**.
   - Timestamp must not be more than **2 hours** in the future.
@@ -245,7 +259,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
   - Converted to lowercase.
   - Maximum length of 20 characters.
 
---- 
+---
 
 ### PubkyAppFeed
 
@@ -256,6 +270,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 **Fields:**
 
 - `feed` (object, required): The main configuration object for the feed.
+
   - `tags` (array of strings, optional): Tags used to filter content within the feed.
   - `reach` (string, required): Defines the visibility or scope of the feed. Possible values are:
     - `following`: Content from followed users.
@@ -360,6 +375,7 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
   "status": "Exploring the decentralized web."
 }
 ```
+
 ### Example of PubkyAppPost
 
 ```json
@@ -383,10 +399,11 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 ```
 
 ## Notes
+
 - All timestamps are Unix epoch times in seconds.
 - Developers should ensure that all validation rules are enforced to maintain data integrity and interoperability between clients.
 - This specification may be updated in future versions to include additional fields or validation rules.
 
 ## License
-This specification is released under the MIT License.
 
+This specification is released under the MIT License.
