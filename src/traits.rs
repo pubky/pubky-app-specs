@@ -125,5 +125,5 @@ pub trait Validatable: Sized + DeserializeOwned {
 }
 
 pub trait HasPath {
-    fn get_path(&self) -> String;
+    fn create_path(&self) -> String;
 }

@@ -81,7 +81,7 @@ impl PubkyAppPost {
 impl TimestampId for PubkyAppPost {}
 
 impl HasPath for PubkyAppPost {
-    fn get_path(&self) -> String {
+    fn create_path(&self) -> String {
         format!("{}posts/{}", APP_PATH, self.create_id())
     }
 }
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_path() {
+    fn test_create_path() {
         let post = PubkyAppPost::new(
             "Test post".to_string(),
             PubkyAppPostKind::Short,
@@ -217,7 +217,7 @@ mod tests {
 
         let post_id = post.create_id();
         let expected_path_len = format!("{}posts/{}", APP_PATH, post_id).len();
-        let path = post.get_path();
+        let path = post.create_path();
 
         assert_eq!(path.len(), expected_path_len);
     }

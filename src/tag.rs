@@ -42,7 +42,7 @@ impl PubkyAppTag {
 }
 
 impl HasPath for PubkyAppTag {
-    fn get_path(&self) -> String {
+    fn create_path(&self) -> String {
         format!("{}tags/{}", APP_PATH, self.create_id())
     }
 }
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_path() {
+    fn test_create_path() {
         let tag = PubkyAppTag {
             uri: "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032FNCGXE3R0".to_string(),
             created_at: 1627849723000,
@@ -152,7 +152,7 @@ mod tests {
 
         let expected_id = tag.create_id();
         let expected_path = format!("{}tags/{}", APP_PATH, expected_id);
-        let path = tag.get_path();
+        let path = tag.create_path();
 
         assert_eq!(path, expected_path);
     }
