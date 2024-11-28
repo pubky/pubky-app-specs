@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 ///
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct PubkyAppFollow {
-    created_at: i64,
+    pub created_at: i64,
 }
 
 impl PubkyAppFollow {

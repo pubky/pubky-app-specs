@@ -19,9 +19,9 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct PubkyAppTag {
-    uri: String,
-    label: String,
-    created_at: i64,
+    pub uri: String,
+    pub label: String,
+    pub created_at: i64,
 }
 
 impl PubkyAppTag {

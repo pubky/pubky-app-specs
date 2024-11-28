@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
 #[derive(Serialize, Deserialize, Default)]
 pub struct PubkyAppBookmark {
-    uri: String,
-    created_at: i64,
+    pub uri: String,
+    pub created_at: i64,
 }
 
 impl PubkyAppBookmark {

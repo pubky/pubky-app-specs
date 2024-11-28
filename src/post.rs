@@ -37,8 +37,8 @@ impl fmt::Display for PubkyAppPostKind {
 /// Represents embedded content within a post
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PubkyAppPostEmbed {
-    kind: PubkyAppPostKind, // Kind of the embedded content
-    uri: String,            // URI of the embedded content
+    pub kind: PubkyAppPostKind, // Kind of the embedded content
+    pub uri: String,            // URI of the embedded content
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -50,11 +50,11 @@ pub struct PubkyAppPostEmbed {
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PubkyAppPost {
-    content: String,
-    kind: PubkyAppPostKind,
-    parent: Option<String>, // If a reply, the URI of the parent post.
-    embed: Option<PubkyAppPostEmbed>,
-    attachments: Option<Vec<String>>,
+    pub content: String,
+    pub kind: PubkyAppPostKind,
+    pub parent: Option<String>, // If a reply, the URI of the parent post.
+    pub embed: Option<PubkyAppPostEmbed>,
+    pub attachments: Option<Vec<String>>,
 }
 
 impl PubkyAppPost {

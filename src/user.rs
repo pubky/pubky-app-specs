@@ -15,22 +15,21 @@ const MAX_LINK_TITLE_LENGTH: usize = 100;
 const MAX_LINK_URL_LENGTH: usize = 300;
 const MAX_STATUS_LENGTH: usize = 50;
 
-/// Profile schema
 /// URI: /pub/pubky.app/profile.json
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct PubkyAppUser {
-    name: String,
-    bio: Option<String>,
-    image: Option<String>,
-    links: Option<Vec<PubkyAppUserLink>>,
-    status: Option<String>,
+    pub name: String,
+    pub bio: Option<String>,
+    pub image: Option<String>,
+    pub links: Option<Vec<PubkyAppUserLink>>,
+    pub status: Option<String>,
 }
 
 /// Represents a user's single link with a title and URL.
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct PubkyAppUserLink {
-    title: String,
-    url: String,
+    pub title: String,
+    pub url: String,
 }
 
 impl PubkyAppUser {

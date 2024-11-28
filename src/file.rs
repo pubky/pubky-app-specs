@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 /// URI: /pub/pubky.app/files/:file_id
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct PubkyAppFile {
-    name: String,
-    created_at: i64,
-    src: String,
-    content_type: String,
-    size: i64,
+    pub name: String,
+    pub created_at: i64,
+    pub src: String,
+    pub content_type: String,
+    pub size: i64,
 }
 
 impl PubkyAppFile {
