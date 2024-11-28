@@ -216,9 +216,13 @@ mod tests {
         );
 
         let post_id = post.create_id();
-        let expected_path_len = format!("{}posts/{}", APP_PATH, post_id).len();
         let path = post.create_path();
 
+        // Check if the path starts with the expected prefix
+        let prefix = format!("{}posts/", APP_PATH);
+        assert!(path.starts_with(&prefix));
+
+        let expected_path_len = prefix.len() + post_id.len();
         assert_eq!(path.len(), expected_path_len);
     }
 

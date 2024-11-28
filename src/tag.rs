@@ -1,6 +1,5 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{
+    common::timestamp,
     traits::{HasPath, HashId, Validatable},
     APP_PATH,
 };
@@ -27,11 +26,7 @@ pub struct PubkyAppTag {
 
 impl PubkyAppTag {
     pub fn new(uri: String, label: String) -> Self {
-        let created_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as i64;
-
+        let created_at = timestamp();
         Self {
             uri,
             label,
@@ -132,10 +127,7 @@ mod tests {
         assert_eq!(tag.uri, uri);
         assert_eq!(tag.label, label);
         // Check that created_at is recent
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as i64;
+        let now = timestamp();
         println!("TIMESTAMP {}", tag.created_at);
         println!("TIMESTAMP {}", now);
 

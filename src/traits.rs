@@ -1,17 +1,14 @@
+use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
 use bytes::Bytes;
 use serde::de::DeserializeOwned;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
     fn create_id(&self) -> String {
         // Get current time in microseconds since UNIX epoch
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as u64;
+        let now = timestamp();
 
         // Convert to big-endian bytes
         let bytes = now.to_be_bytes();
@@ -37,16 +34,13 @@ pub trait TimestampId {
         }
 
         // Convert the decoded bytes to a timestamp in microseconds
-        let timestamp_micros = u64::from_be_bytes(decoded_bytes.try_into().unwrap());
+        let timestamp_micros = i64::from_be_bytes(decoded_bytes.try_into().unwrap());
 
         // Get current time in microseconds
-        let now_micros = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as u64;
+        let now_micros = timestamp();
 
         // Define October 1st, 2024, in microseconds since UNIX epoch
-        let oct_first_2024_micros = 1727740800000000u64; // Timestamp for 2024-10-01 00:00:00 UTC
+        let oct_first_2024_micros = 1727740800000000; // Timestamp for 2024-10-01 00:00:00 UTC
 
         // Allowable future duration (2 hours) in microseconds
         let max_future_micros = now_micros + 2 * 60 * 60 * 1_000_000;

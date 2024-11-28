@@ -1,9 +1,9 @@
 use crate::{
+    common::timestamp,
     traits::{HasPath, HashId, Validatable},
     APP_PATH,
 };
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Represents raw homeserver bookmark with id
 /// URI: /pub/pubky.app/bookmarks/:bookmark_id
@@ -22,10 +22,7 @@ pub struct PubkyAppBookmark {
 impl PubkyAppBookmark {
     /// Creates a new `PubkyAppBookmark` instance.
     pub fn new(uri: String) -> Self {
-        let created_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as i64;
+        let created_at = timestamp();
         Self { uri, created_at }.sanitize()
     }
 }
