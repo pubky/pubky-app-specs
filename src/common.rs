@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub static VERSION: &str = "0.2.0";
+pub static VERSION: &str = "0.2.1";
 pub static APP_PATH: &str = "/pub/pubky.app/";
 pub static PROTOCOL: &str = "pubky://";
 
