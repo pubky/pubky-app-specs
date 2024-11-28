@@ -100,7 +100,6 @@ impl Validatable for PubkyAppTag {
 mod tests {
     use super::*;
     use crate::{traits::Validatable, APP_PATH};
-    use bytes::Bytes;
 
     #[test]
     fn test_create_id() {
@@ -221,7 +220,7 @@ mod tests {
         )
         .create_id();
 
-        let blob = Bytes::from(tag_json);
+        let blob = tag_json.as_bytes();
         let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id).unwrap();
         assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
         assert_eq!(tag.label, "cool tag"); // After sanitization
@@ -238,7 +237,7 @@ mod tests {
         "#;
 
         let id = "B55PGPFV1E5E0HQ2PB76EQGXPR";
-        let blob = Bytes::from(tag_json);
+        let blob = tag_json.as_bytes();
         let result = <PubkyAppTag as Validatable>::try_from(&blob, &id);
         assert!(result.is_err());
         assert_eq!(

@@ -52,7 +52,6 @@ impl Validatable for PubkyAppBookmark {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use bytes::Bytes;
 
     #[test]
     fn test_create_bookmark_id() {
@@ -107,7 +106,7 @@ mod tests {
         let bookmark = PubkyAppBookmark::new(uri.clone());
         let id = bookmark.create_id();
 
-        let blob = Bytes::from(bookmark_json);
+        let blob = bookmark_json.as_bytes();
         let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(&blob, &id).unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);

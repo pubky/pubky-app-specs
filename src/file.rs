@@ -52,7 +52,6 @@ impl Validatable for PubkyAppFile {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use bytes::Bytes;
 
     #[test]
     fn test_new() {
@@ -136,7 +135,7 @@ mod tests {
         );
         let id = file.create_id();
 
-        let blob = Bytes::from(file_json);
+        let blob = file_json.as_bytes();
         let file_parsed = <PubkyAppFile as Validatable>::try_from(&blob, &id).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");

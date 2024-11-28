@@ -1,7 +1,6 @@
 use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
-use bytes::Bytes;
 use serde::de::DeserializeOwned;
 
 pub trait TimestampId {
@@ -104,7 +103,7 @@ pub trait HashId {
 }
 
 pub trait Validatable: Sized + DeserializeOwned {
-    fn try_from(blob: &Bytes, id: &str) -> Result<Self, String> {
+    fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
         instance.validate(id)?;
@@ -120,4 +119,8 @@ pub trait Validatable: Sized + DeserializeOwned {
 
 pub trait HasPath {
     fn create_path(&self) -> String;
+}
+
+pub trait HasPubkyIdPath {
+    fn create_path(&self, pubky_id: &str) -> String;
 }

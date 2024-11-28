@@ -5,7 +5,6 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
-use utoipa::ToSchema;
 
 // Validation
 const MAX_SHORT_CONTENT_LENGTH: usize = 1000;
@@ -13,7 +12,7 @@ const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
-#[derive(Serialize, Deserialize, ToSchema, Default, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PubkyAppPostKind {
     #[default]
@@ -173,7 +172,6 @@ impl Validatable for PubkyAppPost {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use bytes::Bytes;
 
     #[test]
     fn test_create_id() {
@@ -297,7 +295,7 @@ mod tests {
         )
         .create_id();
 
-        let blob = Bytes::from(post_json);
+        let blob = post_json.as_bytes();
         let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
 
         assert_eq!(post.content, "Hello World!");
@@ -320,7 +318,7 @@ mod tests {
         let id = PubkyAppPost::new(content.clone(), PubkyAppPostKind::Short, None, None, None)
             .create_id();
 
-        let blob = Bytes::from(post_json);
+        let blob = post_json.as_bytes();
         let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
 
         assert_eq!(post.content, "empty"); // After sanitization
