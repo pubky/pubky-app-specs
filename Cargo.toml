@@ -16,5 +16,11 @@ base32 = "0.5.1"
 blake3 = "1.5.4"
 utoipa = { version = "5.2.0", optional = true }
 
+[dev-dependencies]
+pubky = "0.3.0"
+pubky-common = "0.1.0"
+anyhow = "1"
+tokio = { version = "1.41.1", features = ["full"] }
+
 [features]
 openapi = ["utoipa"]
