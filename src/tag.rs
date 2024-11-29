@@ -1,11 +1,16 @@
-use crate::traits::{HashId, Validatable};
-use crate::types::DynError;
-use async_trait::async_trait;
+use crate::{
+    common::timestamp,
+    traits::{HasPath, HashId, Validatable},
+    APP_PATH,
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
+
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 /// Represents raw homeserver tag with id
 /// URI: /pub/pubky.app/tags/:tag_id
@@ -15,14 +20,32 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 /// `/pub/pubky.app/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
     pub uri: String,
     pub label: String,
     pub created_at: i64,
 }
 
-#[async_trait]
+impl PubkyAppTag {
+    pub fn new(uri: String, label: String) -> Self {
+        let created_at = timestamp();
+        Self {
+            uri,
+            label,
+            created_at,
+        }
+        .sanitize()
+    }
+}
+
+impl HasPath for PubkyAppTag {
+    fn create_path(&self) -> String {
+        format!("{}tags/{}", APP_PATH, self.create_id())
+    }
+}
+
 impl HashId for PubkyAppTag {
     /// Tag ID is created based on the hash of the URI tagged and the label used
     fn get_id_data(&self) -> String {
@@ -30,9 +53,8 @@ impl HashId for PubkyAppTag {
     }
 }
 
-#[async_trait]
 impl Validatable for PubkyAppTag {
-    async fn sanitize(self) -> Result<Self, DynError> {
+    fn sanitize(self) -> Self {
         // Convert label to lowercase and trim
         let label = self.label.trim().to_lowercase();
 
@@ -41,39 +63,190 @@ impl Validatable for PubkyAppTag {
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
-            Ok(url) => url.to_string(),
-            Err(_) => return Err("Invalid URI in tag".into()),
+            Ok(url) => {
+                // If the URL is valid, reformat it to a sanitized string representation
+                url.to_string()
+            }
+            Err(_) => {
+                // If the URL is invalid, return as-is for error reporting later
+                self.uri.trim().to_string()
+            }
         };
 
-        Ok(PubkyAppTag {
+        PubkyAppTag {
             uri,
             label,
             created_at: self.created_at,
-        })
+        }
     }
 
-    async fn validate(&self, id: &str) -> Result<(), DynError> {
-        self.validate_id(id).await?;
+    fn validate(&self, id: &str) -> Result<(), String> {
+        // Validate the tag ID
+        self.validate_id(id)?;
 
-        // Validate label length based on characters
+        // Validate label length
         if self.label.chars().count() > MAX_TAG_LABEL_LENGTH {
-            return Err("Tag label exceeds maximum length".into());
+            return Err("Validation Error: Tag label exceeds maximum length".to_string());
         }
 
-        // TODO: more validation?
-
-        Ok(())
+        // Validate URI format
+        match Url::parse(&self.uri) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(format!(
+                "Validation Error: Invalid URI format: {}",
+                self.uri
+            )),
+        }
     }
 }
 
-#[test]
-fn test_create_id() {
-    let tag = PubkyAppTag {
-        uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
-        created_at: 1627849723,
-        label: "cool".to_string(),
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{traits::Validatable, APP_PATH};
 
-    let tag_id = tag.create_id();
-    println!("Generated Tag ID: {}", tag_id);
+    #[test]
+    fn test_create_id() {
+        let tag = PubkyAppTag {
+            uri: "https://example.com/post/1".to_string(),
+            created_at: 1627849723000,
+            label: "cool".to_string(),
+        };
+
+        let tag_id = tag.create_id();
+        println!("Generated Tag ID: {}", tag_id);
+
+        // Assert that the tag ID is of expected length
+        // The length depends on your implementation of create_id
+        assert!(!tag_id.is_empty());
+    }
+
+    #[test]
+    fn test_new() {
+        let uri = "https://example.com/post/1".to_string();
+        let label = "interesting".to_string();
+        let tag = PubkyAppTag::new(uri.clone(), label.clone());
+
+        assert_eq!(tag.uri, uri);
+        assert_eq!(tag.label, label);
+        // Check that created_at is recent
+        let now = timestamp();
+        println!("TIMESTAMP {}", tag.created_at);
+        println!("TIMESTAMP {}", now);
+
+        assert!(tag.created_at <= now && tag.created_at >= now - 1_000_000); // within 1 second
+    }
+
+    #[test]
+    fn test_create_path() {
+        let tag = PubkyAppTag {
+            uri: "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032FNCGXE3R0".to_string(),
+            created_at: 1627849723000,
+            label: "cool".to_string(),
+        };
+
+        let expected_id = tag.create_id();
+        let expected_path = format!("{}tags/{}", APP_PATH, expected_id);
+        let path = tag.create_path();
+
+        assert_eq!(path, expected_path);
+    }
+
+    #[test]
+    fn test_sanitize() {
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            label: "   CoOl  ".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let sanitized_tag = tag.sanitize();
+        assert_eq!(sanitized_tag.label, "cool");
+    }
+
+    #[test]
+    fn test_validate_valid() {
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(&id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_label_length() {
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            label: "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(&id);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Validation Error: Tag label exceeds maximum length"
+        );
+    }
+
+    #[test]
+    fn test_validate_invalid_id() {
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let invalid_id = "INVALIDID";
+        let result = tag.validate(&invalid_id);
+        assert!(result.is_err());
+        // You can check the specific error message if necessary
+    }
+
+    #[test]
+    fn test_try_from_valid() {
+        let tag_json = r#"
+        {
+            "uri": "pubky://user_pubky_id/pub/pubky.app/profile.json",
+            "label": "Cool Tag",
+            "created_at": 1627849723000
+        }
+        "#;
+
+        let id = PubkyAppTag::new(
+            "pubky://user_pubky_id/pub/pubky.app/profile.json".to_string(),
+            "Cool Tag".to_string(),
+        )
+        .create_id();
+
+        let blob = tag_json.as_bytes();
+        let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id).unwrap();
+        assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
+        assert_eq!(tag.label, "cool tag"); // After sanitization
+    }
+
+    #[test]
+    fn test_try_from_invalid_uri() {
+        let tag_json = r#"
+        {
+            "uri": "invalid_uri",
+            "label": "Cool Tag",
+            "created_at": 1627849723000
+        }
+        "#;
+
+        let id = "B55PGPFV1E5E0HQ2PB76EQGXPR";
+        let blob = tag_json.as_bytes();
+        let result = <PubkyAppTag as Validatable>::try_from(&blob, &id);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Validation Error: Invalid URI format: invalid_uri"
+        );
+    }
 }
