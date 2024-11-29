@@ -15,8 +15,12 @@ const MAX_LINK_TITLE_LENGTH: usize = 100;
 const MAX_LINK_URL_LENGTH: usize = 300;
 const MAX_STATUS_LENGTH: usize = 50;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// URI: /pub/pubky.app/profile.json
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUser {
     pub name: String,
     pub bio: Option<String>,
@@ -27,6 +31,7 @@ pub struct PubkyAppUser {
 
 /// Represents a user's single link with a title and URL.
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUserLink {
     pub title: String,
     pub url: String,

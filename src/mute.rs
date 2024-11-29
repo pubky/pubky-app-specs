@@ -5,6 +5,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver Mute object with timestamp
 /// URI: /pub/pubky.app/mutes/:user_id
 ///
@@ -13,6 +16,7 @@ use serde::{Deserialize, Serialize};
 /// `/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppMute {
     pub created_at: i64,
 }

@@ -5,6 +5,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver follow object with timestamp
 ///
 /// On follow objects, the main data is encoded in the path
@@ -16,6 +19,7 @@ use serde::{Deserialize, Serialize};
 /// `/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFollow {
     pub created_at: i64,
 }

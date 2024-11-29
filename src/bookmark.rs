@@ -5,6 +5,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver bookmark with id
 /// URI: /pub/pubky.app/bookmarks/:bookmark_id
 ///
@@ -14,6 +17,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
 #[derive(Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
     pub uri: String,
     pub created_at: i64,

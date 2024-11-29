@@ -9,6 +9,9 @@ use url::Url;
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver tag with id
 /// URI: /pub/pubky.app/tags/:tag_id
 ///
@@ -18,6 +21,7 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
     pub uri: String,
     pub label: String,

@@ -5,9 +5,13 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFile {
     pub name: String,
     pub created_at: i64,

@@ -10,10 +10,14 @@ use url::Url;
 const MAX_SHORT_CONTENT_LENGTH: usize = 1000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppPostKind {
     #[default]
     Short,
@@ -36,6 +40,7 @@ impl fmt::Display for PubkyAppPostKind {
 
 /// Represents embedded content within a post
 #[derive(Serialize, Deserialize, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPostEmbed {
     pub kind: PubkyAppPostKind, // Kind of the embedded content
     pub uri: String,            // URI of the embedded content
@@ -49,6 +54,7 @@ pub struct PubkyAppPostEmbed {
 ///
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
 #[derive(Serialize, Deserialize, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPost {
     pub content: String,
     pub kind: PubkyAppPostKind,
