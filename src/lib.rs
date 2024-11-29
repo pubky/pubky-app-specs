@@ -1,7 +1,9 @@
 mod bookmark;
 mod common;
+mod feed;
 mod file;
 mod follow;
+mod last_read;
 mod mute;
 mod post;
 mod tag;
@@ -10,8 +12,10 @@ mod user;
 
 pub use bookmark::PubkyAppBookmark;
 pub use common::{APP_PATH, PROTOCOL, VERSION};
+pub use feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
 pub use file::PubkyAppFile;
 pub use follow::PubkyAppFollow;
+pub use last_read::PubkyAppLastRead;
 pub use mute::PubkyAppMute;
 pub use post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use tag::PubkyAppTag;

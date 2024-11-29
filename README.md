@@ -284,12 +284,13 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
   - `sort` (string, required): Determines the sorting order of the feed content. Supported values are:
     - `recent`: Most recent content first.
     - `popularity`: Content with the highest engagement.
-  - `content` (string, required): Defines the type of content displayed. Options include:
-    - `all`: Includes all content types.
-    - `posts`: Only posts are shown.
-    - `images`: Only media images.
-    - `videos`: Only media videos.
-    - `links`: Only links.
+  - `content` (string, optional): Defines the type of content to filter. Possible values are the same as post kinds:
+    - `short`
+    - `long`
+    - `image`
+    - `video`
+    - `link`
+    - `file`
 
 - `name` (string, required): The user-defined name for this feed configuration.
 - `created_at` (integer, required): Timestamp (Unix epoch in milliseconds) representing when the feed was created.

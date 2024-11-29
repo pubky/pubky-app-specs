@@ -55,8 +55,8 @@ mod tests {
         let follow = PubkyAppFollow::new();
         // Check that created_at is recent
         let now = timestamp();
-        assert!(follow.created_at <= now && follow.created_at >= now - 1_000_000);
         // within 1 second
+        assert!(follow.created_at <= now && follow.created_at >= now - 1_000_000);
     }
 
     #[test]
