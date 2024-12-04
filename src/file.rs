@@ -1,12 +1,21 @@
+use std::str::FromStr;
+
 use crate::{
     common::timestamp,
     traits::{HasPath, TimestampId, Validatable},
     APP_PATH,
 };
+use mime::Mime;
 use serde::{Deserialize, Serialize};
 
+use url::Url;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
+
+const MIN_NAME_LENGTH: usize = 1;
+const MAX_NAME_LENGTH: usize = 255;
+const MAX_SRC_LENGTH: usize = 1024;
+const MAX_SIZE: i64 = 10_000_000; // 10 MB
 
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
@@ -31,6 +40,7 @@ impl PubkyAppFile {
             content_type,
             size,
         }
+        .sanitize()
     }
 }
 
@@ -43,11 +53,59 @@ impl HasPath for PubkyAppFile {
 }
 
 impl Validatable for PubkyAppFile {
-    // TODO: content_type validation.
+    fn sanitize(self) -> Self {
+        let name = self.name.trim().chars().take(MAX_NAME_LENGTH).collect();
+
+        let sanitized_src = self
+            .src
+            .trim()
+            .chars()
+            .take(MAX_SRC_LENGTH)
+            .collect::<String>();
+
+        let src = match Url::parse(&sanitized_src) {
+            Ok(_) => Some(sanitized_src),
+            Err(_) => None, // Invalid src URL, set to None
+        };
+
+        let content_type = self.content_type.trim().to_string();
+
+        Self {
+            name,
+            created_at: self.created_at,
+            src: src.unwrap_or("".to_string()),
+            content_type,
+            size: self.size,
+        }
+    }
+
     fn validate(&self, id: &str) -> Result<(), String> {
         self.validate_id(id)?;
-        // TODO: content_type validation.
-        // TODO: size and other validation.
+
+        // Validate name
+        let name_length = self.name.chars().count();
+
+        if !(MIN_NAME_LENGTH..=MAX_NAME_LENGTH).contains(&name_length) {
+            return Err("Validation Error: Invalid name length".into());
+        }
+
+        // Validate src
+        if self.src.chars().count() == 0 {
+            return Err("Validation Error: Invalid src".into());
+        }
+        if self.src.chars().count() > MAX_SRC_LENGTH {
+            return Err("Validation Error: src exceeds maximum length".into());
+        }
+
+        // Validate content type
+        if Mime::from_str(&self.content_type).is_err() {
+            return Err("Validation Error: Invalid content type".into());
+        }
+
+        // Validate size
+        if self.size <= 0 || self.size > MAX_SIZE {
+            return Err("Validation Error: Invalid size".into());
+        }
         Ok(())
     }
 }
@@ -97,7 +155,7 @@ mod tests {
     fn test_validate_valid() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "/uploads/example.png".to_string(),
+            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
             "image/png".to_string(),
             1024,
         );
@@ -110,7 +168,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "/uploads/example.png".to_string(),
+            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
             "image/png".to_string(),
             1024,
         );
@@ -120,12 +178,51 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_invalid_content_type() {
+        let file = PubkyAppFile::new(
+            "example.png".to_string(),
+            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            "notavalid/content_type".to_string(),
+            1024,
+        );
+        let id = file.create_id();
+        let result = file.validate(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_size() {
+        let file = PubkyAppFile::new(
+            "example.png".to_string(),
+            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            "notavalid/content_type".to_string(),
+            MAX_SIZE + 1,
+        );
+        let id = file.create_id();
+        let result = file.validate(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_src() {
+        let file = PubkyAppFile::new(
+            "example.png".to_string(),
+            "not_a_url".to_string(),
+            "notavalid/content_type".to_string(),
+            MAX_SIZE + 1,
+        );
+        let id = file.create_id();
+        let result = file.validate(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_try_from_valid() {
         let file_json = r#"
         {
             "name": "example.png",
             "created_at": 1627849723,
-            "src": "/uploads/example.png",
+            "src": "pubky://user_id/pub/pubky.app/blobs/id",
             "content_type": "image/png",
             "size": 1024
         }
@@ -133,7 +230,7 @@ mod tests {
 
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "/uploads/example.png".to_string(),
+            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
             "image/png".to_string(),
             1024,
         );
@@ -143,7 +240,7 @@ mod tests {
         let file_parsed = <PubkyAppFile as Validatable>::try_from(&blob, &id).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");
-        assert_eq!(file_parsed.src, "/uploads/example.png");
+        assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");
         assert_eq!(file_parsed.content_type, "image/png");
         assert_eq!(file_parsed.size, 1024);
     }
