@@ -95,17 +95,17 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 
 ### PubkyAppFile
 
-**Description:** Represents metadata of file uploaded by the user.
+**Description:** Represents a file uploaded by the user, containing its metadata, including a reference to the actual blob of the file in `src` property.
 
 **URI:** `/pub/pubky.app/files/:file_id`
 
-| **Field**      | **Type** | **Description**             | **Validation Rules**        |
-| -------------- | -------- | --------------------------- | --------------------------- |
-| `name`         | String   | Name of the file.           | Required.                   |
-| `created_at`   | Integer  | Unix timestamp of creation. | Required.                   |
-| `src`          | String   | File blob URL               | Required.                   |
-| `content_type` | String   | MIME type of the file.      | Required.                   |
-| `size`         | Integer  | Size of the file in bytes.  | Required. Positive integer. |
+| **Field**      | **Type** | **Description**             | **Validation Rules**                           |
+| -------------- | -------- | --------------------------- | ---------------------------------------------- |
+| `name`         | String   | Name of the file.           | Required. Must be 1-255 characters             |
+| `created_at`   | Integer  | Unix timestamp of creation. | Required.                                      |
+| `src`          | String   | File blob URL               | Required. must be a valid URL. Max length 1024 |
+| `content_type` | String   | MIME type of the file.      | Required. Valid IANA mime types                |
+| `size`         | Integer  | Size of the file in bytes.  | Required. Positive integer. Max size is 10Mb   |
 
 **Validation Notes:**
 
