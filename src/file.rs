@@ -17,6 +17,30 @@ const MAX_NAME_LENGTH: usize = 255;
 const MAX_SRC_LENGTH: usize = 1024;
 const MAX_SIZE: i64 = 10_000_000; // 10 MB
 
+const VALID_MIME_TYPES: &[&str] = &[
+    "application/javascript",
+    "application/json",
+    "application/octet-stream",
+    "application/pdf",
+    "application/x-www-form-urlencoded",
+    "application/xml",
+    "application/zip",
+    "audio/mpeg",
+    "audio/wav",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/svg+xml",
+    "image/webp",
+    "multipart/form-data",
+    "text/css",
+    "text/html",
+    "text/plain",
+    "text/xml",
+    "video/mp4",
+    "video/mpeg",
+];
+
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
@@ -97,9 +121,16 @@ impl Validatable for PubkyAppFile {
             return Err("Validation Error: src exceeds maximum length".into());
         }
 
-        // Validate content type
-        if Mime::from_str(&self.content_type).is_err() {
-            return Err("Validation Error: Invalid content type".into());
+        // validate content type
+        match Mime::from_str(&self.content_type) {
+            Ok(mime) => {
+                if !VALID_MIME_TYPES.contains(&mime.essence_str()) {
+                    return Err("Validation Error: Invalid content type".into());
+                }
+            }
+            Err(_) => {
+                return Err("Validation Error: Invalid content type".into());
+            }
         }
 
         // Validate size
