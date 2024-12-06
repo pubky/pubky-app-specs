@@ -55,11 +55,18 @@ impl HashId for PubkyAppTag {
 
 impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
+        // Remove spaces from the tag and keep it as one word
+        // let mut label = self
+        //     .label
+        //     .chars()
+        //     .filter(|c| !c.is_whitespace())
+        //     .collect::<String>();
+
         // Convert label to lowercase and trim
-        let label = self.label.trim().to_lowercase();
+        let mut label = self.label.trim().to_lowercase();
 
         // Enforce maximum label length safely
-        let label = label.chars().take(MAX_TAG_LABEL_LENGTH).collect::<String>();
+        label = label.chars().take(MAX_TAG_LABEL_LENGTH).collect::<String>();
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
@@ -104,6 +111,39 @@ impl Validatable for PubkyAppTag {
 mod tests {
     use super::*;
     use crate::{traits::Validatable, APP_PATH};
+
+    #[test]
+    fn test_label_id() {
+        // Precomputed earlier
+        let tag_id = "CBYS8P6VJPHC5XXT4WDW26662W";
+        // Create new tag
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: "cool".to_string(),
+        };
+
+        let new_tag_id = tag.create_id();
+        assert!(!tag_id.is_empty());
+
+        // Check if the tag ID is correct
+        assert_eq!(
+            new_tag_id,
+            tag_id
+        );
+
+        let wrong_tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: "co0l".to_string(),
+        };
+
+        // Assure that the new tag has wrong ID
+        assert_ne!(
+            wrong_tag.create_id(),
+            tag_id
+        );
+    }
 
     #[test]
     fn test_create_id() {
@@ -248,5 +288,64 @@ mod tests {
             result.unwrap_err().to_string(),
             "Validation Error: Invalid URI format: invalid_uri"
         );
+    }
+
+    #[test]
+    fn test_incorrect_label() {
+        let tag = PubkyAppTag {
+            uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: "cool".to_string(),
+        };
+        let tag_id = tag.create_id();
+
+        match tag.validate(&tag_id) {
+            Err(e) => assert_eq!(e.to_string(), format!("Validation Error: Invalid URI format: {}", tag.uri), "The error message is not related URI or the message description is wrong"),
+            _ => ()
+        };
+
+        let tag = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: "coolc00lcolaca0g00llooll".to_string(),
+        };
+
+        // Precomputed earlier
+        let label_id = tag.create_id();
+
+        match tag.validate(&label_id) {
+            Err(e) => assert_eq!(e.to_string(), "Validation Error: Tag label exceeds maximum length".to_string(), "The error message is not related tag length or the message description is wrong"),
+            _ => ()
+        };
+    }
+
+    #[test]
+    fn test_white_space_tag() {
+        // All the tags has to be that label after sanitation
+        let label = "cool";
+
+        let leading_whitespace = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: " cool".to_string(),
+        };
+        let mut sanitazed_label = leading_whitespace.sanitize();
+        assert_eq!(sanitazed_label.label, label);
+
+        let trailing_whitespace = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: " cool".to_string(),
+        };
+        sanitazed_label = trailing_whitespace.sanitize();
+        assert_eq!(sanitazed_label.label, label);
+
+        let space_between = PubkyAppTag {
+            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            created_at: 1627849723,
+            label: "   co ol ".to_string(),
+        };
+        sanitazed_label = space_between.sanitize();
+        assert_eq!(sanitazed_label.label, "co ol");
     }
 }
