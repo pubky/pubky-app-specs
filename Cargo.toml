@@ -1,6 +1,6 @@
 [package]
 name = "pubky-app-specs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Pubky.app Data Model Specifications"
 homepage = "https://pubky.app"
@@ -9,16 +9,18 @@ license = "MIT"
 documentation = "https://github.com/pubky/pubky-app-specs"
 
 [dependencies]
-async-trait = "0.1"
-bytes = "^1.7.0"
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.133"
-utoipa = "5.2.0"
-pubky-common = "0.1.0"
 url = "2.5.4"
 base32 = "0.5.1"
 blake3 = "1.5.4"
-chrono = "0.4.38"
+utoipa = { version = "5.2.0", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1.41.1", features = ["full"] }
+pubky = "0.3.0"
+pubky-common = "0.1.0"
+anyhow = "1.0.93"
+
+[features]
+openapi = ["utoipa"]

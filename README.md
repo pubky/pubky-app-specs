@@ -1,12 +1,57 @@
 # Pubky.app Data Model Specification
 
-_Version 0.2.0_
+_Version 0.2.1_
+
+> ⚠️ **Warning: Rapid Development Phase**  
+> This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
+>
+> When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability.
+
+## Table of Contents
+
+1. [Introduction](#introduction)
+2. [Quick Start](#quick-start)
+3. [Data Models](#data-models)
+   - [PubkyAppUser](#pubkyappuser)
+   - [PubkyAppFile](#pubkyappfile)
+   - [PubkyAppPost](#pubkyapppost)
+   - [PubkyAppTag](#pubkyapptag)
+   - [PubkyAppBookmark](#pubkyappbookmark)
+   - [PubkyAppFollow](#pubkyappfollow)
+   - [PubkyAppMute](#pubkyappmute)
+   - [PubkyAppFeed](#pubkyappfeed)
+   - [PubkyAppLastRead](#pubkyapplastread)
+4. [Validation Rules](#validation-rules)
+   - [Common Rules](#common-rules)
+   - [ID Generation](#id-generation)
+5. [Glossary](#glossary)
+6. [Examples](#examples)
+   - [PubkyAppUser](#example-pubkyappuser)
+   - [PubkyAppPost](#example-pubkyapppost)
+   - [PubkyAppTag](#example-pubkyapptag)
+7. [License](#license)
+
+---
 
 ## Introduction
 
-This document specifies the data models and validation rules for the Pubky.app client and homeserver interactions. It defines the structures of data entities, their properties, and the validation rules to ensure data integrity and consistency. This specification is intended for developers who wish to implement their own libraries or clients compatible with Pubky.app.
+This document specifies the data models and validation rules for the **Pubky.app** clients interactions. It defines the structure of data entities, their properties, and the validation rules to ensure data integrity and consistency. This is intended for developers building compatible libraries or clients.
 
 This document intents to be a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src). If you intend to develop in Rust, use them directly. In case of disagreement between this document and the Rust implementation, the Rust implementation prevails.
+
+---
+
+## Quick Start
+
+Pubky.app models are designed for decentralized content sharing. The system uses a combination of timestamp-based IDs and Blake3-hashed IDs encoded in Crockford Base32 to ensure unique identifiers for each entity.
+
+### Concepts:
+
+- **Timestamp IDs** for sequential objects like posts and files.
+- **Hash IDs** for content-based uniqueness (e.g., tags and bookmarks).
+- **Validation Rules** ensure consistent and interoperable data formats.
+
+---
 
 ## Data Models
 
@@ -16,69 +61,55 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 **URI:** `/pub/pubky.app/profile.json`
 
-**Fields:**
+| **Field** | **Type** | **Description**                         | **Validation Rules**                                                                         |
+| --------- | -------- | --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `name`    | String   | User's name.                            | Required. Length: 3–50 characters. Cannot be `"[DELETED]"`.                                  |
+| `bio`     | String   | Short biography.                        | Optional. Maximum length: 160 characters.                                                    |
+| `image`   | String   | URL to the user's profile image.        | Optional. Valid URL. Maximum length: 300 characters.                                         |
+| `links`   | Array    | List of associated links (title + URL). | Optional. Maximum of 5 links, each with title (100 chars max) and valid URL (300 chars max). |
+| `status`  | String   | User's current status.                  | Optional. Maximum length: 50 characters.                                                     |
 
-- `name` (string, required): The user's name.
-- `bio` (string, optional): A short biography.
-- `image` (string, optional): A URL to the user's profile image.
-- `links` (array of `UserLink`, optional): A list of links associated with the user.
-- `status` (string, optional): The user's current status.
+**Validation Notes:**
 
-**`UserLink` Object:**
+- Reserved keyword `[DELETED]` cannot be used for `name`.
+- Each `UserLink` in `links` must have a valid title and URL.
 
-- `title` (string, required): The title of the link.
-- `url` (string, required): The URL of the link.
+**Example: Valid User**
 
-**Validation Rules:**
-
-- **`name`:**
-
-  - Must be at least **3** and at most **50** characters.
-  - Cannot be the keyword `[DELETED]`; this is reserved for deleted profiles.
-
-- **`bio`:**
-
-  - Maximum length of **160** characters if provided.
-
-- **`image`:**
-
-  - If provided, must be a valid URL.
-  - Maximum length of **300** characters.
-
-- **`links`:**
-
-  - Maximum of **5** links.
-  - Each `UserLink` must have:
-    - `title`: Maximum length of **100** characters.
-    - `url`: Must be a valid URL, maximum length of **300** characters.
-
-- **`status`:**
-  - Maximum length of **50** characters if provided.
+```json
+{
+  "name": "Alice",
+  "bio": "Toxic maximalist.",
+  "image": "pubky://user_id/pub/pubky.app/files/0000000000000",
+  "links": [
+    {
+      "title": "GitHub",
+      "url": "https://github.com/alice"
+    }
+  ],
+  "status": "Exploring decentralized tech."
+}
+```
 
 ---
 
 ### PubkyAppFile
 
-**Description:** Represents a file uploaded by the user.
+**Description:** Represents metadata of file uploaded by the user.
 
 **URI:** `/pub/pubky.app/files/:file_id`
 
-**Fields:**
+| **Field**      | **Type** | **Description**             | **Validation Rules**        |
+| -------------- | -------- | --------------------------- | --------------------------- |
+| `name`         | String   | Name of the file.           | Required.                   |
+| `created_at`   | Integer  | Unix timestamp of creation. | Required.                   |
+| `src`          | String   | File blob URL               | Required.                   |
+| `content_type` | String   | MIME type of the file.      | Required.                   |
+| `size`         | Integer  | Size of the file in bytes.  | Required. Positive integer. |
 
-- `name` (string, required): The name of the file.
-- `created_at` (integer, required): Timestamp (Unix epoch in seconds) of when the file was created.
-- `src` (string, required): The source URL or path of the file.
-- `content_type` (string, required): The MIME type of the file.
-- `size` (integer, required): The size of the file in bytes.
+**Validation Notes:**
 
-**Validation Rules:**
-
-- **ID Validation:**
-
-  - The `file_id` in the URI must be a valid **Timestamp ID** (see [ID Generation](#id-generation)).
-
-- **Additional Validation:**
-  - Validation for `content_type`, `size`, and other fields should be implemented as needed.
+- The `file_id` in the URI must be a valid **Timestamp ID**.
 
 ---
 
@@ -88,54 +119,37 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 **URI:** `/pub/pubky.app/posts/:post_id`
 
-**Fields:**
+| **Field**     | **Type** | **Description**                      | **Validation Rules**                                                       |
+| ------------- | -------- | ------------------------------------ | -------------------------------------------------------------------------- |
+| `content`     | String   | Content of the post.                 | Required. Max length: 1000 (short), 50000 (long). Cannot be `"[DELETED]"`. |
+| `kind`        | String   | Type of post.                        | Required. Must be a valid `PubkyAppPostKind` value.                        |
+| `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
+| `embed`       | Object   | Embedded content (type + URI).       | Optional. URI must be valid if present.                                    |
+| `attachments` | Array    | List of attachment URIs.             | Optional. Each must be a valid URI.                                        |
 
-- `content` (string, required): The content of the post.
-- `kind` (string, required): The type of post. Possible values are:
+**Post Kinds:**
 
-  - `Short`
-  - `Long`
-  - `Image`
-  - `Video`
-  - `Link`
-  - `File`
+- `short`
+- `long`
+- `image`
+- `video`
+- `link`
+- `file`
 
-- `parent` (string, optional): URI of the parent post if this is a reply.
-- `embed` (object, optional): Embedded content.
-- `attachments` (array of strings, optional): A list of attachment URIs.
+**Example: Valid Post**
 
-**`embed` Object:**
-
-- `kind` (string, required): Type of the embedded content. Same as `kind` in `PubkyAppPost`.
-- `uri` (string, required): URI of the embedded content.
-
-**Validation Rules:**
-
-- **ID Validation:**
-
-  - The `post_id` in the URI must be a valid **Timestamp ID** (see [ID Generation](#id-generation)).
-
-- **`content`:**
-
-  - Must not be the keyword `[DELETED]`; this is reserved for deleted posts.
-  - **For `kind` of `Short`:**
-    - Maximum length of **1000** characters.
-  - **For `kind` of `Long`:**
-    - Maximum length of **50000** characters.
-  - **For other `kind` values:**
-    - Maximum length of **1000** characters.
-
-- **`parent`:**
-
-  - If provided, must be a valid URI.
-
-- **`embed`:**
-
-  - If provided:
-    - `uri` must be a valid URI.
-
-- **Additional Validation:**
-  - Validation for `attachments` and other fields should be implemented as needed.
+```json
+{
+  "content": "Hello world! This is my first post.",
+  "kind": "short",
+  "parent": null,
+  "embed": {
+    "kind": "short",
+    "uri": "pubky://user_id/pub/pubky.app/posts/0000000000000"
+  },
+  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"]
+}
+```
 
 ---
 
@@ -145,25 +159,15 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 **URI:** `/pub/pubky.app/tags/:tag_id`
 
-**Fields:**
+| **Field**    | **Type** | **Description**             | **Validation Rules**                                     |
+| ------------ | -------- | --------------------------- | -------------------------------------------------------- |
+| `uri`        | String   | URI of the tagged object.   | Required. Must be a valid URI.                           |
+| `label`      | String   | Label for the tag.          | Required. Trimmed, lowercase. Max length: 20 characters. |
+| `created_at` | Integer  | Unix timestamp of creation. | Required.                                                |
 
-- `uri` (string, required): The URI that is tagged.
-- `label` (string, required): The tag label.
-- `created_at` (integer, required): Timestamp (Unix epoch in seconds) of when the tag was created.
+**Validation Notes:**
 
-**Validation Rules:**
-
-- **ID Validation:**
-
-  - The `tag_id` in the URI must be a valid **Hash ID** generated from the `uri` and `label` (see [ID Generation](#id-generation)).
-
-- **`uri`:**
-
-  - Must be a valid URI.
-
-- **`label`:**
-  - Must be trimmed and converted to lowercase.
-  - Maximum length of **20** characters.
+- The `tag_id` is a **Hash ID** derived from the `uri` and `label`.
 
 ---
 
@@ -173,53 +177,43 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 **URI:** `/pub/pubky.app/bookmarks/:bookmark_id`
 
-**Fields:**
+| **Field**    | **Type** | **Description**        | **Validation Rules**           |
+| ------------ | -------- | ---------------------- | ------------------------------ |
+| `uri`        | String   | URI of the bookmark.   | Required. Must be a valid URI. |
+| `created_at` | Integer  | Timestamp of creation. | Required.                      |
 
-- `uri` (string, required): The URI that is bookmarked.
-- `created_at` (integer, required): Timestamp (Unix epoch in seconds) of when the bookmark was created.
+**Validation Notes:**
 
-**Validation Rules:**
-
-- **ID Validation:**
-
-  - The `bookmark_id` in the URI must be a valid **Hash ID** generated from the `uri` (see [ID Generation](#id-generation)).
-
-- **`uri`:**
-  - Must be a valid URI.
+- The `bookmark_id` is a **Hash ID** derived from the `uri`.
 
 ---
 
 ### PubkyAppFollow
 
-**Description:** Represents a follow relationship to another user.
+**Description:** Represents a follow relationship.
 
 **URI:** `/pub/pubky.app/follows/:user_id`
 
-**Fields:**
-
-- `created_at` (integer, required): Timestamp (Unix epoch in seconds) of when the follow was created.
-
-**Validation Rules:**
-
-- **`created_at`:**
-  - Should be validated as needed.
+| **Field**    | **Type** | **Description**        | **Validation Rules** |
+| ------------ | -------- | ---------------------- | -------------------- |
+| `created_at` | Integer  | Timestamp of creation. | Required.            |
 
 ---
 
-### PubkyAppMute
+### PubkyAppFeed
 
-**Description:** Represents a mute relationship to another user.
+**Description:** Represents a feed configuration.
 
-**URI:** `/pub/pubky.app/mutes/:user_id`
+**URI:** `/pub/pubky.app/feeds/:feed_id`
 
-**Fields:**
-
-- `created_at` (integer, required): Timestamp (Unix epoch in seconds) of when the mute was created.
-
-**Validation Rules:**
-
-- **`created_at`:**
-  - Should be validated as needed.
+| **Field** | **Type** | **Description**                           | **Validation Rules**               |
+| --------- | -------- | ----------------------------------------- | ---------------------------------- |
+| `tags`    | Array    | List of tags for filtering.               | Optional. Strings must be trimmed. |
+| `reach`   | String   | Feed visibility (e.g., `all`, `friends`). | Required. Must be a valid reach.   |
+| `layout`  | String   | Feed layout style (e.g., `columns`).      | Required. Must be valid layout.    |
+| `sort`    | String   | Sort order (e.g., `recent`).              | Required. Must be valid sort.      |
+| `content` | String   | Type of content filtered.                 | Optional.                          |
+| `name`    | String   | Name of the feed.                         | Required.                          |
 
 ---
 
@@ -227,182 +221,11 @@ This document intents to be a faithful representation of our [Rust pubky.app mod
 
 ### Common Rules
 
-#### IDs
-
-- **Timestamp IDs**: IDs generated based on the current timestamp, encoded in Crockford Base32.
-
-  - Must be **13** characters long.
-  - Decoded ID must represent a valid timestamp after **October 1st, 2024**.
-  - Timestamp must not be more than **2 hours** in the future.
-
-- **Hash IDs**: IDs generated by hashing certain fields of the object using Blake3 and encoding in Crockford Base32.
-  - For `PubkyAppTag`: Hash of `uri:label`.
-  - For `PubkyAppBookmark`: Hash of `uri`.
-  - The generated ID must match the provided ID.
-
-### URL Validation
-
-- All URLs must be valid according to standard URL parsing rules.
-
-### String Lengths
-
-- Fields have maximum lengths as specified in their validation rules.
-
-### Content Restrictions
-
-- The content of posts and profiles must not be `[DELETED]`. This keyword is reserved for indicating deleted content.
-
-### Label Formatting
-
-- Labels for tags must be:
-  - Trimmed.
-  - Converted to lowercase.
-  - Maximum length of 20 characters.
+1. **Timestamp IDs:** 13-character Crockford Base32 strings derived from timestamps (in microseconds).
+2. **Hash IDs:** First half of the bytes from the resulting Blake3-hashed strings encoded in Crockford Base32.
+3. **URLs:** All URLs must pass standard validation.
 
 ---
-
-### PubkyAppFeed
-
-**Description:** Represents a feed configuration, allowing users to customize the content they see based on tags, reach, layout, and sort order.
-
-**URI:** `/feeds/:feed_id`
-
-**Fields:**
-
-- `feed` (object, required): The main configuration object for the feed.
-
-  - `tags` (array of strings, optional): Tags used to filter content within the feed.
-  - `reach` (string, required): Defines the visibility or scope of the feed. Possible values are:
-    - `following`: Content from followed users.
-    - `followers`: Content from follower users.
-    - `friends`: Content from mutual following users.
-    - `all`: Public content accessible to everyone.
-  - `layout` (string, required): Specifies the layout of the feed. Options include:
-    - `columns`: Organizes feed content in a columnar format.
-    - `wide`: Arranges content in a standard wide format.
-    - `visual`: Arranges content in visual format.
-  - `sort` (string, required): Determines the sorting order of the feed content. Supported values are:
-    - `recent`: Most recent content first.
-    - `popularity`: Content with the highest engagement.
-  - `content` (string, required): Defines the type of content displayed. Options include:
-    - `all`: Includes all content types.
-    - `posts`: Only posts are shown.
-    - `images`: Only media images.
-    - `videos`: Only media videos.
-    - `links`: Only links.
-
-- `name` (string, required): The user-defined name for this feed configuration.
-- `created_at` (integer, required): Timestamp (Unix epoch in milliseconds) representing when the feed was created.
-
-**Validation Rules:**
-
-- **ID Validation:**
-  - The `feed_id` in the URI is a **Hash ID** generated from the serialized feed object (the JSON object for `feed`), computed using Blake3 and encoded in Crockford Base32.
-  - The generated `feed_id` must match the provided `feed_id`.
-
----
-
-### PubkyAppLastRead
-
-**Description:** Represents the last read timestamp for notifications, used to track when the user last checked for new activity.
-
-**URI:** `/pub/pubky.app/last_read`
-
-**Fields:**
-
-- `timestamp` (integer, required): Unix epoch time in milliseconds of the last time the user checked notifications.
-
-**Validation Rules:**
-
-- **`timestamp`:** Must be a valid timestamp in milliseconds.
-
----
-
-## ID Generation
-
-### TimestampId
-
-**Description:** Generates an ID based on the current timestamp.
-
-**Generation Steps:**
-
-1. Obtain the current timestamp in microseconds.
-2. Convert the timestamp to an 8-byte big-endian representation.
-3. Encode the bytes using Crockford Base32 to get a 13-character ID.
-
-**Validation:**
-
-- The ID must be **13** characters long.
-- Decoded timestamp must represent a date after **October 1st, 2024**.
-- The timestamp must not be more than **2 hours** in the future.
-
-### HashId
-
-**Description:** Generates an ID based on hashing certain fields of the object.
-
-**Generation Steps:**
-
-1. Concatenate the relevant fields (e.g., `uri:label` for tags).
-2. Compute the Blake3 hash of the concatenated string.
-3. Take the first half of the hash bytes.
-4. Encode the bytes using Crockford Base32.
-
-**Validation:**
-
-- The generated ID must match the provided ID.
-
----
-
-## Examples
-
-### Example of PubkyAppUser
-
-```json
-{
-  "name": "Alice",
-  "bio": "Blockchain enthusiast and developer.",
-  "image": "https://example.com/images/alice.png",
-  "links": [
-    {
-      "title": "GitHub",
-      "url": "https://github.com/alice"
-    },
-    {
-      "title": "Website",
-      "url": "https://alice.dev"
-    }
-  ],
-  "status": "Exploring the decentralized web."
-}
-```
-
-### Example of PubkyAppPost
-
-```json
-{
-  "content": "Hello world! This is my first post.",
-  "kind": "short",
-  "parent": null,
-  "embed": null,
-  "attachments": null
-}
-```
-
-### Example of PubkyAppTag
-
-```json
-{
-  "uri": "/pub/pubky.app/posts/00321FCW75ZFY",
-  "label": "blockchain",
-  "created_at": 1700000000
-}
-```
-
-## Notes
-
-- All timestamps are Unix epoch times in seconds.
-- Developers should ensure that all validation rules are enforced to maintain data integrity and interoperability between clients.
-- This specification may be updated in future versions to include additional fields or validation rules.
 
 ## License
 
