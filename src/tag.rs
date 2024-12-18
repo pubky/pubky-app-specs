@@ -55,9 +55,8 @@ impl HashId for PubkyAppTag {
 
 impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
-        // Convert label to lowercase and trim
-        //let mut label = self.label.trim().to_lowercase();
         // Remove spaces from the tag and keep it as one word
+        // Returns a lowercase tag
         let mut label = self
             .label
             .chars()
