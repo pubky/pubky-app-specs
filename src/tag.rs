@@ -55,15 +55,15 @@ impl HashId for PubkyAppTag {
 
 impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
-        // Remove spaces from the tag and keep it as one word
-        // let mut label = self
-        //     .label
-        //     .chars()
-        //     .filter(|c| !c.is_whitespace())
-        //     .collect::<String>();
-
         // Convert label to lowercase and trim
-        let mut label = self.label.trim().to_lowercase();
+        //let mut label = self.label.trim().to_lowercase();
+        // Remove spaces from the tag and keep it as one word
+        let mut label = self
+            .label
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase();
 
         // Enforce maximum label length safely
         label = label.chars().take(MAX_TAG_LABEL_LENGTH).collect::<String>();
@@ -171,8 +171,6 @@ mod tests {
         assert_eq!(tag.label, label);
         // Check that created_at is recent
         let now = timestamp();
-        println!("TIMESTAMP {}", tag.created_at);
-        println!("TIMESTAMP {}", now);
 
         assert!(tag.created_at <= now && tag.created_at >= now - 1_000_000); // within 1 second
     }
@@ -267,7 +265,7 @@ mod tests {
         let blob = tag_json.as_bytes();
         let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id).unwrap();
         assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
-        assert_eq!(tag.label, "cool tag"); // After sanitization
+        assert_eq!(tag.label, "cooltag"); // After sanitization
     }
 
     #[test]
@@ -280,7 +278,7 @@ mod tests {
         }
         "#;
 
-        let id = "B55PGPFV1E5E0HQ2PB76EQGXPR";
+        let id = "D2DV4EZDA03Q3KCRMVGMDYZ8C0";
         let blob = tag_json.as_bytes();
         let result = <PubkyAppTag as Validatable>::try_from(&blob, &id);
         assert!(result.is_err());
@@ -346,6 +344,6 @@ mod tests {
             label: "   co ol ".to_string(),
         };
         sanitazed_label = space_between.sanitize();
-        assert_eq!(sanitazed_label.label, "co ol");
+        assert_eq!(sanitazed_label.label, "cool");
     }
 }
