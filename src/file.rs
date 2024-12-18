@@ -15,7 +15,7 @@ use utoipa::ToSchema;
 const MIN_NAME_LENGTH: usize = 1;
 const MAX_NAME_LENGTH: usize = 255;
 const MAX_SRC_LENGTH: usize = 1024;
-const MAX_SIZE: i64 = 10_000_000; // 10 MB
+const MAX_SIZE: i64 = 10 * (1 << 20); // 10 MB
 
 const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
