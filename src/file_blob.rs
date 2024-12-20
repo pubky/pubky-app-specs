@@ -1,8 +1,21 @@
-use crate::traits::HashId;
+use crate::{
+    traits::{HasPath, HashId},
+    APP_PATH,
+};
+
+use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 const SAMPLE_SIZE: usize = 2 * 1024;
 
+/// Represents a file uploaded by the user.
+/// URI: /pub/pubky.app/files/:file_id
+#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBlob(pub Vec<u8>);
+
 impl HashId for PubkyAppBlob {
     fn get_id_data(&self) -> String {
         // Get the start and end samples
@@ -19,6 +32,12 @@ impl HashId for PubkyAppBlob {
         combined.extend_from_slice(end);
 
         base32::encode(base32::Alphabet::Crockford, &combined)
+    }
+}
+
+impl HasPath for PubkyAppBlob {
+    fn create_path(&self) -> String {
+        format!("{}blobs/{}", APP_PATH, self.create_id())
     }
 }
 
