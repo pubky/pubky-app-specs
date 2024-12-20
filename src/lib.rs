@@ -2,6 +2,7 @@ mod bookmark;
 mod common;
 mod feed;
 mod file;
+mod file_blob;
 mod follow;
 mod last_read;
 mod mute;
