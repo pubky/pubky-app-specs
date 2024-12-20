@@ -1189,6 +1189,7 @@ dependencies = [
  "anyhow",
  "base32",
  "blake3",
+ "mime",
  "pubky",
  "pubky-common",
  "serde",
