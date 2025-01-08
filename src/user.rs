@@ -179,10 +179,11 @@ impl Validatable for PubkyAppUserLink {
             .chars()
             .take(MAX_LINK_TITLE_LENGTH)
             .collect::<String>();
-
+        
         let url = match Url::parse(self.url.trim()) {
             Ok(parsed_url) => {
-                let sanitized_url = parsed_url.to_string();
+                // Avoid trailing slash in authority-based URLs
+                let sanitized_url = parsed_url.to_string().trim_end_matches('/').to_string();
                 sanitized_url
                     .chars()
                     .take(MAX_LINK_URL_LENGTH)
@@ -244,6 +245,8 @@ mod tests {
         );
         assert!(user.links.is_some());
         assert_eq!(user.links.as_ref().unwrap().len(), 2);
+        // Ensure that the root URL does not include a trailing slash
+        assert_eq!(user.links.unwrap()[1].url, "https://alice.dev");
     }
 
     #[test]
