@@ -1,12 +1,15 @@
 [package]
 name = "pubky-app-specs"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Pubky.app Data Model Specifications"
 homepage = "https://pubky.app"
 repository = "https://github.com/pubky/pubky-app-specs"
 license = "MIT"
 documentation = "https://github.com/pubky/pubky-app-specs"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 serde = { version = "1.0.215", features = ["derive"] }
@@ -16,6 +19,8 @@ base32 = "0.5.1"
 blake3 = "1.5.4"
 mime = "0.3"
 utoipa = { git = "https://github.com/juhaku/utoipa", rev = "d522f744259dc4fde5f45d187983fb68c8167029", optional = true }
+wasm-bindgen = "0.2.99"
+serde-wasm-bindgen = "0.6.5"
 
 [dev-dependencies]
 pubky = "0.3.0"
@@ -25,3 +30,9 @@ tokio = { version = "1.41.1", features = ["full"] }
 
 [features]
 openapi = ["utoipa"]
+
+[profile.release]
+opt-level = "z"   # Requests maximum optimization for binary size (“z” stands for “size”), rather than speed.
+lto = true        # Enables link-time optimization, allowing the compiler to do more aggressive inlining/dead-code elimination across crates.
+codegen-units = 1 # Forces compilation into a single code-generation unit, further helping inlining and dead-code elimination at link time.
+panic = "abort"   # Ensures panics do not generate extra stack-unwinding code, reducing binary bloat. Panics will simply abort execution.
