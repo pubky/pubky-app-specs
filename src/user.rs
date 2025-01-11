@@ -1,9 +1,10 @@
 use crate::{
-    traits::{HasPath, Validatable},
+    traits::{HasPath, JSdata, Validatable},
     APP_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
+use wasm_bindgen::prelude::*;
 
 // Validation constants
 const MIN_USERNAME_LENGTH: usize = 3;
@@ -19,26 +20,38 @@ const MAX_STATUS_LENGTH: usize = 50;
 use utoipa::ToSchema;
 
 /// URI: /pub/pubky.app/profile.json
+#[wasm_bindgen]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUser {
+    #[wasm_bindgen(skip)]
+    // Avoid wasm-pack automatically generating getter/setters for the pub fields.
     pub name: String,
+    #[wasm_bindgen(skip)]
     pub bio: Option<String>,
+    #[wasm_bindgen(skip)]
     pub image: Option<String>,
+    #[wasm_bindgen(skip)]
     pub links: Option<Vec<PubkyAppUserLink>>,
+    #[wasm_bindgen(skip)]
     pub status: Option<String>,
 }
 
 /// Represents a user's single link with a title and URL.
+#[wasm_bindgen]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUserLink {
+    #[wasm_bindgen(skip)]
     pub title: String,
+    #[wasm_bindgen(skip)]
     pub url: String,
 }
 
+#[wasm_bindgen]
 impl PubkyAppUser {
     /// Creates a new `PubkyAppUser` instance and sanitizes it.
+    #[wasm_bindgen(constructor)]
     pub fn new(
         name: String,
         bio: Option<String>,
@@ -55,7 +68,14 @@ impl PubkyAppUser {
         }
         .sanitize()
     }
+
+    #[wasm_bindgen]
+    pub fn get_data(&self) -> Result<JsValue, JsValue> {
+        JSdata::get_data(self)
+    }
 }
+
+impl JSdata for PubkyAppUser {}
 
 impl HasPath for PubkyAppUser {
     fn create_path(&self) -> String {
@@ -168,6 +188,15 @@ impl Validatable for PubkyAppUser {
         }
 
         Ok(())
+    }
+}
+
+#[wasm_bindgen]
+impl PubkyAppUserLink {
+    /// Creates a new `PubkyAppUserLink` instance and sanitizes it.
+    #[wasm_bindgen(constructor)]
+    pub fn new(title: String, url: String) -> Self {
+        Self { title, url }.sanitize()
     }
 }
 

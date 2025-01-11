@@ -21,6 +21,7 @@ mime = "0.3"
 utoipa = { git = "https://github.com/juhaku/utoipa", rev = "d522f744259dc4fde5f45d187983fb68c8167029", optional = true }
 wasm-bindgen = "0.2.99"
 serde-wasm-bindgen = "0.6.5"
+js-sys = "0.3.76"
 
 [dev-dependencies]
 pubky = "0.3.0"

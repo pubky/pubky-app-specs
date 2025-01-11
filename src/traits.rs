@@ -1,7 +1,8 @@
 use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
+use wasm_bindgen::prelude::*;
 
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
@@ -123,4 +124,22 @@ pub trait HasPath {
 
 pub trait HasPubkyIdPath {
     fn create_path(&self, pubky_id: &str) -> String;
+}
+
+pub trait JSdata: HasPath + Serialize {
+    // helper that returns { id, path, json }
+    fn get_data(&self) -> Result<JsValue, JsValue> {
+        let path = self.create_path();
+
+        let json_val = serde_wasm_bindgen::to_value(&self)
+            .map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
+
+        // Construct a small JS object
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::null())?;
+        js_sys::Reflect::set(&obj, &JsValue::from_str("path"), &JsValue::from_str(&path))?;
+        js_sys::Reflect::set(&obj, &JsValue::from_str("json"), &json_val)?;
+
+        Ok(obj.into())
+    }
 }
