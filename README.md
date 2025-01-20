@@ -7,10 +7,18 @@ _Version 0.3.0_
 >
 > When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability.
 
-### To build the JS package
+### JS package
+
+Build with
 
 ```bash
 wasm-pack build --target bundler
+```
+
+Test with
+
+```bash
+wasm-pack test --headless --firefox
 ```
 
 ## Table of Contents
