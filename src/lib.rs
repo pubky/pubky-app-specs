@@ -25,6 +25,8 @@ pub use tag::PubkyAppTag;
 pub use user::{PubkyAppUser, PubkyAppUserLink};
 
 // Our FFI module
+#[cfg(target_arch = "wasm32")]
 mod ffi;
 // Re-export the FFI functions so they're available to wasm-pack
+#[cfg(target_arch = "wasm32")]
 pub use ffi::*;

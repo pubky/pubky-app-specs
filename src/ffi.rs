@@ -70,9 +70,6 @@ pub fn create_pubky_app_user(
     // We have no ID for PubkyAppUser. The path is always profile.json
     let path = user.create_path();
 
-    // Quick debug: log to console
-    let debug_json = serde_json::to_string_pretty(&user).unwrap();
-
     build_create_result(&user, "", &path)
 }
 

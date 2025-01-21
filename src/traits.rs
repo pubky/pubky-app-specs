@@ -1,7 +1,11 @@
 use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
+
+#[cfg(target_arch = "wasm32")]
+use serde::Serialize;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 pub trait TimestampId {
@@ -126,6 +130,7 @@ pub trait HasPubkyIdPath {
     fn create_path(&self, pubky_id: &str) -> String;
 }
 
+#[cfg(target_arch = "wasm32")]
 pub trait JSdata: HasPath + Serialize {
     // helper that returns { id, path, json }
     fn get_data(&self) -> Result<JsValue, JsValue> {
