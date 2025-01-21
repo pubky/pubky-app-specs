@@ -1,4 +1,4 @@
-name: Rust
+name: Rust (native)
 
 on:
   push:
@@ -15,9 +15,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: cargo build --verbose
       - name: Run Native tests
         run: cargo test --verbose
-      - name: Run Wasm tests
-        run: wasm-pack test --headless --firefox
+      - name: Build
+        run: cargo build --verbose
