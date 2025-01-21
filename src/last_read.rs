@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 /// Represents the last read timestamp for notifications.
 /// URI: /pub/pubky.app/last_read
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppLastRead {
     pub timestamp: i64, // Unix epoch time in milliseconds

@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 /// `/pub/pubky.app/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
     pub uri: String,

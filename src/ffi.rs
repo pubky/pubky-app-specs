@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 /// - Returns { json, id, path } or a descriptive error.
 
 /// Returned by each FFI function to JS.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateResult {
     /// The fully validated and sanitized object, as JSON
     pub json: serde_json::Value,
@@ -285,7 +285,7 @@ pub fn create_pubky_app_last_read() -> Result<JsValue, JsValue> {
 // -----------------------------------------------------------------------------
 
 /// A small wrapper for JSON-serializing the blob data as base64.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PubkyAppBlobJson {
     pub data_base64: String,
 }
