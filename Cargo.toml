@@ -26,12 +26,12 @@ serde-wasm-bindgen = "0.6.5"
 js-sys = "0.3.77"
 web-sys = "0.3.77"
 
-[dev-dependencies]
-pubky = "0.3.0"
-pubky-common = "0.1.0"
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.50"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+pubky = "0.3.0"
+pubky-common = "0.1.0"
 tokio = { version = "1.43.0", features = ["full"] }
 anyhow = "1.0.95"
 
