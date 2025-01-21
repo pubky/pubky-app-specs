@@ -56,14 +56,8 @@ fn test_create_pubky_app_user_ffi() {
     // Check the `json` field explicitly
     let json_val = Reflect::get(&result_obj, &JsValue::from_str("json")).expect("no `json` field");
 
-    // Log the raw `json_val`
-    web_sys::console::log_1(&json_val);
-
     // Attempt to convert `json_val` to an Object
     let json_obj = Object::try_from(&json_val).expect("json field should be an object");
-
-    // Log the `json_obj` as well
-    web_sys::console::log_1(&json_obj);
 
     let id_str = id_val.as_string().expect("id must be a string");
     let path_str = path_val.as_string().expect("path must be a string");
