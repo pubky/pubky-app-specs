@@ -80,7 +80,7 @@ mod tests {
         "#;
 
         let blob = mute_json.as_bytes();
-        let mute_parsed = <PubkyAppMute as Validatable>::try_from(&blob, "some_user_id").unwrap();
+        let mute_parsed = <PubkyAppMute as Validatable>::try_from(blob, "some_user_id").unwrap();
 
         assert_eq!(mute_parsed.created_at, 1627849723);
     }

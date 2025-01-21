@@ -83,7 +83,7 @@ mod tests {
         "#;
 
         let blob = last_read_json.as_bytes();
-        let last_read = <PubkyAppLastRead as Validatable>::try_from(&blob, "").unwrap();
+        let last_read = <PubkyAppLastRead as Validatable>::try_from(blob, "").unwrap();
         assert_eq!(last_read.timestamp, 1700000000);
     }
 }

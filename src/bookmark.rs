@@ -93,7 +93,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let bookmark = PubkyAppBookmark::new("user_id/pub/pubky.app/posts/post_id".to_string());
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(&invalid_id);
+        let result = bookmark.validate(invalid_id);
         assert!(result.is_err());
     }
 
@@ -111,7 +111,7 @@ mod tests {
         let id = bookmark.create_id();
 
         let blob = bookmark_json.as_bytes();
-        let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(&blob, &id).unwrap();
+        let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);
     }

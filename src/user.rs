@@ -374,7 +374,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(&blob, "").unwrap();
+        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist"));
@@ -402,7 +402,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(&blob, "").unwrap();
+        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
 
         // Since the link URL is invalid, it should be filtered out
         assert!(user.links.is_none() || user.links.as_ref().unwrap().is_empty());

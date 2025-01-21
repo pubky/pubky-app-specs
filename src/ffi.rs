@@ -28,8 +28,7 @@ where
     T: Serialize,
 {
     // 1) Serialize `obj` into a JavaScript object
-    let json_val = serde_wasm_bindgen::to_value(obj)
-        .map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
+    let json_val = to_value(obj).map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
 
     // 2) Construct the final object { id, path, json } just like `get_data()` does
     let ret_obj = js_sys::Object::new();
