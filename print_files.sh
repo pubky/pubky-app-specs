@@ -11,7 +11,7 @@ for dir in "${skip_dirs[@]}"; do
 done
 
 # Add the file types to include and the actions to perform
-find_cmd+=" \( -name '*.rs' -o -name '*.toml' -o -name '*.md' \) -print"
+find_cmd+=" \( -name '*.rs' -o -name '*.toml' -o -name '*.md' -o -name '*.json' -o -name '*.js' -o -name '*.ts' \) -print"
 
 # Execute the constructed find command
 eval $find_cmd | while read -r file; do

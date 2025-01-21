@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 /// - Returns { json, id, path } or a descriptive error.
 
 /// Returned by each FFI function to JS.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreateResult {
     /// The fully validated and sanitized object, as JSON
     pub json: serde_json::Value,
@@ -27,15 +27,21 @@ fn build_create_result<T>(obj: &T, id: &str, path: &str) -> Result<JsValue, JsVa
 where
     T: Serialize,
 {
-    let json_value = serde_json::to_value(obj)
-        .map_err(|e| JsValue::from_str(&format!("Serialization Error: {}", e)))?;
+    // 1) Serialize `obj` into a JavaScript object
+    let json_val = serde_wasm_bindgen::to_value(obj)
+        .map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
 
-    let result = CreateResult {
-        json: json_value,
-        id: id.to_string(),
-        path: path.to_string(),
-    };
-    to_value(&result).map_err(|e| JsValue::from_str(&e.to_string()))
+    // 2) Construct the final object { id, path, json } just like `get_data()` does
+    let ret_obj = js_sys::Object::new();
+    js_sys::Reflect::set(&ret_obj, &JsValue::from_str("id"), &JsValue::from_str(id))?;
+    js_sys::Reflect::set(
+        &ret_obj,
+        &JsValue::from_str("path"),
+        &JsValue::from_str(path),
+    )?;
+    js_sys::Reflect::set(&ret_obj, &JsValue::from_str("json"), &json_val)?;
+
+    Ok(ret_obj.into())
 }
 
 // -----------------------------------------------------------------------------
@@ -63,6 +69,10 @@ pub fn create_pubky_app_user(
 
     // We have no ID for PubkyAppUser. The path is always profile.json
     let path = user.create_path();
+
+    // Quick debug: log to console
+    let debug_json = serde_json::to_string_pretty(&user).unwrap();
+
     build_create_result(&user, "", &path)
 }
 
