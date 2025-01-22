@@ -1,6 +1,6 @@
 [package]
 name = "pubky-app-specs"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Pubky.app Data Model Specifications"
 homepage = "https://pubky.app"
@@ -8,20 +8,40 @@ repository = "https://github.com/pubky/pubky-app-specs"
 license = "MIT"
 documentation = "https://github.com/pubky/pubky-app-specs"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
 url = "2.5.4"
 base32 = "0.5.1"
-blake3 = "1.5.4"
+blake3 = "1.5.5"
 mime = "0.3"
 utoipa = { git = "https://github.com/juhaku/utoipa", rev = "d522f744259dc4fde5f45d187983fb68c8167029", optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.100"
+serde-wasm-bindgen = "0.6.5"
+js-sys = "0.3.77"
+web-sys = "0.3.77"
+
 [dev-dependencies]
-pubky = "0.3.0"
 pubky-common = "0.1.0"
-anyhow = "1.0.93"
-tokio = { version = "1.41.1", features = ["full"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.50"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+pubky = "0.3.0"
+tokio = { version = "1.43.0", features = ["full"] }
+anyhow = "1.0.95"
 
 [features]
 openapi = ["utoipa"]
+
+[profile.release]
+opt-level = "s"   # Requests maximum optimization for binary size (“z” stands for “size”), rather than speed.
+lto = true        # Enables link-time optimization, allowing the compiler to do more aggressive inlining/dead-code elimination across crates.
+codegen-units = 1 # Forces compilation into a single code-generation unit, further helping inlining and dead-code elimination at link time.
+panic = "abort"   # Ensures panics do not generate extra stack-unwinding code, reducing binary bloat. Panics will simply abort execution.

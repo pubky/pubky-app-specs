@@ -15,7 +15,7 @@ use utoipa::ToSchema;
 ///
 /// `/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppMute {
     pub created_at: i64,
@@ -80,7 +80,7 @@ mod tests {
         "#;
 
         let blob = mute_json.as_bytes();
-        let mute_parsed = <PubkyAppMute as Validatable>::try_from(&blob, "some_user_id").unwrap();
+        let mute_parsed = <PubkyAppMute as Validatable>::try_from(blob, "some_user_id").unwrap();
 
         assert_eq!(mute_parsed.created_at, 1627849723);
     }

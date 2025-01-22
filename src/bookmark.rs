@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 /// `/pub/pubky.app/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
     pub uri: String,
@@ -93,7 +93,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let bookmark = PubkyAppBookmark::new("user_id/pub/pubky.app/posts/post_id".to_string());
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(&invalid_id);
+        let result = bookmark.validate(invalid_id);
         assert!(result.is_err());
     }
 
@@ -111,7 +111,7 @@ mod tests {
         let id = bookmark.create_id();
 
         let blob = bookmark_json.as_bytes();
-        let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(&blob, &id).unwrap();
+        let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);
     }

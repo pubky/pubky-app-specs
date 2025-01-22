@@ -276,7 +276,7 @@ mod tests {
         );
 
         let invalid_id = "INVALIDID12345";
-        let result = post.validate(&invalid_id);
+        let result = post.validate(invalid_id);
         assert!(result.is_err());
     }
 
@@ -302,7 +302,7 @@ mod tests {
         .create_id();
 
         let blob = post_json.as_bytes();
-        let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
+        let post = <PubkyAppPost as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(post.content, "Hello World!");
     }
@@ -325,7 +325,7 @@ mod tests {
             .create_id();
 
         let blob = post_json.as_bytes();
-        let post = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
+        let post = <PubkyAppPost as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(post.content, "empty"); // After sanitization
     }

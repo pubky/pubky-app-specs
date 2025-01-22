@@ -1,16 +1,27 @@
 /// cargo run --example create_user
-use anyhow::Result;
-use pubky::PubkyClient;
-use pubky_app_specs::{
-    traits::{HasPath, Validatable},
-    PubkyAppUser, PROTOCOL,
-};
-use pubky_common::crypto::{Keypair, PublicKey};
-use serde_json::to_vec;
 
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    // Do nothing when compiled for wasm
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+use {
+    anyhow::Result,
+    pubky::PubkyClient,
+    pubky_app_specs::{
+        traits::{HasPath, Validatable},
+        PubkyAppUser, PROTOCOL,
+    },
+    pubky_common::crypto::{Keypair, PublicKey},
+    serde_json::to_vec,
+};
 // Replace this with your actual homeserver public key
+
+#[cfg(not(target_arch = "wasm32"))]
 const HOMESERVER: &str = "ufibwbmed6jeq9k4p583go95wofakh9fwpp4k734trq79pd9u1uy";
 
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<()> {
     // Print an introduction for the developer

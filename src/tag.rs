@@ -20,7 +20,7 @@ use utoipa::ToSchema;
 /// `/pub/pubky.app/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
     pub uri: String,
@@ -126,10 +126,7 @@ mod tests {
         assert!(!tag_id.is_empty());
 
         // Check if the tag ID is correct
-        assert_eq!(
-            new_tag_id,
-            tag_id
-        );
+        assert_eq!(new_tag_id, tag_id);
 
         let wrong_tag = PubkyAppTag {
             uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
@@ -138,10 +135,7 @@ mod tests {
         };
 
         // Assure that the new tag has wrong ID
-        assert_ne!(
-            wrong_tag.create_id(),
-            tag_id
-        );
+        assert_ne!(wrong_tag.create_id(), tag_id);
     }
 
     #[test]
@@ -240,7 +234,7 @@ mod tests {
         };
 
         let invalid_id = "INVALIDID";
-        let result = tag.validate(&invalid_id);
+        let result = tag.validate(invalid_id);
         assert!(result.is_err());
         // You can check the specific error message if necessary
     }
@@ -262,7 +256,7 @@ mod tests {
         .create_id();
 
         let blob = tag_json.as_bytes();
-        let tag = <PubkyAppTag as Validatable>::try_from(&blob, &id).unwrap();
+        let tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
         assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
         assert_eq!(tag.label, "cooltag"); // After sanitization
     }
@@ -279,7 +273,7 @@ mod tests {
 
         let id = "D2DV4EZDA03Q3KCRMVGMDYZ8C0";
         let blob = tag_json.as_bytes();
-        let result = <PubkyAppTag as Validatable>::try_from(&blob, &id);
+        let result = <PubkyAppTag as Validatable>::try_from(blob, id);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -296,9 +290,12 @@ mod tests {
         };
         let tag_id = tag.create_id();
 
-        match tag.validate(&tag_id) {
-            Err(e) => assert_eq!(e.to_string(), format!("Validation Error: Invalid URI format: {}", tag.uri), "The error message is not related URI or the message description is wrong"),
-            _ => ()
+        if let Err(e) = tag.validate(&tag_id) {
+            assert_eq!(
+                e.to_string(),
+                format!("Validation Error: Invalid URI format: {}", tag.uri),
+                "The error message is not related URI or the message description is wrong"
+            )
         };
 
         let tag = PubkyAppTag {
@@ -310,9 +307,12 @@ mod tests {
         // Precomputed earlier
         let label_id = tag.create_id();
 
-        match tag.validate(&label_id) {
-            Err(e) => assert_eq!(e.to_string(), "Validation Error: Tag label exceeds maximum length".to_string(), "The error message is not related tag length or the message description is wrong"),
-            _ => ()
+        if let Err(e) = tag.validate(&label_id) {
+            assert_eq!(
+                e.to_string(),
+                "Validation Error: Tag label exceeds maximum length".to_string(),
+                "The error message is not related tag length or the message description is wrong"
+            )
         };
     }
 

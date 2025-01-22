@@ -5,6 +5,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+#[cfg(target_arch = "wasm32")]
+use crate::traits::JSdata;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 // Validation constants
 const MIN_USERNAME_LENGTH: usize = 3;
 const MAX_USERNAME_LENGTH: usize = 50;
@@ -19,26 +24,38 @@ const MAX_STATUS_LENGTH: usize = 50;
 use utoipa::ToSchema;
 
 /// URI: /pub/pubky.app/profile.json
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUser {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    // Avoid wasm-pack automatically generating getter/setters for the pub fields.
     pub name: String,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub bio: Option<String>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub image: Option<String>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub links: Option<Vec<PubkyAppUserLink>>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
 }
 
 /// Represents a user's single link with a title and URL.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUserLink {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub title: String,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub url: String,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppUser {
     /// Creates a new `PubkyAppUser` instance and sanitizes it.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
         bio: Option<String>,
@@ -55,7 +72,15 @@ impl PubkyAppUser {
         }
         .sanitize()
     }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_data(&self) -> Result<JsValue, JsValue> {
+        JSdata::get_data(self)
+    }
 }
+
+#[cfg(target_arch = "wasm32")]
+impl JSdata for PubkyAppUser {}
 
 impl HasPath for PubkyAppUser {
     fn create_path(&self) -> String {
@@ -168,6 +193,15 @@ impl Validatable for PubkyAppUser {
         }
 
         Ok(())
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppUserLink {
+    /// Creates a new `PubkyAppUserLink` instance and sanitizes it.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(title: String, url: String) -> Self {
+        Self { title, url }.sanitize()
     }
 }
 
@@ -340,7 +374,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(&blob, "").unwrap();
+        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist"));
@@ -368,7 +402,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(&blob, "").unwrap();
+        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
 
         // Since the link URL is invalid, it should be filtered out
         assert!(user.links.is_none() || user.links.as_ref().unwrap().is_empty());

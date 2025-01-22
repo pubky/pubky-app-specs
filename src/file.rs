@@ -204,7 +204,7 @@ mod tests {
             1024,
         );
         let invalid_id = "INVALIDID";
-        let result = file.validate(&invalid_id);
+        let result = file.validate(invalid_id);
         assert!(result.is_err());
     }
 
@@ -268,7 +268,7 @@ mod tests {
         let id = file.create_id();
 
         let blob = file_json.as_bytes();
-        let file_parsed = <PubkyAppFile as Validatable>::try_from(&blob, &id).unwrap();
+        let file_parsed = <PubkyAppFile as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");
         assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");

@@ -18,7 +18,7 @@ use utoipa::ToSchema;
 ///
 /// `/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFollow {
     pub created_at: i64,
@@ -83,7 +83,7 @@ mod tests {
 
         let blob = follow_json.as_bytes();
         let follow_parsed =
-            <PubkyAppFollow as Validatable>::try_from(&blob, "some_user_id").unwrap();
+            <PubkyAppFollow as Validatable>::try_from(blob, "some_user_id").unwrap();
 
         assert_eq!(follow_parsed.created_at, 1627849723);
     }

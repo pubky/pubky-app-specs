@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 /// Represents the last read timestamp for notifications.
 /// URI: /pub/pubky.app/last_read
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppLastRead {
     pub timestamp: i64, // Unix epoch time in milliseconds
@@ -83,7 +83,7 @@ mod tests {
         "#;
 
         let blob = last_read_json.as_bytes();
-        let last_read = <PubkyAppLastRead as Validatable>::try_from(&blob, "").unwrap();
+        let last_read = <PubkyAppLastRead as Validatable>::try_from(blob, "").unwrap();
         assert_eq!(last_read.timestamp, 1700000000);
     }
 }

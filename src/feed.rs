@@ -4,7 +4,6 @@ use crate::{
     PubkyAppPostKind, APP_PATH,
 };
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -208,7 +207,7 @@ mod tests {
             "Rust Bitcoiners".to_string(),
         );
         let invalid_id = "INVALIDID";
-        let result = feed.validate(&invalid_id);
+        let result = feed.validate(invalid_id);
         assert!(result.is_err());
     }
 
@@ -249,7 +248,7 @@ mod tests {
         let feed_id = feed.create_id();
 
         let blob = feed_json.as_bytes();
-        let feed_parsed = <PubkyAppFeed as Validatable>::try_from(&blob, &feed_id).unwrap();
+        let feed_parsed = <PubkyAppFeed as Validatable>::try_from(blob, &feed_id).unwrap();
 
         assert_eq!(feed_parsed.name, "My Feed");
         assert_eq!(

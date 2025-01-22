@@ -1,11 +1,25 @@
 # Pubky.app Data Model Specification
 
-_Version 0.2.1_
+_Version 0.3.0_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
 >
 > When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability.
+
+### JS package
+
+Build with
+
+```bash
+wasm-pack build --target bundler
+```
+
+Test with
+
+```bash
+wasm-pack test --headless --firefox
+```
 
 ## Table of Contents
 
