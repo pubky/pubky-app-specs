@@ -1,7 +1,7 @@
 use crate::traits::{HasPath, HasPubkyIdPath, HashId, TimestampId, Validatable};
 use crate::*;
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 
 /// Each FFI function:
@@ -13,20 +13,18 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
-pub struct CreateResult {
+pub struct Meta {
     /// The unique ID for this object (empty if none)
     id: String,
     /// The final path (or empty if none)
     path: String,
     /// The final url (or empty if none)
     url: String,
-    /// The fully validated and sanitized object, as JSON
-    json: JsValue,
 }
 
 // Implement wasm_bindgen methods to expose read-only fields.
 #[wasm_bindgen]
-impl CreateResult {
+impl Meta {
     // Getters clone the data out because String/JsValue is not Copy.
     #[wasm_bindgen(getter)]
     pub fn id(&self) -> String {
@@ -42,62 +40,111 @@ impl CreateResult {
     pub fn url(&self) -> String {
         self.url.clone()
     }
-
-    #[wasm_bindgen(getter)]
-    pub fn json(&self) -> JsValue {
-        self.json.clone()
-    }
 }
 
-impl CreateResult {
+impl Meta {
     /// Internal helper. Generates JSON from `object` + sets `id`, `path`, and `url`.
-    pub fn from_object<T: Serialize>(
-        object_id: String,
-        pubky_id: String,
-        path: String,
-        object: T,
-    ) -> Result<Self, JsValue> {
-        let json = to_value(&object)
-            .map_err(|e| JsValue::from_str(&format!("JSON serialization error: {}", e)))?;
-
-        Ok(Self {
+    pub fn from_object(object_id: String, pubky_id: String, path: String) -> Self {
+        Self {
             id: object_id,
             url: format!("{}{}{}", PROTOCOL, pubky_id, path),
             path,
-            json,
-        })
+        }
     }
 }
 
 /// Represents a user's single link with a title and URL.
 #[wasm_bindgen]
-pub struct PubkyAppSpecs {
+pub struct PubkyAppBuilder {
     #[wasm_bindgen(skip)]
     pub pubky_id: String,
 }
 
 #[wasm_bindgen]
-impl PubkyAppSpecs {
-    /// Creates a new `PubkyAppSpecs` instance.
+pub struct FollowResult {
+    follow: PubkyAppFollow,
+    meta: Meta,
+}
+
+#[wasm_bindgen]
+impl FollowResult {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[wasm_bindgen(getter)]
+    pub fn meta(&self) -> Meta {
+        self.meta.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn follow(&self) -> PubkyAppFollow {
+        self.follow.clone()
+    }
+}
+
+#[wasm_bindgen]
+pub struct UserResult {
+    user: PubkyAppUser,
+    meta: Meta,
+}
+
+#[wasm_bindgen]
+impl UserResult {
+    // Expose read-only getters for TS:
+    #[wasm_bindgen(getter)]
+    pub fn user(&self) -> PubkyAppUser {
+        self.user.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn meta(&self) -> Meta {
+        self.meta.clone()
+    }
+}
+
+#[wasm_bindgen]
+impl PubkyAppBuilder {
+    /// Creates a new `PubkyAppBuilder` instance.
     #[wasm_bindgen(constructor)]
     pub fn new(pubky_id: String) -> Self {
         Self { pubky_id }
     }
 
-    fn create_url(&self, path: &str) -> String {
-        format!("pubky://{}{}", self.pubky_id, path)
-    }
-
     #[wasm_bindgen(js_name = createFollow)]
-    pub fn create_follow(&self, followee_id: String) -> Result<CreateResult, JsValue> {
+    pub fn create_follow(&self, followee_id: String) -> Result<FollowResult, JsValue> {
         let follow = PubkyAppFollow::new();
         follow.validate(&followee_id)?; // No ID in follow, so we pass user ID or empty
 
         // Path requires the user ID
         let path = follow.create_path(&followee_id);
-
+        let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
         // Return an empty ID for follow
-        CreateResult::from_object("".to_string(), self.pubky_id.clone(), path, follow)
+        Ok(FollowResult { follow, meta })
+    }
+
+    #[wasm_bindgen(js_name = createUser)]
+    pub fn create_user(
+        &self,
+        name: String,
+        bio: Option<String>,
+        image: Option<String>,
+        links: JsValue, // a JS array of {title, url} or null
+        status: Option<String>,
+    ) -> Result<UserResult, JsValue> {
+        // 1) Convert JS 'links' -> Option<Vec<PubkyAppUserLink>>
+        let links_vec: Option<Vec<PubkyAppUserLink>> = if links.is_null() || links.is_undefined() {
+            None
+        } else {
+            from_value(links)?
+        };
+
+        // 2) Build user domain object
+        let user = PubkyAppUser::new(name, bio, image, links_vec, status);
+        user.validate("")?; // No ID-based validation for user
+
+        // 3) Create the path and meta
+        let path = user.create_path();
+        let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
+
+        // 4) Return a typed struct containing both
+        Ok(UserResult { user, meta })
     }
 }
 

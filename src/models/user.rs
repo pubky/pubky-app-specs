@@ -6,9 +6,11 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::JSdata;
+use crate::traits::ToJson;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -41,6 +43,39 @@ pub struct PubkyAppUser {
     pub status: Option<String>,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppUser {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn bio(&self) -> Option<String> {
+        self.bio.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn image(&self) -> Option<String> {
+        self.image.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn links(&self) -> Option<Vec<PubkyAppUserLink>> {
+        self.links.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn status(&self) -> Option<String> {
+        self.status.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppUser {}
+
 /// Represents a user's single link with a title and URL.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -52,10 +87,8 @@ pub struct PubkyAppUserLink {
     pub url: String,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppUser {
     /// Creates a new `PubkyAppUser` instance and sanitizes it.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
         bio: Option<String>,
@@ -72,15 +105,7 @@ impl PubkyAppUser {
         }
         .sanitize()
     }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn get_data(&self) -> Result<JsValue, JsValue> {
-        JSdata::get_data(self)
-    }
 }
-
-#[cfg(target_arch = "wasm32")]
-impl JSdata for PubkyAppUser {}
 
 impl HasPath for PubkyAppUser {
     fn create_path(&self) -> String {

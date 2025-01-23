@@ -1,10 +1,8 @@
 use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use serde::Serialize;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -134,20 +132,14 @@ pub trait HasPubkyIdPath {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub trait JSdata: HasPath + Serialize {
-    // helper that returns { id, path, json }
-    fn get_data(&self) -> Result<JsValue, JsValue> {
-        let path = self.create_path();
+use serde_wasm_bindgen::to_value;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
 
-        let json_val = serde_wasm_bindgen::to_value(&self)
-            .map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
-
-        // Construct a small JS object
-        let obj = js_sys::Object::new();
-        js_sys::Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::null())?;
-        js_sys::Reflect::set(&obj, &JsValue::from_str("path"), &JsValue::from_str(&path))?;
-        js_sys::Reflect::set(&obj, &JsValue::from_str("json"), &json_val)?;
-
-        Ok(obj.into())
+/// Provides a `.to_json()` method returning a `JsValue` with all fields in plain JSON.
+#[cfg(target_arch = "wasm32")]
+pub trait ToJson: Serialize {
+    fn to_json(&self) -> Result<JsValue, JsValue> {
+        to_value(&self).map_err(|e| JsValue::from_str(&format!("JSON serialization error: {}", e)))
     }
 }
