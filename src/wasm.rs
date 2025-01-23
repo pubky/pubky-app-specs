@@ -15,14 +15,16 @@ use wasm_bindgen::prelude::*;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateResult {
     /// The fully validated and sanitized object, as JSON
-    pub json: serde_json::Value,
+    json: serde_json::Value,
     /// The unique ID for this object (empty if none)
-    pub id: String,
+    id: String,
     /// The final path (or empty if none)
-    pub path: String,
+    path: String,
+    /// The final url (or empty if none)
+    url: String,
 }
 
-/// Utility to convert a Rust object into `{ json, id, path }` for JS.
+/// Convert a Rust object into `{ json, id, path, url }` for JS.
 fn build_create_result<T>(obj: &T, id: &str, path: &str) -> Result<JsValue, JsValue>
 where
     T: Serialize,
@@ -41,6 +43,66 @@ where
     js_sys::Reflect::set(&ret_obj, &JsValue::from_str("json"), &json_val)?;
 
     Ok(ret_obj.into())
+}
+
+/// Represents a user's single link with a title and URL.
+#[wasm_bindgen]
+pub struct PubkyAppSpecs {
+    #[wasm_bindgen(skip)]
+    pub pubky_id: String,
+}
+
+#[wasm_bindgen]
+impl PubkyAppSpecs {
+    /// Creates a new `PubkyAppSpecs` instance.
+    #[wasm_bindgen(constructor)]
+    pub fn new(pubky_id: String) -> Self {
+        Self { pubky_id }
+    }
+
+    fn create_url(&self, path: &str) -> String {
+        format!("pubky://{}{}", self.pubky_id, path)
+    }
+
+    /// Convert a Rust object into `{ json, id, path, url }` for JS.
+    fn to_js<T>(&self, obj: &T, id: &str, path: &str) -> Result<JsValue, JsValue>
+    where
+        T: Serialize,
+    {
+        let url = self.create_url(path);
+        // 1) Serialize `obj` into a JavaScript object
+        let json_val =
+            to_value(obj).map_err(|e| JsValue::from_str(&format!("JSON Error: {}", e)))?;
+
+        // 2) Construct the final object { id, path, json } just like `get_data()` does
+        let ret_obj = js_sys::Object::new();
+        js_sys::Reflect::set(&ret_obj, &JsValue::from_str("id"), &JsValue::from_str(id))?;
+        js_sys::Reflect::set(
+            &ret_obj,
+            &JsValue::from_str("path"),
+            &JsValue::from_str(path),
+        )?;
+        js_sys::Reflect::set(
+            &ret_obj,
+            &JsValue::from_str("url"),
+            &JsValue::from_str(&url),
+        )?;
+        js_sys::Reflect::set(&ret_obj, &JsValue::from_str("json"), &json_val)?;
+
+        Ok(ret_obj.into())
+    }
+
+    #[wasm_bindgen(js_name = createFollow)]
+    pub fn create_follow(&self, followee_id: String) -> Result<JsValue, JsValue> {
+        let follow = PubkyAppFollow::new();
+        follow.validate(&followee_id)?; // No ID in follow, so we pass user ID or empty
+
+        // Path requires the user ID
+        let path = follow.create_path(&followee_id);
+
+        // Return an empty ID for follow
+        self.to_js(&follow, "", &path)
+    }
 }
 
 // -----------------------------------------------------------------------------

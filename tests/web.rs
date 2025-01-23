@@ -1,5 +1,3 @@
-// tests/wasm_follow_test.rs
-
 #![cfg(target_arch = "wasm32")]
 
 extern crate wasm_bindgen_test;

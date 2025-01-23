@@ -10,6 +10,9 @@ use crate::traits::JSdata;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 // Validation constants
 const MIN_USERNAME_LENGTH: usize = 3;
 const MAX_USERNAME_LENGTH: usize = 50;
@@ -19,9 +22,6 @@ const MAX_LINKS: usize = 5;
 const MAX_LINK_TITLE_LENGTH: usize = 100;
 const MAX_LINK_URL_LENGTH: usize = 300;
 const MAX_STATUS_LENGTH: usize = 50;
-
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
 
 /// URI: /pub/pubky.app/profile.json
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]

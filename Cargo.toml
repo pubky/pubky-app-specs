@@ -41,7 +41,7 @@ anyhow = "1.0.95"
 openapi = ["utoipa"]
 
 [profile.release]
-opt-level = "s"   # Requests maximum optimization for binary size (“z” stands for “size”), rather than speed.
+opt-level = "z"   # Requests maximum optimization for binary size (“z” stands for “size”), rather than speed.
 lto = true        # Enables link-time optimization, allowing the compiler to do more aggressive inlining/dead-code elimination across crates.
 codegen-units = 1 # Forces compilation into a single code-generation unit, further helping inlining and dead-code elimination at link time.
 panic = "abort"   # Ensures panics do not generate extra stack-unwinding code, reducing binary bloat. Panics will simply abort execution.
