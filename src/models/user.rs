@@ -87,8 +87,10 @@ pub struct PubkyAppUserLink {
     pub url: String,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppUser {
     /// Creates a new `PubkyAppUser` instance and sanitizes it.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
         bio: Option<String>,
