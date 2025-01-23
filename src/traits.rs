@@ -1,10 +1,7 @@
 use crate::common::timestamp;
 use base32::{decode, encode, Alphabet};
 use blake3::Hasher;
-use serde::{de::DeserializeOwned, Serialize};
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use serde::de::DeserializeOwned;
 
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
@@ -131,6 +128,8 @@ pub trait HasPubkyIdPath {
     fn create_path(&self, pubky_id: &str) -> String;
 }
 
+#[cfg(target_arch = "wasm32")]
+use serde::Serialize;
 #[cfg(target_arch = "wasm32")]
 use serde_wasm_bindgen::to_value;
 #[cfg(target_arch = "wasm32")]

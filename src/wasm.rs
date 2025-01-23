@@ -1,7 +1,6 @@
 use crate::traits::{HasPath, HasPubkyIdPath, HashId, TimestampId, Validatable};
 use crate::*;
-use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
 
 /// Each FFI function:
