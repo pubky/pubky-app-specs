@@ -6,7 +6,7 @@
   </head>
   <body>
     <script type="module">
-      import init, { create_pubky_app_follow } from "./pubky_app_specs.js";
+      import init, { PubkySpecsBuilder } from "./pubky_app_specs.js";
 
       async function main() {
         try {
@@ -18,7 +18,8 @@
           // await init("./pubky_app_specs_bg.wasm");
 
           // 2) Now call the function
-          const result = create_pubky_app_follow("nonsense");
+          const specs = new PubkySpecsBuilder("our_user");
+          const result = specs.createFollow("other_user");
           console.log("Success:", result);
         } catch (err) {
           console.error("Error creating follow:", err);

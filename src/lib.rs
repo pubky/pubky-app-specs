@@ -1,6 +1,7 @@
 mod common;
 mod models;
 pub mod traits;
+mod utils;
 
 // Re-export domain types
 pub use common::{APP_PATH, PROTOCOL, VERSION};
@@ -14,6 +15,7 @@ pub use models::mute::PubkyAppMute;
 pub use models::post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
+pub use utils::*;
 
 // Our WASM module
 #[cfg(target_arch = "wasm32")]

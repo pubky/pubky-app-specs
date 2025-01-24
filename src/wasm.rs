@@ -328,12 +328,12 @@ impl PubkySpecsBuilder {
     // -----------------------------------------------------------------------------
 
     #[wasm_bindgen(js_name = createMute)]
-    pub fn create_mute(&self, pubky_id: String) -> Result<MuteResult, JsValue> {
+    pub fn create_mute(&self, mutee_id: String) -> Result<MuteResult, JsValue> {
         let mute = PubkyAppMute::new();
-        mute.validate(&pubky_id)?;
+        mute.validate(&mutee_id)?;
 
-        let path = mute.create_path(&pubky_id);
-        let meta = Meta::from_object(pubky_id, self.pubky_id.clone(), path);
+        let path = mute.create_path(&mutee_id);
+        let meta = Meta::from_object(mutee_id, self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
     }

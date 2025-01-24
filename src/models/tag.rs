@@ -8,6 +8,7 @@ use url::Url;
 
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
+const MIN_TAG_LABEL_LENGTH: usize = 1;
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::ToJson;
@@ -124,9 +125,15 @@ impl Validatable for PubkyAppTag {
         self.validate_id(id)?;
 
         // Validate label length
-        if self.label.chars().count() > MAX_TAG_LABEL_LENGTH {
-            return Err("Validation Error: Tag label exceeds maximum length".to_string());
-        }
+        match self.label.chars().count() {
+            len if len > MAX_TAG_LABEL_LENGTH => {
+                return Err("Validation Error: Tag label exceeds maximum length".to_string())
+            }
+            len if len < MIN_TAG_LABEL_LENGTH => {
+                return Err("Validation Error: Tag label is shorter than minimum length".to_string())
+            }
+            _ => (),
+        };
 
         // Validate URI format
         match Url::parse(&self.uri) {
