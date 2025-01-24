@@ -5,7 +5,7 @@ echo "🦀 Testing WebAssembly package..."
 wasm-pack test --headless --firefox
 
 echo "🦀 Building WebAssembly package..."
-wasm-pack build -out-dir dist
+wasm-pack build --target web --out-dir dist
 
 echo "📋 Copying package.json and Readme files to /dist..."
 cp pkg/* dist/

@@ -5,6 +5,11 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -16,9 +21,11 @@ use utoipa::ToSchema;
 /// `/pub/pubky.app/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     pub created_at: i64,
 }
@@ -31,8 +38,27 @@ impl PubkyAppBookmark {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppBookmark {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+
+    /// Getter for `uri`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppBookmark {}
+
 impl HashId for PubkyAppBookmark {
-    /// Bookmark ID is created based on the hash of the URI bookmarked
+    /// Bookmark ID is created based on the hash of the URI bookmarked.
     fn get_id_data(&self) -> String {
         self.uri.clone()
     }
@@ -47,7 +73,7 @@ impl HasPath for PubkyAppBookmark {
 impl Validatable for PubkyAppBookmark {
     fn validate(&self, id: &str) -> Result<(), String> {
         self.validate_id(id)?;
-        // TODO: more bookmarks validation?
+        // Additional bookmark validation can be added here.
         Ok(())
     }
 }

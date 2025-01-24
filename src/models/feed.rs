@@ -4,6 +4,12 @@ use crate::{
     PubkyAppPostKind, APP_PATH,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -50,10 +56,13 @@ pub struct PubkyAppFeedConfig {
 }
 
 /// Represents a feed configuration.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFeed {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub feed: PubkyAppFeedConfig,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
     pub created_at: i64,
 }
@@ -84,6 +93,34 @@ impl PubkyAppFeed {
         .sanitize()
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppFeed {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+
+    /// Getter for `feed`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn feed(&self) -> JsValue {
+        match serde_wasm_bindgen::to_value(&self.feed) {
+            Ok(value) => value,
+            Err(value) => value.into(),
+        }
+    }
+
+    /// Getter for `name`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppFeed {}
 
 impl HashId for PubkyAppFeed {
     /// Generates an ID based on the serialized `feed` object.
@@ -129,6 +166,45 @@ impl Validatable for PubkyAppFeed {
             feed,
             name,
             created_at: self.created_at,
+        }
+    }
+}
+
+impl FromStr for PubkyAppFeedReach {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "following" => Ok(PubkyAppFeedReach::Following),
+            "followers" => Ok(PubkyAppFeedReach::Followers),
+            "friends" => Ok(PubkyAppFeedReach::Friends),
+            "all" => Ok(PubkyAppFeedReach::All),
+            _ => Err(format!("Invalid feed reach: {}", s)),
+        }
+    }
+}
+
+impl FromStr for PubkyAppFeedLayout {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "columns" => Ok(PubkyAppFeedLayout::Columns),
+            "wide" => Ok(PubkyAppFeedLayout::Wide),
+            "visual" => Ok(PubkyAppFeedLayout::Visual),
+            _ => Err(format!("Invalid feed layout: {}", s)),
+        }
+    }
+}
+
+impl FromStr for PubkyAppFeedSort {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "recent" => Ok(PubkyAppFeedSort::Recent),
+            "popularity" => Ok(PubkyAppFeedSort::Popularity),
+            _ => Err(format!("Invalid feed sort: {}", s)),
         }
     }
 }

@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::{
     common::timestamp,
     traits::{HasPath, TimestampId, Validatable},
@@ -7,8 +5,14 @@ use crate::{
 };
 use mime::Mime;
 use serde::{Deserialize, Serialize};
-
+use std::str::FromStr;
 use url::Url;
+
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -43,15 +47,44 @@ const VALID_MIME_TYPES: &[&str] = &[
 
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFile {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
     pub created_at: i64,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub src: String,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content_type: String,
     pub size: i64,
 }
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppFile {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn src(&self) -> String {
+        self.src.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn content_type(&self) -> String {
+        self.content_type.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppFile {}
 
 impl PubkyAppFile {
     /// Creates a new `PubkyAppFile` instance.
