@@ -2,7 +2,7 @@
 
 extern crate wasm_bindgen_test;
 use js_sys::Array;
-use pubky_app_specs::{PubkyAppBuilder, PubkyAppUserLink};
+use pubky_app_specs::{PubkyAppUserLink, PubkySpecsBuilder};
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -11,7 +11,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn test_create_follow() {
-    let specs = PubkyAppBuilder::new("test_pubky_id".to_string());
+    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
 
     let result = specs
         .create_follow("followee_123".to_string())
@@ -25,13 +25,13 @@ fn test_create_follow() {
         meta.url(),
         "pubky://test_pubky_id/pub/pubky.app/follows/followee_123"
     );
-    assert_eq!(meta.id(), "");
+    assert_eq!(meta.id(), "followee_123");
     assert!(follow.created_at > 0);
 }
 
 #[wasm_bindgen_test]
 fn test_create_user_rust_api() {
-    let specs = PubkyAppBuilder::new("test_pubky_id".to_string());
+    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
 
     // Prepare links as a JS-compatible array
     let links = Array::new();
@@ -100,7 +100,7 @@ fn test_create_user_rust_api() {
 
 #[wasm_bindgen_test]
 fn test_create_user_with_minimal_data() {
-    let specs = PubkyAppBuilder::new("test_pubky_id".to_string());
+    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
 
     // Call `create_user` with minimal data
     let result = specs

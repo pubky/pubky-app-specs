@@ -42,7 +42,7 @@ impl Meta {
 }
 
 impl Meta {
-    /// Internal helper. Generates JSON from `object` + sets `id`, `path`, and `url`.
+    /// Internal helper. Generates meta's `id`, `path`, and `url`.
     pub fn from_object(object_id: String, pubky_id: String, path: String) -> Self {
         Self {
             id: object_id,
@@ -54,69 +54,88 @@ impl Meta {
 
 /// Represents a user's single link with a title and URL.
 #[wasm_bindgen]
-pub struct PubkyAppBuilder {
+pub struct PubkySpecsBuilder {
     #[wasm_bindgen(skip)]
     pub pubky_id: String,
 }
 
-#[wasm_bindgen]
-pub struct FollowResult {
-    follow: PubkyAppFollow,
-    meta: Meta,
+/// A macro to generate result structs and `wasm_bindgen`-exposed getters.
+/// A struct for each `create_*()` function is needed if we want
+/// correct TS types
+///
+/// This macro creates a struct with the specified name (`$struct_name`),
+/// containing:
+/// - A primary field (`$field_name`) of type `$field_type`.
+/// - A `meta` field of type `Meta`.
+///
+/// It also generates getters for both fields.
+///
+/// # Usage
+/// ```rust
+/// result_struct!(PostResult, post, PubkyAppPost);
+/// ```
+/// Expands to:
+/// ```rust
+/// #[wasm_bindgen]
+/// pub struct PostResult {
+///     post: PubkyAppPost,
+///     meta: Meta,
+/// }
+///
+/// #[wasm_bindgen]
+/// impl PostResult {
+///     #[wasm_bindgen(getter)]
+///     pub fn post(&self) -> PubkyAppPost { self.post.clone() }
+///
+///     #[wasm_bindgen(getter)]
+///     pub fn meta(&self) -> Meta { self.meta.clone() }
+/// }
+/// ```
+macro_rules! result_struct {
+    ($struct_name:ident, $field_name:ident, $field_type:ty) => {
+        #[wasm_bindgen]
+        pub struct $struct_name {
+            $field_name: $field_type,
+            meta: Meta,
+        }
+
+        #[wasm_bindgen]
+        impl $struct_name {
+            #[wasm_bindgen(getter)]
+            pub fn $field_name(&self) -> $field_type {
+                self.$field_name.clone()
+            }
+
+            #[wasm_bindgen(getter)]
+            pub fn meta(&self) -> Meta {
+                self.meta.clone()
+            }
+        }
+    };
 }
 
-#[wasm_bindgen]
-impl FollowResult {
-    // Getters clone the data out because String/JsValue is not Copy.
-    #[wasm_bindgen(getter)]
-    pub fn meta(&self) -> Meta {
-        self.meta.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn follow(&self) -> PubkyAppFollow {
-        self.follow.clone()
-    }
-}
+result_struct!(UserResult, user, PubkyAppUser);
+result_struct!(FileResult, file, PubkyAppFile);
+result_struct!(FollowResult, follow, PubkyAppFollow);
+result_struct!(PostResult, post, PubkyAppPost);
+// result_struct!(FeedResult, feed, PubkyAppFeed);
+// result_struct!(TagResult, tag, PubkyAppTag);
+// result_struct!(BookmarkResult, bookmark, PubkyAppBookmark);
+result_struct!(MuteResult, mute, PubkyAppMute);
+// result_struct!(LastReadResult, last_read, PubkyAppLastRead);
+// result_struct!(BlobResult, blob, PubkyAppBlob);
 
 #[wasm_bindgen]
-pub struct UserResult {
-    user: PubkyAppUser,
-    meta: Meta,
-}
-
-#[wasm_bindgen]
-impl UserResult {
-    // Expose read-only getters for TS:
-    #[wasm_bindgen(getter)]
-    pub fn user(&self) -> PubkyAppUser {
-        self.user.clone()
-    }
-    #[wasm_bindgen(getter)]
-    pub fn meta(&self) -> Meta {
-        self.meta.clone()
-    }
-}
-
-#[wasm_bindgen]
-impl PubkyAppBuilder {
+impl PubkySpecsBuilder {
     /// Creates a new `PubkyAppBuilder` instance.
     #[wasm_bindgen(constructor)]
     pub fn new(pubky_id: String) -> Self {
         Self { pubky_id }
     }
 
-    #[wasm_bindgen(js_name = createFollow)]
-    pub fn create_follow(&self, followee_id: String) -> Result<FollowResult, JsValue> {
-        let follow = PubkyAppFollow::new();
-        follow.validate(&followee_id)?; // No ID in follow, so we pass user ID or empty
-
-        // Path requires the user ID
-        let path = follow.create_path(&followee_id);
-        let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
-        // Return an empty ID for follow
-        Ok(FollowResult { follow, meta })
-    }
+    // // -----------------------------------------------------------------------------
+    // // 1. PubkyAppUser
+    // // -----------------------------------------------------------------------------
 
     #[wasm_bindgen(js_name = createUser)]
     pub fn create_user(
@@ -145,273 +164,242 @@ impl PubkyAppBuilder {
         // 4) Return a typed struct containing both
         Ok(UserResult { user, meta })
     }
+
+    // -----------------------------------------------------------------------------
+    // 2. PubkyAppFeed
+    // -----------------------------------------------------------------------------
+
+    // #[wasm_bindgen(js_name = createFeed)]
+    // pub fn create_feed(
+    //     &self,
+    //     tags: JsValue,
+    //     reach: String,
+    //     layout: String,
+    //     sort: String,
+    //     content: Option<String>,
+    //     name: String,
+    // ) -> Result<FeedResult, JsValue> {
+    //     let tags_vec: Option<Vec<String>> = if tags.is_null() || tags.is_undefined() {
+    //         None
+    //     } else {
+    //         from_value(tags)?
+    //     };
+
+    //     let reach_enum = match reach.as_str() {
+    //         "following" => PubkyAppFeedReach::Following,
+    //         "followers" => PubkyAppFeedReach::Followers,
+    //         "friends" => PubkyAppFeedReach::Friends,
+    //         "all" => PubkyAppFeedReach::All,
+    //         _ => return Err(JsValue::from_str("Invalid feed reach")),
+    //     };
+
+    //     let layout_enum = match layout.as_str() {
+    //         "columns" => PubkyAppFeedLayout::Columns,
+    //         "wide" => PubkyAppFeedLayout::Wide,
+    //         "visual" => PubkyAppFeedLayout::Visual,
+    //         _ => return Err(JsValue::from_str("Invalid feed layout")),
+    //     };
+
+    //     let sort_enum = match sort.as_str() {
+    //         "recent" => PubkyAppFeedSort::Recent,
+    //         "popularity" => PubkyAppFeedSort::Popularity,
+    //         _ => return Err(JsValue::from_str("Invalid feed sort")),
+    //     };
+
+    //     let content_kind = match content.as_deref() {
+    //         Some("short") => Some(PubkyAppPostKind::Short),
+    //         Some("long") => Some(PubkyAppPostKind::Long),
+    //         Some("image") => Some(PubkyAppPostKind::Image),
+    //         Some("video") => Some(PubkyAppPostKind::Video),
+    //         Some("link") => Some(PubkyAppPostKind::Link),
+    //         Some("file") => Some(PubkyAppPostKind::File),
+    //         None => None,
+    //         Some(_) => return Err(JsValue::from_str("Invalid content kind")),
+    //     };
+
+    //     let feed = PubkyAppFeed::new(
+    //         tags_vec,
+    //         reach_enum,
+    //         layout_enum,
+    //         sort_enum,
+    //         content_kind,
+    //         name,
+    //     );
+    //     let feed_id = feed.create_id();
+    //     feed.validate(&feed_id)?;
+
+    //     let path = feed.create_path();
+    //     let meta = Meta::from_object(feed_id, self.pubky_id.clone(), path);
+
+    //     Ok(FeedResult { feed, meta })
+    // }
+
+    // -----------------------------------------------------------------------------
+    // 3. PubkyAppFile
+    // -----------------------------------------------------------------------------
+
+    #[wasm_bindgen(js_name = createFile)]
+    pub fn create_file(
+        &self,
+        name: String,
+        src: String,
+        content_type: String,
+        size: i64,
+    ) -> Result<FileResult, JsValue> {
+        let file = PubkyAppFile::new(name, src, content_type, size);
+        let file_id = file.create_id();
+        file.validate(&file_id)?;
+
+        let path = file.create_path();
+        let meta = Meta::from_object(file_id, self.pubky_id.clone(), path);
+
+        Ok(FileResult { file, meta })
+    }
+
+    // -----------------------------------------------------------------------------
+    // 4. PubkyAppPost
+    // -----------------------------------------------------------------------------
+
+    #[wasm_bindgen(js_name = createPost)]
+    pub fn create_post(
+        &self,
+        content: String,
+        kind: String,
+        parent: Option<String>,
+        embed: JsValue,
+        attachments: JsValue,
+    ) -> Result<PostResult, JsValue> {
+        let kind_enum = match kind.as_str() {
+            "short" => PubkyAppPostKind::Short,
+            "long" => PubkyAppPostKind::Long,
+            "image" => PubkyAppPostKind::Image,
+            "video" => PubkyAppPostKind::Video,
+            "link" => PubkyAppPostKind::Link,
+            "file" => PubkyAppPostKind::File,
+            _ => return Err(JsValue::from_str("Invalid post kind")),
+        };
+
+        let embed_option: Option<PubkyAppPostEmbed> = if embed.is_null() || embed.is_undefined() {
+            None
+        } else {
+            from_value(embed)?
+        };
+
+        let attachments_vec: Option<Vec<String>> =
+            if attachments.is_null() || attachments.is_undefined() {
+                None
+            } else {
+                from_value(attachments)?
+            };
+
+        let post = PubkyAppPost::new(content, kind_enum, parent, embed_option, attachments_vec);
+        let post_id = post.create_id();
+        post.validate(&post_id)?;
+
+        let path = post.create_path();
+        let meta = Meta::from_object(post_id, self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
+    // // -----------------------------------------------------------------------------
+    // // 5. PubkyAppTag
+    // // -----------------------------------------------------------------------------
+
+    // #[wasm_bindgen(js_name = createTag)]
+    // pub fn create_tag(&self, uri: String, label: String) -> Result<TagResult, JsValue> {
+    //     let tag = PubkyAppTag::new(uri, label);
+    //     let tag_id = tag.create_id();
+    //     tag.validate(&tag_id)?;
+
+    //     let path = tag.create_path();
+    //     let meta = Meta::from_object(tag_id, self.pubky_id.clone(), path);
+
+    //     Ok(TagResult { tag, meta })
+    // }
+
+    // // -----------------------------------------------------------------------------
+    // // 6. PubkyAppBookmark
+    // // -----------------------------------------------------------------------------
+
+    // #[wasm_bindgen(js_name = createBookmark)]
+    // pub fn create_bookmark(&self, uri: String) -> Result<BookmarkResult, JsValue> {
+    //     let bookmark = PubkyAppBookmark::new(uri);
+    //     let bookmark_id = bookmark.create_id();
+    //     bookmark.validate(&bookmark_id)?;
+
+    //     let path = bookmark.create_path();
+    //     let meta = Meta::from_object(bookmark_id, self.pubky_id.clone(), path);
+
+    //     Ok(BookmarkResult { bookmark, meta })
+    // }
+
+    // -----------------------------------------------------------------------------
+    // 7. PubkyAppFollow
+    // -----------------------------------------------------------------------------
+
+    #[wasm_bindgen(js_name = createFollow)]
+    pub fn create_follow(&self, followee_id: String) -> Result<FollowResult, JsValue> {
+        let follow = PubkyAppFollow::new();
+        follow.validate(&followee_id)?; // No ID in follow, so we pass user ID or empty
+
+        // Path requires the user ID
+        let path = follow.create_path(&followee_id);
+        let meta = Meta::from_object(followee_id, self.pubky_id.clone(), path);
+
+        Ok(FollowResult { follow, meta })
+    }
+
+    // -----------------------------------------------------------------------------
+    // 8. PubkyAppMute
+    // -----------------------------------------------------------------------------
+
+    #[wasm_bindgen(js_name = createMute)]
+    pub fn create_mute(&self, pubky_id: String) -> Result<MuteResult, JsValue> {
+        let mute = PubkyAppMute::new();
+        mute.validate(&pubky_id)?;
+
+        let path = mute.create_path(&pubky_id);
+        let meta = Meta::from_object(pubky_id, self.pubky_id.clone(), path);
+
+        Ok(MuteResult { mute, meta })
+    }
+
+    // // -----------------------------------------------------------------------------
+    // // 9. PubkyAppLastRead
+    // // -----------------------------------------------------------------------------
+
+    // #[wasm_bindgen(js_name = createLastRead)]
+    // pub fn create_last_read(&self) -> Result<LastReadResult, JsValue> {
+    //     let last_read = PubkyAppLastRead::new();
+    //     last_read.validate("")?;
+
+    //     let path = last_read.create_path();
+    //     let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
+
+    //     Ok(LastReadResult { last_read, meta })
+    // }
+
+    // // -----------------------------------------------------------------------------
+    // // 10. PubkyAppBlob
+    // // -----------------------------------------------------------------------------
+
+    // #[wasm_bindgen(js_name = createBlob)]
+    // pub fn create_blob(&self, blob_data: JsValue) -> Result<BlobResult, JsValue> {
+    //     // Convert from JsValue (Uint8Array in JS) -> Vec<u8> in Rust
+    //     let data_vec: Vec<u8> = from_value(blob_data)
+    //         .map_err(|e| JsValue::from_str(&format!("Invalid blob bytes: {}", e)))?;
+
+    //     // Create the PubkyAppBlob
+    //     let blob = PubkyAppBlob(data_vec);
+
+    //     // Generate ID and path
+    //     let id = blob.create_id();
+    //     blob.validate(&id)?;
+
+    //     let path = blob.create_path();
+    //     let meta = Meta::from_object(id, self.pubky_id.clone(), path);
+
+    //     Ok(BlobResult { blob, meta })
+    // }
 }
-
-// // -----------------------------------------------------------------------------
-// // 1. PubkyAppUser
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_user(
-//     name: String,
-//     bio: Option<String>,
-//     image: Option<String>,
-//     links: JsValue, // JSON array of PubkyAppUserLink
-//     status: Option<String>,
-// ) -> Result<JsValue, JsValue> {
-//     // Convert links to Option<Vec<PubkyAppUserLink>>
-//     let links_vec: Option<Vec<PubkyAppUserLink>> = if links.is_null() || links.is_undefined() {
-//         None
-//     } else {
-//         from_value(links)?
-//     };
-
-//     // Create user, sanitize, then validate
-//     let user = PubkyAppUser::new(name, bio, image, links_vec, status);
-//     user.validate("")?; // no ID-based validation
-
-//     // We have no ID for PubkyAppUser. The path is always profile.json
-//     let path = user.create_path();
-
-//     build_create_result(&user, "", &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 2. PubkyAppFeed
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_feed(
-//     tags: JsValue, // JSON array of strings
-//     reach: String,
-//     layout: String,
-//     sort: String,
-//     content: Option<String>,
-//     name: String,
-// ) -> Result<JsValue, JsValue> {
-//     // Convert tags
-//     let tags_vec: Option<Vec<String>> = if tags.is_null() || tags.is_undefined() {
-//         None
-//     } else {
-//         from_value(tags)?
-//     };
-
-//     // Convert feed reach
-//     let reach_enum = match reach.as_str() {
-//         "following" => PubkyAppFeedReach::Following,
-//         "followers" => PubkyAppFeedReach::Followers,
-//         "friends" => PubkyAppFeedReach::Friends,
-//         "all" => PubkyAppFeedReach::All,
-//         _ => return Err(JsValue::from_str("Invalid feed reach")),
-//     };
-
-//     // Convert layout
-//     let layout_enum = match layout.as_str() {
-//         "columns" => PubkyAppFeedLayout::Columns,
-//         "wide" => PubkyAppFeedLayout::Wide,
-//         "visual" => PubkyAppFeedLayout::Visual,
-//         _ => return Err(JsValue::from_str("Invalid feed layout")),
-//     };
-
-//     // Convert sort
-//     let sort_enum = match sort.as_str() {
-//         "recent" => PubkyAppFeedSort::Recent,
-//         "popularity" => PubkyAppFeedSort::Popularity,
-//         _ => return Err(JsValue::from_str("Invalid feed sort")),
-//     };
-
-//     // Convert content kind
-//     let content_kind = match content.as_deref() {
-//         Some("short") => Some(PubkyAppPostKind::Short),
-//         Some("long") => Some(PubkyAppPostKind::Long),
-//         Some("image") => Some(PubkyAppPostKind::Image),
-//         Some("video") => Some(PubkyAppPostKind::Video),
-//         Some("link") => Some(PubkyAppPostKind::Link),
-//         Some("file") => Some(PubkyAppPostKind::File),
-//         None => None,
-//         Some(_) => return Err(JsValue::from_str("Invalid content kind")),
-//     };
-
-//     // Build feed, sanitize, validate
-//     let feed = PubkyAppFeed::new(
-//         tags_vec,
-//         reach_enum,
-//         layout_enum,
-//         sort_enum,
-//         content_kind,
-//         name,
-//     );
-//     let feed_id = feed.create_id();
-//     feed.validate(&feed_id)?;
-
-//     let path = feed.create_path();
-//     build_create_result(&feed, &feed_id, &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 3. PubkyAppFile
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_file(
-//     name: String,
-//     src: String,
-//     content_type: String,
-//     size: i64,
-// ) -> Result<JsValue, JsValue> {
-//     let file = PubkyAppFile::new(name, src, content_type, size);
-//     let file_id = file.create_id();
-//     file.validate(&file_id)?;
-
-//     let path = file.create_path();
-//     build_create_result(&file, &file_id, &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 4. PubkyAppPost
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_post(
-//     content: String,
-//     kind: String,
-//     parent: Option<String>,
-//     embed: JsValue,       // JSON object { kind: string, uri: string } or null
-//     attachments: JsValue, // JSON array of string or null
-// ) -> Result<JsValue, JsValue> {
-//     // Convert kind
-//     let kind_enum = match kind.as_str() {
-//         "short" => PubkyAppPostKind::Short,
-//         "long" => PubkyAppPostKind::Long,
-//         "image" => PubkyAppPostKind::Image,
-//         "video" => PubkyAppPostKind::Video,
-//         "link" => PubkyAppPostKind::Link,
-//         "file" => PubkyAppPostKind::File,
-//         _ => return Err(JsValue::from_str("Invalid post kind")),
-//     };
-
-//     // Convert embed
-//     let embed_option: Option<PubkyAppPostEmbed> = if embed.is_null() || embed.is_undefined() {
-//         None
-//     } else {
-//         from_value(embed)?
-//     };
-
-//     // Convert attachments
-//     let attachments_vec: Option<Vec<String>> =
-//         if attachments.is_null() || attachments.is_undefined() {
-//             None
-//         } else {
-//             from_value(attachments)?
-//         };
-
-//     // Build the post, sanitize, validate
-//     let post = PubkyAppPost::new(content, kind_enum, parent, embed_option, attachments_vec);
-//     let post_id = post.create_id();
-//     post.validate(&post_id)?;
-
-//     let path = post.create_path();
-//     build_create_result(&post, &post_id, &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 5. PubkyAppTag
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_tag(uri: String, label: String) -> Result<JsValue, JsValue> {
-//     let tag = PubkyAppTag::new(uri, label);
-//     let tag_id = tag.create_id();
-//     tag.validate(&tag_id)?;
-
-//     let path = tag.create_path();
-//     build_create_result(&tag, &tag_id, &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 6. PubkyAppBookmark
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_bookmark(uri: String) -> Result<JsValue, JsValue> {
-//     let bookmark = PubkyAppBookmark::new(uri);
-//     let bookmark_id = bookmark.create_id();
-//     bookmark.validate(&bookmark_id)?;
-
-//     let path = bookmark.create_path();
-//     build_create_result(&bookmark, &bookmark_id, &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 7. PubkyAppFollow
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_follow(pubky_id: String) -> Result<JsValue, JsValue> {
-//     let follow = PubkyAppFollow::new();
-//     follow.validate(&pubky_id)?; // No ID in follow, so we pass user ID or empty
-
-//     // Path requires the user ID
-//     let path = follow.create_path(&pubky_id);
-
-//     // Return an empty ID for follow
-//     build_create_result(&follow, "", &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 8. PubkyAppMute
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_mute(pubky_id: String) -> Result<JsValue, JsValue> {
-//     let mute = PubkyAppMute::new();
-//     mute.validate(&pubky_id)?;
-
-//     let path = mute.create_path(&pubky_id);
-//     build_create_result(&mute, "", &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 9. PubkyAppLastRead
-// // -----------------------------------------------------------------------------
-
-// #[wasm_bindgen]
-// pub fn create_pubky_app_last_read() -> Result<JsValue, JsValue> {
-//     let last_read = PubkyAppLastRead::new();
-//     last_read.validate("")?;
-
-//     let path = last_read.create_path();
-//     build_create_result(&last_read, "", &path)
-// }
-
-// // -----------------------------------------------------------------------------
-// // 10. PubkyAppBlob
-// // -----------------------------------------------------------------------------
-
-// /// A small wrapper for JSON-serializing the blob data as base64.
-// #[derive(Serialize, Deserialize, Clone)]
-// pub struct PubkyAppBlobJson {
-//     pub data_base64: String,
-// }
-
-// // #[wasm_bindgen]
-// // pub fn create_pubky_app_blob(blob_data: JsValue) -> Result<JsValue, JsValue> {
-// //     // 1) Convert from JsValue (Uint8Array in JS) -> Vec<u8> in Rust
-// //     let data_vec: Vec<u8> = from_value(blob_data)
-// //         .map_err(|e| JsValue::from_str(&format!("Invalid blob bytes: {}", e)))?;
-
-// //     // 2) Build the PubkyAppBlob
-// //     let blob = PubkyAppBlob(data_vec);
-
-// //     // 3) Generate ID and path
-// //     let id = blob.create_id();
-// //     let path = blob.create_path();
-
-// //     // 4) Provide a minimal JSON representation (e.g. base64)
-// //     let json_blob = PubkyAppBlobJson {
-// //         data_base64: base64::encode(&blob.0),
-// //     };
-
-// //     // 5) Return { json, id, path }
-// //     build_create_result(&json_blob, &id, &path)
-// // }

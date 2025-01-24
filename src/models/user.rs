@@ -9,8 +9,6 @@ use url::Url;
 use crate::traits::ToJson;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
