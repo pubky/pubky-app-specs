@@ -5,11 +5,17 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Represents the last read timestamp for notifications.
 /// URI: /pub/pubky.app/last_read
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppLastRead {
@@ -19,10 +25,23 @@ pub struct PubkyAppLastRead {
 impl PubkyAppLastRead {
     /// Creates a new `PubkyAppLastRead` instance.
     pub fn new() -> Self {
-        let timestamp = timestamp() / 1_000; // to millis
+        let timestamp = timestamp() / 1_000; // Convert to milliseconds
         Self { timestamp }
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppLastRead {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppLastRead {}
 
 impl Validatable for PubkyAppLastRead {
     fn validate(&self, _id: &str) -> Result<(), String> {

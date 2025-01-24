@@ -3,7 +3,7 @@ use crate::{
     APP_PATH,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 use url::Url;
 
 // Validation
@@ -41,6 +41,22 @@ impl fmt::Display for PubkyAppPostKind {
             .and_then(|v| v.as_str().map(String::from))
             .unwrap_or_default();
         write!(f, "{}", string_repr)
+    }
+}
+
+impl FromStr for PubkyAppPostKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "short" => Ok(PubkyAppPostKind::Short),
+            "long" => Ok(PubkyAppPostKind::Long),
+            "image" => Ok(PubkyAppPostKind::Image),
+            "video" => Ok(PubkyAppPostKind::Video),
+            "link" => Ok(PubkyAppPostKind::Link),
+            "file" => Ok(PubkyAppPostKind::File),
+            _ => Err(format!("Invalid content kind: {}", s)),
+        }
     }
 }
 

@@ -1,9 +1,13 @@
 use crate::{
-    traits::{HasPath, HashId},
+    traits::{HasPath, HashId, Validatable},
     APP_PATH,
 };
-
 use serde::{Deserialize, Serialize};
+
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -12,9 +16,36 @@ const SAMPLE_SIZE: usize = 2 * 1024;
 
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppBlob(pub Vec<u8>);
+pub struct PubkyAppBlob(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
+
+impl PubkyAppBlob {
+    /// Creates a new `PubkyAppBlob` instance.
+    pub fn new(data: Vec<u8>) -> Self {
+        Self(data)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppBlob {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+
+    /// Getter for the blob data as a `Uint8Array`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn data(&self) -> js_sys::Uint8Array {
+        js_sys::Uint8Array::from(&self.0[..])
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppBlob {}
 
 impl HashId for PubkyAppBlob {
     fn get_id_data(&self) -> String {
@@ -38,6 +69,13 @@ impl HashId for PubkyAppBlob {
 impl HasPath for PubkyAppBlob {
     fn create_path(&self) -> String {
         format!("{}blobs/{}", APP_PATH, self.create_id())
+    }
+}
+
+impl Validatable for PubkyAppBlob {
+    fn validate(&self, id: &str) -> Result<(), String> {
+        // Validate the tag ID
+        self.validate_id(id)
     }
 }
 
