@@ -15,6 +15,7 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Enum representing the reach of the feed.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -26,6 +27,7 @@ pub enum PubkyAppFeedReach {
 }
 
 /// Enum representing the layout of the feed.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -36,6 +38,7 @@ pub enum PubkyAppFeedLayout {
 }
 
 /// Enum representing the sort order of the feed.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -45,15 +48,64 @@ pub enum PubkyAppFeedSort {
 }
 
 /// Configuration object for the feed.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFeedConfig {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub tags: Option<Vec<String>>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub reach: PubkyAppFeedReach,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub layout: PubkyAppFeedLayout,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub sort: PubkyAppFeedSort,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content: Option<PubkyAppPostKind>,
 }
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppFeedConfig {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+
+    /// Getter for `tags`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn tags(&self) -> Option<Vec<String>> {
+        self.tags.clone()
+    }
+
+    /// Getter for `name`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn reach(&self) -> PubkyAppFeedReach {
+        self.reach.clone()
+    }
+
+    /// Getter for `layout`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn layout(&self) -> PubkyAppFeedLayout {
+        self.layout.clone()
+    }
+
+    /// Getter for `sort`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn sort(&self) -> PubkyAppFeedSort {
+        self.sort.clone()
+    }
+
+    /// Getter for `content`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn content(&self) -> Option<PubkyAppPostKind> {
+        self.content.clone()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppFeedConfig {}
 
 /// Represents a feed configuration.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -105,11 +157,8 @@ impl PubkyAppFeed {
 
     /// Getter for `feed`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn feed(&self) -> JsValue {
-        match serde_wasm_bindgen::to_value(&self.feed) {
-            Ok(value) => value,
-            Err(value) => value.into(),
-        }
+    pub fn feed(&self) -> PubkyAppFeedConfig {
+        self.feed.clone()
     }
 
     /// Getter for `name`.

@@ -71,6 +71,20 @@ pub struct PubkyAppPostEmbed {
     pub uri: String, // URI of the embedded content
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppPostEmbed {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn kind(&self) -> PubkyAppPostKind {
+        self.kind.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
+}
+
 /// Represents raw post in homeserver with content and kind
 /// URI: /pub/pubky.app/posts/:post_id
 /// Where post_id is CrockfordBase32 encoding of timestamp
