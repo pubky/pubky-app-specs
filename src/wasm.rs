@@ -237,35 +237,12 @@ impl PubkySpecsBuilder {
     pub fn create_post(
         &self,
         content: String,
-        kind: String,
+        kind: PubkyAppPostKind,
         parent: Option<String>,
-        embed: JsValue,
-        attachments: JsValue,
+        embed: Option<PubkyAppPostEmbed>,
+        attachments: Option<Vec<String>>,
     ) -> Result<PostResult, JsValue> {
-        let kind_enum = match kind.as_str() {
-            "short" => PubkyAppPostKind::Short,
-            "long" => PubkyAppPostKind::Long,
-            "image" => PubkyAppPostKind::Image,
-            "video" => PubkyAppPostKind::Video,
-            "link" => PubkyAppPostKind::Link,
-            "file" => PubkyAppPostKind::File,
-            _ => return Err(JsValue::from_str("Invalid post kind")),
-        };
-
-        let embed_option: Option<PubkyAppPostEmbed> = if embed.is_null() || embed.is_undefined() {
-            None
-        } else {
-            from_value(embed)?
-        };
-
-        let attachments_vec: Option<Vec<String>> =
-            if attachments.is_null() || attachments.is_undefined() {
-                None
-            } else {
-                from_value(attachments)?
-            };
-
-        let post = PubkyAppPost::new(content, kind_enum, parent, embed_option, attachments_vec);
+        let post = PubkyAppPost::new(content, kind, parent, embed, attachments);
         let post_id = post.create_id();
         post.validate(&post_id)?;
 

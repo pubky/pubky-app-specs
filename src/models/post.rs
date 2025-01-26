@@ -74,6 +74,11 @@ pub struct PubkyAppPostEmbed {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppPostEmbed {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(uri: String, kind: PubkyAppPostKind) -> Self {
+        PubkyAppPostEmbed { uri, kind }
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn kind(&self) -> PubkyAppPostKind {
         self.kind.clone()
