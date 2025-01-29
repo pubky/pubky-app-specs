@@ -85,6 +85,20 @@ pub struct PubkyAppUserLink {
     pub url: String,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppUserLink {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn title(&self) -> String {
+        self.title.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+}
+
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppUser {
     /// Creates a new `PubkyAppUser` instance and sanitizes it.
