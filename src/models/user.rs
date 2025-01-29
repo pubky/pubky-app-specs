@@ -6,9 +6,12 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::JSdata;
+use crate::traits::ToJson;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 // Validation constants
 const MIN_USERNAME_LENGTH: usize = 3;
@@ -19,9 +22,6 @@ const MAX_LINKS: usize = 5;
 const MAX_LINK_TITLE_LENGTH: usize = 100;
 const MAX_LINK_URL_LENGTH: usize = 300;
 const MAX_STATUS_LENGTH: usize = 50;
-
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
 
 /// URI: /pub/pubky.app/profile.json
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -41,6 +41,39 @@ pub struct PubkyAppUser {
     pub status: Option<String>,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppUser {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn bio(&self) -> Option<String> {
+        self.bio.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn image(&self) -> Option<String> {
+        self.image.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn links(&self) -> Option<Vec<PubkyAppUserLink>> {
+        self.links.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn status(&self) -> Option<String> {
+        self.status.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppUser {}
+
 /// Represents a user's single link with a title and URL.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -50,6 +83,20 @@ pub struct PubkyAppUserLink {
     pub title: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub url: String,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppUserLink {
+    // Getters clone the data out because String/JsValue is not Copy.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn title(&self) -> String {
+        self.title.clone()
+    }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -72,15 +119,7 @@ impl PubkyAppUser {
         }
         .sanitize()
     }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn get_data(&self) -> Result<JsValue, JsValue> {
-        JSdata::get_data(self)
-    }
 }
-
-#[cfg(target_arch = "wasm32")]
-impl JSdata for PubkyAppUser {}
 
 impl HasPath for PubkyAppUser {
     fn create_path(&self) -> String {

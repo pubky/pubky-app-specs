@@ -1,32 +1,25 @@
-mod bookmark;
 mod common;
-mod feed;
-mod file;
-mod file_blob;
-mod follow;
-mod last_read;
-mod mute;
-mod post;
-mod tag;
+mod models;
 pub mod traits;
-mod user;
+mod utils;
 
 // Re-export domain types
-pub use bookmark::PubkyAppBookmark;
 pub use common::{APP_PATH, PROTOCOL, VERSION};
-pub use feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
-pub use file::PubkyAppFile;
-pub use file_blob::PubkyAppBlob;
-pub use follow::PubkyAppFollow;
-pub use last_read::PubkyAppLastRead;
-pub use mute::PubkyAppMute;
-pub use post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
-pub use tag::PubkyAppTag;
-pub use user::{PubkyAppUser, PubkyAppUserLink};
+pub use models::bookmark::PubkyAppBookmark;
+pub use models::feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
+pub use models::file::PubkyAppFile;
+pub use models::file_blob::PubkyAppBlob;
+pub use models::follow::PubkyAppFollow;
+pub use models::last_read::PubkyAppLastRead;
+pub use models::mute::PubkyAppMute;
+pub use models::post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
+pub use models::tag::PubkyAppTag;
+pub use models::user::{PubkyAppUser, PubkyAppUserLink};
+pub use utils::*;
 
-// Our FFI module
+// Our WASM module
 #[cfg(target_arch = "wasm32")]
-mod ffi;
-// Re-export the FFI functions so they're available to wasm-pack
+mod wasm;
+// Re-export the Wasm functions so they're available to wasm-pack
 #[cfg(target_arch = "wasm32")]
-pub use ffi::*;
+pub use wasm::*;

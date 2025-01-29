@@ -3,12 +3,17 @@ use crate::{
     APP_PATH,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 use url::Url;
 
 // Validation
 const MAX_SHORT_CONTENT_LENGTH: usize = 1000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
+
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -16,6 +21,7 @@ use utoipa::ToSchema;
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppPostKind {
@@ -38,12 +44,50 @@ impl fmt::Display for PubkyAppPostKind {
     }
 }
 
+impl FromStr for PubkyAppPostKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "short" => Ok(PubkyAppPostKind::Short),
+            "long" => Ok(PubkyAppPostKind::Long),
+            "image" => Ok(PubkyAppPostKind::Image),
+            "video" => Ok(PubkyAppPostKind::Video),
+            "link" => Ok(PubkyAppPostKind::Link),
+            "file" => Ok(PubkyAppPostKind::File),
+            _ => Err(format!("Invalid content kind: {}", s)),
+        }
+    }
+}
+
 /// Represents embedded content within a post
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPostEmbed {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub kind: PubkyAppPostKind, // Kind of the embedded content
-    pub uri: String,            // URI of the embedded content
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub uri: String, // URI of the embedded content
+}
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppPostEmbed {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(uri: String, kind: PubkyAppPostKind) -> Self {
+        PubkyAppPostEmbed { uri, kind }
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn kind(&self) -> PubkyAppPostKind {
+        self.kind.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -53,18 +97,63 @@ pub struct PubkyAppPostEmbed {
 /// Example URI:
 ///
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPost {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content: String,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub kind: PubkyAppPostKind,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub parent: Option<String>, // If a reply, the URI of the parent post.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub embed: Option<PubkyAppPostEmbed>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub attachments: Option<Vec<String>>,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppPost {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn content(&self) -> String {
+        self.content.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn kind(&self) -> PubkyAppPostKind {
+        self.kind.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn parent(&self) -> Option<String> {
+        self.parent.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn embed(&self) -> Option<PubkyAppPostEmbed> {
+        self.embed.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn attachments(&self) -> Option<Vec<String>> {
+        self.attachments.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppPost {}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppPost {
     /// Creates a new `PubkyAppPost` instance and sanitizes it.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         content: String,
         kind: PubkyAppPostKind,

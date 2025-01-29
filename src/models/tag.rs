@@ -8,6 +8,12 @@ use url::Url;
 
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
+const MIN_TAG_LABEL_LENGTH: usize = 1;
+
+#[cfg(target_arch = "wasm32")]
+use crate::traits::ToJson;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -20,10 +26,13 @@ use utoipa::ToSchema;
 /// `/pub/pubky.app/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub label: String,
     pub created_at: i64,
 }
@@ -39,6 +48,31 @@ impl PubkyAppTag {
         .sanitize()
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkyAppTag {
+    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
+    pub fn json(&self) -> Result<JsValue, JsValue> {
+        self.to_json()
+    }
+
+    /// Getter for `uri`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
+
+    /// Getter for `label`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn label(&self) -> String {
+        self.label.clone()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ToJson for PubkyAppTag {}
 
 impl HasPath for PubkyAppTag {
     fn create_path(&self) -> String {
@@ -91,9 +125,15 @@ impl Validatable for PubkyAppTag {
         self.validate_id(id)?;
 
         // Validate label length
-        if self.label.chars().count() > MAX_TAG_LABEL_LENGTH {
-            return Err("Validation Error: Tag label exceeds maximum length".to_string());
-        }
+        match self.label.chars().count() {
+            len if len > MAX_TAG_LABEL_LENGTH => {
+                return Err("Validation Error: Tag label exceeds maximum length".to_string())
+            }
+            len if len < MIN_TAG_LABEL_LENGTH => {
+                return Err("Validation Error: Tag label is shorter than minimum length".to_string())
+            }
+            _ => (),
+        };
 
         // Validate URI format
         match Url::parse(&self.uri) {
