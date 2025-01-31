@@ -44,7 +44,7 @@ impl Meta {
 
 impl Meta {
     /// Internal helper. Generates meta's `id`, `path`, and `url`.
-    pub fn from_object(object_id: String, pubky_id: String, path: String) -> Self {
+    pub fn from_object(object_id: String, pubky_id: PubkyId, path: String) -> Self {
         Self {
             id: object_id,
             url: format!("{}{}{}", PROTOCOL, pubky_id, path),
@@ -57,7 +57,7 @@ impl Meta {
 #[wasm_bindgen]
 pub struct PubkySpecsBuilder {
     #[wasm_bindgen(skip)]
-    pub pubky_id: String,
+    pubky_id: PubkyId,
 }
 
 /// A macro to generate result structs and `wasm_bindgen`-exposed getters.
@@ -130,8 +130,9 @@ result_struct!(BlobResult, blob, PubkyAppBlob);
 impl PubkySpecsBuilder {
     /// Creates a new `PubkyAppBuilder` instance.
     #[wasm_bindgen(constructor)]
-    pub fn new(pubky_id: String) -> Self {
-        Self { pubky_id }
+    pub fn new(pubky_id: String) -> Result<Self, String> {
+        let pubky_id = PubkyId::try_from(&pubky_id)?;
+        Ok(Self { pubky_id })
     }
 
     // // -----------------------------------------------------------------------------

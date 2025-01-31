@@ -11,7 +11,9 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn test_create_follow() {
-    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Valid pubky ID");
 
     let result = specs
         .create_follow("followee_123".to_string())
@@ -23,7 +25,7 @@ fn test_create_follow() {
     assert_eq!(meta.path(), "/pub/pubky.app/follows/followee_123");
     assert_eq!(
         meta.url(),
-        "pubky://test_pubky_id/pub/pubky.app/follows/followee_123"
+        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/followee_123"
     );
     assert_eq!(meta.id(), "followee_123");
     assert!(follow.created_at > 0);
@@ -31,7 +33,9 @@ fn test_create_follow() {
 
 #[wasm_bindgen_test]
 fn test_create_user_rust_api() {
-    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Valid pubky ID");
 
     // Prepare links as a JS-compatible array
     let links = Array::new();
@@ -69,7 +73,7 @@ fn test_create_user_rust_api() {
     assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
     assert_eq!(
         meta.url(),
-        "pubky://test_pubky_id/pub/pubky.app/profile.json"
+        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
     );
     assert_eq!(meta.id(), "");
 
@@ -100,7 +104,9 @@ fn test_create_user_rust_api() {
 
 #[wasm_bindgen_test]
 fn test_create_user_with_minimal_data() {
-    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string());
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Invalid specsBuilder");
 
     // Call `create_user` with minimal data
     let result = specs
@@ -121,7 +127,7 @@ fn test_create_user_with_minimal_data() {
     assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
     assert_eq!(
         meta.url(),
-        "pubky://test_pubky_id/pub/pubky.app/profile.json"
+        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
     );
     assert_eq!(meta.id(), "");
 
