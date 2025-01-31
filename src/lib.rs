@@ -1,6 +1,7 @@
 mod common;
 mod models;
 pub mod traits;
+mod types;
 mod utils;
 
 // Re-export domain types
@@ -15,6 +16,7 @@ pub use models::mute::PubkyAppMute;
 pub use models::post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
+pub use types::PubkyId;
 pub use utils::*;
 
 // Our WASM module
