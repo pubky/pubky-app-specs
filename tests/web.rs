@@ -11,7 +11,9 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn test_create_follow() {
-    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string()).expect("Valid pubky ID");
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Valid pubky ID");
 
     let result = specs
         .create_follow("followee_123".to_string())
@@ -31,7 +33,9 @@ fn test_create_follow() {
 
 #[wasm_bindgen_test]
 fn test_create_user_rust_api() {
-    let specs = PubkySpecsBuilder::new("test_pubky_id".to_string()).expect("Valid pubky ID");
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Valid pubky ID");
 
     // Prepare links as a JS-compatible array
     let links = Array::new();
