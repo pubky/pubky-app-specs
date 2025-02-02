@@ -21,7 +21,7 @@ pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
 pub use models::PubkyAppObject;
 pub use types::PubkyId;
-pub use uri_parser::ParsedUri;
+pub use uri_parser::{ParsedUri, Resource};
 pub use utils::*;
 
 // Our WASM module
