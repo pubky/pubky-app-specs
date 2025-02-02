@@ -33,85 +33,77 @@ pub struct ParsedUri {
 impl TryFrom<&str> for ParsedUri {
     type Error = String;
     fn try_from(uri: &str) -> Result<Self, Self::Error> {
-        let mut parsed_uri = ParsedUri::default();
-
         // 0. Validate and sanitize the URL.
         let parsed_url = Url::parse(uri).map_err(|e| format!("Invalid URL: {}", e))?;
-        let uri = parsed_url.as_str();
 
-        // 1. Validate protocol
-        if !uri.starts_with(PROTOCOL) {
+        // 1. Validate the scheme (using PROTOCOL without the "://")
+        if parsed_url.scheme() != PROTOCOL.trim_end_matches("://") {
             return Err(format!(
-                "Invalid URI, must start with '{}',  {}",
+                "Invalid URI, must start with '{}': {}",
                 PROTOCOL, uri
             ));
         }
 
-        // 2. Validate that the URI belongs to the correct app
-        if let Some(app_segment) = extract_segment(uri, PUBLIC_PATH, "/") {
-            if app_segment != APP_PATH.trim_end_matches('/') {
-                return Err(format!(
-                    "The Event URI does not belong to {},  {}",
-                    APP_PATH, uri
-                ));
-            }
-        } else {
-            return Err(format!("The Event URI is malformed,  {}", uri));
+        // 2. Extract the user_id from the host.
+        let user_id_str = parsed_url
+            .host_str()
+            .ok_or_else(|| format!("Missing user ID in URI: {}", uri))?;
+        let user_id = PubkyId::try_from(user_id_str)?;
+
+        // 3. Get the path segments.
+        // Expected URI structure:
+        // pubky://<user_id>/<public>/<app>/<resource>[/<id>]
+        let segments: Vec<&str> = parsed_url
+            .path_segments()
+            .ok_or_else(|| format!("Cannot parse path segments from URI: {}", uri))?
+            .collect();
+        if segments.len() < 2 {
+            return Err(format!("Not enough path segments in URI: {}", uri));
+        }
+        if segments[0] != PUBLIC_PATH.trim_matches('/') {
+            return Err(format!(
+                "Expected public path '{}' but got '{}' in URI: {}",
+                PUBLIC_PATH, segments[0], uri
+            ));
+        }
+        if segments[1] != APP_PATH.trim_matches('/') {
+            return Err(format!(
+                "Expected app path '{}' but got '{}' in URI: {}",
+                APP_PATH, segments[1], uri
+            ));
         }
 
-        // 3. Extract the user_id
-        if let Some(user_id) = extract_segment(uri, PROTOCOL, PUBLIC_PATH) {
-            parsed_uri.user_id = PubkyId::try_from(user_id)?;
-        } else {
-            return Err(format!("Uri Pubky ID is invalid,  {}", uri));
-        }
-
-        // 4. Extract the resource type and id
-        // Remove the base portion.
-        let base = format!("{}{}", PUBLIC_PATH, APP_PATH);
-        let after_app = uri.split(&base).nth(1).unwrap_or("");
-        let parts: Vec<&str> = after_app.split('/').filter(|s| !s.is_empty()).collect();
-
-        // Modularize resource detection using slice pattern matching.
-        parsed_uri.resource = match parts.as_slice() {
+        // 4. Determine the resource from the remaining segments.
+        let resource = match &segments[2..] {
             // No extra segments.
-            [] => Ok(Resource::Unknown),
-            // A single segment: it must exactly match the identifier-less routes.
+            [] => Resource::Unknown,
+            // A single segment: must exactly match an identifier-less route.
             [segment] => match *segment {
-                s if s == PubkyAppUser::PATH_SEGMENT => Ok(Resource::User),
-                s if s == PubkyAppLastRead::PATH_SEGMENT => Ok(Resource::LastRead),
-                _ => Ok(Resource::Unknown),
+                PubkyAppUser::PATH_SEGMENT => Resource::User,
+                PubkyAppLastRead::PATH_SEGMENT => Resource::LastRead,
+                _ => Resource::Unknown,
             },
-            // Two or more segments: the first is the resource type and the second is its id.
-            [res_type, id, ..] => {
-                // Since our constants for these routes include a trailing slash, re-add it.
-                let path_segment = format!("{}/", res_type);
-                match path_segment.as_str() {
-                    PubkyAppPost::PATH_SEGMENT => Ok(Resource::Post(id.to_string())),
-                    PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Follow),
-                    PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Mute),
-                    PubkyAppBookmark::PATH_SEGMENT => Ok(Resource::Bookmark(id.to_string())),
-                    PubkyAppTag::PATH_SEGMENT => Ok(Resource::Tag(id.to_string())),
-                    PubkyAppFile::PATH_SEGMENT => Ok(Resource::File(id.to_string())),
-                    PubkyAppBlob::PATH_SEGMENT => Ok(Resource::Blob(id.to_string())),
-                    PubkyAppFeed::PATH_SEGMENT => Ok(Resource::Feed(id.to_string())),
-                    _ => Ok(Resource::Unknown),
+            // Two or more segments and the id is not empty.
+            [res_type, id, ..] if !id.is_empty() => {
+                let resource_type = format!("{}/", res_type);
+                match resource_type.as_str() {
+                    PubkyAppPost::PATH_SEGMENT => Resource::Post(id.to_string()),
+                    PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Follow)?,
+                    PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Mute)?,
+                    PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.to_string()),
+                    PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.to_string()),
+                    PubkyAppFile::PATH_SEGMENT => Resource::File(id.to_string()),
+                    PubkyAppBlob::PATH_SEGMENT => Resource::Blob(id.to_string()),
+                    PubkyAppFeed::PATH_SEGMENT => Resource::Feed(id.to_string()),
+                    _ => Resource::Unknown,
                 }
             }
-        }?;
+            // If the identifier is empty or doesn't match the expected pattern.
+            _ => Resource::Unknown,
+        };
 
-        Ok(parsed_uri)
+        Ok(ParsedUri { user_id, resource })
     }
-}
-
-fn extract_segment<'a>(uri: &'a str, start_pattern: &str, end_pattern: &str) -> Option<&'a str> {
-    let start_idx = uri.find(start_pattern)? + start_pattern.len();
-    let end_idx = uri[start_idx..]
-        .find(end_pattern)
-        .map(|i| i + start_idx)
-        .unwrap_or_else(|| uri.len());
-
-    Some(&uri[start_idx..end_idx])
 }
 
 #[cfg(test)]
@@ -119,10 +111,12 @@ mod tests {
 
     use super::*;
 
+    const USER_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
     #[test]
     fn test_empty_bookmark_uri() {
         let uri =
-            "pubky://phbhg3qgcttn95guepmbud1nzcxhg3xc5j5k4h7i8a4b6wb3nw1o/pub/pubky.app/bookmarks/";
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/";
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -134,7 +128,7 @@ mod tests {
     #[test]
     fn test_some_bookmark_uri() {
         let uri =
-            "pubky://phbhg3qgcttn95guepmbud1nzcxhg3xc5j5k4h7i8a4b6wb3nw1o/pub/pubky.app/bookmarks/00";
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/00";
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -146,12 +140,167 @@ mod tests {
     #[test]
     fn test_user() {
         let uri =
-            "pubky://phbhg3qgcttn95guepmbud1nzcxhg3xc5j5k4h7i8a4b6wb3nw1o/pub/pubky.app/profile.json";
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::User,
             "The provided URI is not user resource type"
         );
+    }
+
+    // Successful cases
+
+    #[test]
+    fn test_valid_user_uri() {
+        // A valid user URI ends with profile.json.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::User);
+    }
+
+    #[test]
+    fn test_valid_last_read_uri() {
+        // A valid last_read URI ends with last_read.
+        let uri =
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid last_read URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::LastRead);
+    }
+
+    #[test]
+    fn test_valid_post_uri() {
+        // A valid post URI includes the posts/ segment followed by an identifier.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid post URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::Post("0032SSN7Q4EVG".to_string()));
+    }
+
+    #[test]
+    fn test_valid_follow_uri() {
+        // A valid follow URI.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid follow URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        // Assuming PubkyId::try_from("def456") returns a PubkyId that equals PubkyId::try_from("def456")
+        assert_eq!(
+            parsed.resource,
+            Resource::Follow(PubkyId::try_from(USER_ID).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_valid_bookmark_uri() {
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid bookmark URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(
+            parsed.resource,
+            Resource::Bookmark("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
+        );
+    }
+
+    #[test]
+    fn test_valid_tag_uri() {
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid tag URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(
+            parsed.resource,
+            Resource::Tag("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
+        );
+    }
+
+    #[test]
+    fn test_valid_file_uri() {
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/file003";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid file URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::File("file003".to_string()));
+    }
+
+    #[test]
+    fn test_valid_blob_uri() {
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid blob URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(
+            parsed.resource,
+            Resource::Blob("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
+        );
+    }
+
+    #[test]
+    fn test_valid_feed_uri() {
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid feed URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(
+            parsed.resource,
+            Resource::Feed("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
+        );
+    }
+
+    #[test]
+    fn test_no_resource_segments() {
+        // When there are no segments beyond the public and app paths,
+        // the resource should be Unknown.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/";
+        let parsed =
+            ParsedUri::try_from(uri).expect("Failed to parse URI with no resource segments");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::Unknown);
+    }
+
+    #[test]
+    fn test_unknown_resource() {
+        // Unknown resource type yields Resource::Unknown.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/xyz";
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse URI with unknown resource");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::Unknown);
+    }
+
+    // Failure cases
+
+    #[test]
+    fn test_invalid_scheme() {
+        let uri = "http://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let result = ParsedUri::try_from(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_public_path() {
+        // Change the public path so it doesn't match.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/invalid/pubky.app/profile.json";
+        let result = ParsedUri::try_from(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_app_path() {
+        // Change the app path so it doesn't match.
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/other.app/profile.json";
+        let result = ParsedUri::try_from(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_host() {
+        // URL with missing host.
+        let uri = "pubky:///pub/pubky.app/profile.json";
+        let result = ParsedUri::try_from(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_url() {
+        let uri = "not a url";
+        let result = ParsedUri::try_from(uri);
+        assert!(result.is_err());
     }
 }
