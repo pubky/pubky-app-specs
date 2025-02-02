@@ -62,7 +62,7 @@ impl FromStr for PubkyAppPostKind {
 
 /// Represents embedded content within a post
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPostEmbed {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -98,7 +98,7 @@ impl PubkyAppPostEmbed {
 ///
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPost {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]

@@ -1,4 +1,5 @@
 mod common;
+mod importer;
 mod models;
 pub mod traits;
 mod types;
@@ -7,16 +8,18 @@ mod utils;
 
 // Re-export domain types
 pub use common::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
+pub use importer::import_object;
+pub use models::blob::PubkyAppBlob;
 pub use models::bookmark::PubkyAppBookmark;
 pub use models::feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
 pub use models::file::PubkyAppFile;
-pub use models::file_blob::PubkyAppBlob;
 pub use models::follow::PubkyAppFollow;
 pub use models::last_read::PubkyAppLastRead;
 pub use models::mute::PubkyAppMute;
 pub use models::post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
+pub use models::PubkyAppObject;
 pub use types::PubkyId;
 pub use uri_parser::ParsedUri;
 pub use utils::*;
