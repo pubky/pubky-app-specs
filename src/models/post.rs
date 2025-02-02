@@ -1,6 +1,6 @@
 use crate::{
     traits::{HasPath, TimestampId, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -175,8 +175,10 @@ impl PubkyAppPost {
 impl TimestampId for PubkyAppPost {}
 
 impl HasPath for PubkyAppPost {
+    const PATH_SEGMENT: &'static str = "posts/";
+
     fn create_path(&self) -> String {
-        format!("{}posts/{}", APP_PATH, self.create_id())
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
     }
 }
 
@@ -266,7 +268,7 @@ impl Validatable for PubkyAppPost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Validatable;
+    use crate::{traits::Validatable, PUBLIC_PATH};
 
     #[test]
     fn test_create_id() {
@@ -312,7 +314,7 @@ mod tests {
         let path = post.create_path();
 
         // Check if the path starts with the expected prefix
-        let prefix = format!("{}posts/", APP_PATH);
+        let prefix = format!("{}{}posts/", PUBLIC_PATH, APP_PATH);
         assert!(path.starts_with(&prefix));
 
         let expected_path_len = prefix.len() + post_id.len();

@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPath, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 
@@ -54,8 +54,10 @@ impl Validatable for PubkyAppLastRead {
 }
 
 impl HasPath for PubkyAppLastRead {
+    const PATH_SEGMENT: &'static str = "last_read";
+
     fn create_path(&self) -> String {
-        format!("{}last_read", APP_PATH)
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT].concat()
     }
 }
 
@@ -76,7 +78,7 @@ mod tests {
     fn test_create_path() {
         let last_read = PubkyAppLastRead::new();
         let path = last_read.create_path();
-        assert_eq!(path, format!("{}last_read", APP_PATH));
+        assert_eq!(path, format!("{}{}last_read", PUBLIC_PATH, APP_PATH));
     }
 
     #[test]

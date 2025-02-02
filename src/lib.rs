@@ -2,10 +2,11 @@ mod common;
 mod models;
 pub mod traits;
 mod types;
+mod uri_parser;
 mod utils;
 
 // Re-export domain types
-pub use common::{APP_PATH, PROTOCOL, VERSION};
+pub use common::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
 pub use models::bookmark::PubkyAppBookmark;
 pub use models::feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
 pub use models::file::PubkyAppFile;
@@ -17,6 +18,7 @@ pub use models::post::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
 pub use types::PubkyId;
+pub use uri_parser::ParsedUri;
 pub use utils::*;
 
 // Our WASM module
