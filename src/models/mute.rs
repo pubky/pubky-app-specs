@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPubkyIdPath, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 
@@ -55,8 +55,10 @@ impl Validatable for PubkyAppMute {
 }
 
 impl HasPubkyIdPath for PubkyAppMute {
+    const PATH_SEGMENT: &'static str = "mutes/";
+
     fn create_path(&self, pubky_id: &str) -> String {
-        format!("{}mutes/{}", APP_PATH, pubky_id)
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
     }
 }
 

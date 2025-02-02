@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPath, TimestampId, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use mime::Mime;
 use serde::{Deserialize, Serialize};
@@ -104,8 +104,10 @@ impl PubkyAppFile {
 impl TimestampId for PubkyAppFile {}
 
 impl HasPath for PubkyAppFile {
+    const PATH_SEGMENT: &'static str = "files/";
+
     fn create_path(&self) -> String {
-        format!("{}files/{}", APP_PATH, self.create_id())
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
     }
 }
 
@@ -208,7 +210,7 @@ mod tests {
         let path = file.create_path();
 
         // Check if the path starts with the expected prefix
-        let prefix = format!("{}files/", APP_PATH);
+        let prefix = format!("{}{}files/", PUBLIC_PATH, APP_PATH);
         assert!(path.starts_with(&prefix));
 
         let expected_path_len = prefix.len() + file_id.len();

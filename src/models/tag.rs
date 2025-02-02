@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPath, HashId, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -75,8 +75,10 @@ impl PubkyAppTag {
 impl ToJson for PubkyAppTag {}
 
 impl HasPath for PubkyAppTag {
+    const PATH_SEGMENT: &'static str = "tags/";
+
     fn create_path(&self) -> String {
-        format!("{}tags/{}", APP_PATH, self.create_id())
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
     }
 }
 
@@ -217,7 +219,7 @@ mod tests {
         };
 
         let expected_id = tag.create_id();
-        let expected_path = format!("{}tags/{}", APP_PATH, expected_id);
+        let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
         let path = tag.create_path();
 
         assert_eq!(path, expected_path);

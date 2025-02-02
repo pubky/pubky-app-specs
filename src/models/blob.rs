@@ -1,6 +1,6 @@
 use crate::{
     traits::{HasPath, HashId, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 
@@ -67,8 +67,10 @@ impl HashId for PubkyAppBlob {
 }
 
 impl HasPath for PubkyAppBlob {
+    const PATH_SEGMENT: &'static str = "blobs/";
+
     fn create_path(&self) -> String {
-        format!("{}blobs/{}", APP_PATH, self.create_id())
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
     }
 }
 

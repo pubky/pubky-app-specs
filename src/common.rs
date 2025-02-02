@@ -1,5 +1,6 @@
 pub static VERSION: &str = "0.3.0";
-pub static APP_PATH: &str = "/pub/pubky.app/";
+pub static PUBLIC_PATH: &str = "/pub/";
+pub static APP_PATH: &str = "pubky.app/";
 pub static PROTOCOL: &str = "pubky://";
 
 #[cfg(target_arch = "wasm32")]

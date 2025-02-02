@@ -1,6 +1,6 @@
 use crate::{
     traits::{HasPath, Validatable},
-    APP_PATH,
+    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -122,8 +122,10 @@ impl PubkyAppUser {
 }
 
 impl HasPath for PubkyAppUser {
+    const PATH_SEGMENT: &'static str = "profile.json";
+
     fn create_path(&self) -> String {
-        format!("{}profile.json", APP_PATH)
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT].concat()
     }
 }
 
@@ -287,7 +289,7 @@ impl Validatable for PubkyAppUserLink {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use crate::APP_PATH;
+    use crate::{APP_PATH, PUBLIC_PATH};
 
     #[test]
     fn test_new() {
@@ -323,7 +325,7 @@ mod tests {
     fn test_create_path() {
         let user = PubkyAppUser::default();
         let path = user.create_path();
-        assert_eq!(path, format!("{}profile.json", APP_PATH));
+        assert_eq!(path, format!("{}{}profile.json", PUBLIC_PATH, APP_PATH));
     }
 
     #[test]
