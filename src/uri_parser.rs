@@ -8,7 +8,7 @@ use crate::{
 };
 use std::convert::TryFrom;
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub enum Resource {
     User,
     Post(String),
@@ -24,7 +24,7 @@ pub enum Resource {
     Unknown,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ParsedUri {
     pub user_id: PubkyId,
     pub resource: Resource,
