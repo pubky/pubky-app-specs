@@ -1,6 +1,3 @@
-use std::fmt;
-use url::Url;
-
 use crate::{
     traits::{HasPath, HasPubkyIdPath},
     PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
@@ -8,6 +5,8 @@ use crate::{
     PUBLIC_PATH,
 };
 use std::convert::TryFrom;
+use std::fmt;
+use url::Url;
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub enum Resource {
