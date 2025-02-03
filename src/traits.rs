@@ -121,10 +121,12 @@ pub trait Validatable: Sized + DeserializeOwned {
 }
 
 pub trait HasPath {
+    const PATH_SEGMENT: &'static str;
     fn create_path(&self) -> String;
 }
 
 pub trait HasPubkyIdPath {
+    const PATH_SEGMENT: &'static str;
     fn create_path(&self, pubky_id: &str) -> String;
 }
 

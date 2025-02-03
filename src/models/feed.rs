@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPath, HashId, Validatable},
-    PubkyAppPostKind, APP_PATH,
+    PubkyAppPostKind, APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -179,8 +179,10 @@ impl HashId for PubkyAppFeed {
 }
 
 impl HasPath for PubkyAppFeed {
+    const PATH_SEGMENT: &'static str = "feeds/";
+
     fn create_path(&self) -> String {
-        format!("{}feeds/{}", APP_PATH, self.create_id())
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
     }
 }
 
