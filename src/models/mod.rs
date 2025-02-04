@@ -49,36 +49,36 @@ impl PubkyAppObject {
                 Ok(PubkyAppObject::User(user))
             }
             Resource::Post(post_id) => {
-                let post = <PubkyAppPost as Validatable>::try_from(blob, &post_id)?;
+                let post = <PubkyAppPost as Validatable>::try_from(blob, post_id)?;
                 Ok(PubkyAppObject::Post(post))
             }
             Resource::Follow(follow_id) => {
                 // Use the follow id from the parsed URI.
-                let follow = <PubkyAppFollow as Validatable>::try_from(blob, &follow_id)?;
+                let follow = <PubkyAppFollow as Validatable>::try_from(blob, follow_id)?;
                 Ok(PubkyAppObject::Follow(follow))
             }
             Resource::Mute(muted_id) => {
-                let mute = <PubkyAppMute as Validatable>::try_from(blob, &muted_id)?;
+                let mute = <PubkyAppMute as Validatable>::try_from(blob, muted_id)?;
                 Ok(PubkyAppObject::Mute(mute))
             }
             Resource::Bookmark(bookmark_id) => {
-                let bookmark = <PubkyAppBookmark as Validatable>::try_from(blob, &bookmark_id)?;
+                let bookmark = <PubkyAppBookmark as Validatable>::try_from(blob, bookmark_id)?;
                 Ok(PubkyAppObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
-                let tag = <PubkyAppTag as Validatable>::try_from(blob, &tag_id)?;
+                let tag = <PubkyAppTag as Validatable>::try_from(blob, tag_id)?;
                 Ok(PubkyAppObject::Tag(tag))
             }
             Resource::File(file_id) => {
-                let file = <PubkyAppFile as Validatable>::try_from(blob, &file_id)?;
+                let file = <PubkyAppFile as Validatable>::try_from(blob, file_id)?;
                 Ok(PubkyAppObject::File(file))
             }
             Resource::Blob(blob_id) => {
-                let blob_obj = <PubkyAppBlob as Validatable>::try_from(blob, &blob_id)?;
+                let blob_obj = <PubkyAppBlob as Validatable>::try_from(blob, blob_id)?;
                 Ok(PubkyAppObject::Blob(blob_obj))
             }
             Resource::Feed(feed_id) => {
-                let feed = <PubkyAppFeed as Validatable>::try_from(blob, &feed_id)?;
+                let feed = <PubkyAppFeed as Validatable>::try_from(blob, feed_id)?;
                 Ok(PubkyAppObject::Feed(feed))
             }
             Resource::LastRead => {
