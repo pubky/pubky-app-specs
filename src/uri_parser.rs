@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
 
@@ -9,7 +10,7 @@ use crate::{
 };
 use std::convert::TryFrom;
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize)]
 pub enum Resource {
     User,
     Post(String),
@@ -65,7 +66,7 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ParsedUri {
     pub user_id: PubkyId,
     pub resource: Resource,
