@@ -16,7 +16,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Run Native tests
-        run: cargo test --verbose
-      - name: Build
-        run: cargo build --verbose
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run native tests
+        run: cargo nextest run --no-fail-fast
