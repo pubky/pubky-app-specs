@@ -2,7 +2,7 @@
 
 extern crate wasm_bindgen_test;
 use js_sys::Array;
-use pubky_app_specs::{PubkyAppUserLink, PubkySpecsBuilder};
+use pubky_app_specs::{parse_uri, PubkyAppUserLink, PubkySpecsBuilder};
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -137,4 +137,33 @@ fn test_create_user_with_minimal_data() {
     assert_eq!(user.image(), None);
     assert!(user.links().is_none());
     assert_eq!(user.status(), None);
+}
+
+#[wasm_bindgen_test]
+fn test_parse_uri() {
+    // A valid URI for a post resource.
+    let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+
+    // Call the wasm-exposed parse_uri function.
+    let parsed = parse_uri(uri).expect("Expected valid URI parsing");
+
+    // Verify the user ID is correctly parsed.
+    assert_eq!(
+        parsed.user_id(),
+        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+        "The user ID should match the host in the URI"
+    );
+
+    // Verify that the resource string indicates a post resource.
+    assert!(
+        parsed.resource().contains("posts"),
+        "The resource field should indicate a posts resource"
+    );
+
+    // Verify that the resource ID is correctly extracted.
+    assert_eq!(
+        parsed.resource_id().unwrap(),
+        "0032SSN7Q4EVG",
+        "The resource_id should match the post id provided in the URI"
+    );
 }
