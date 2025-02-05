@@ -253,6 +253,29 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
+    /// Edits an existing post by updating its content while preserving its original ID and timestamp.
+    #[wasm_bindgen(js_name = editPost)]
+    pub fn edit_post(
+        &self,
+        original_post: PubkyAppPost,
+        post_id: String,
+        new_content: String,
+    ) -> Result<PostResult, String> {
+        // Make a mutable copy so we can change its content.
+        let mut post = original_post;
+        post.content = new_content;
+
+        // Re-sanitize the post (this should preserve the original created_at timestamp).
+        post = post.sanitize();
+        post.validate(&post_id)?;
+
+        // Recreate the path and meta using the unchanged ID.
+        let path = [PUBLIC_PATH, APP_PATH, PubkyAppPost::PATH_SEGMENT, &post_id].concat();
+        let meta = Meta::from_object(post_id, self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
     // -----------------------------------------------------------------------------
     // 5. PubkyAppTag
     // -----------------------------------------------------------------------------

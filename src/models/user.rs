@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -65,14 +65,20 @@ impl PubkyAppUser {
     pub fn status(&self) -> Option<String> {
         self.status.clone()
     }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppUser {}
+impl Json for PubkyAppUser {}
 
 /// Represents a user's single link with a title and URL.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]

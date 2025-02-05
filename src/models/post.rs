@@ -11,7 +11,7 @@ const MAX_SHORT_CONTENT_LENGTH: usize = 1000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -141,14 +141,23 @@ impl PubkyAppPost {
         self.attachments.clone()
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        let post: Self = serde_wasm_bindgen::from_value(js_value.clone())
+            .map_err(|e| format!("Error parsing js object: {}", e))?;
+        let post = post.sanitize();
+        post.validate(&post.create_id())?;
+        Ok(post)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppPost {}
+impl Json for PubkyAppPost {}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppPost {

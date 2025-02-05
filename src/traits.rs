@@ -133,14 +133,18 @@ pub trait HasPubkyIdPath {
 #[cfg(target_arch = "wasm32")]
 use serde::Serialize;
 #[cfg(target_arch = "wasm32")]
-use serde_wasm_bindgen::to_value;
+use serde_wasm_bindgen::{from_value, to_value};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 
 /// Provides a `.to_json()` method returning a `JsValue` with all fields in plain JSON.
 #[cfg(target_arch = "wasm32")]
-pub trait ToJson: Serialize {
-    fn to_json(&self) -> Result<JsValue, JsValue> {
-        to_value(&self).map_err(|e| JsValue::from_str(&format!("JSON serialization error: {}", e)))
+pub trait Json: Serialize + DeserializeOwned {
+    fn export_json(&self) -> Result<JsValue, String> {
+        to_value(&self).map_err(|e| format!("JSON serialization error: {}", e))
+    }
+
+    fn import_json(js_value: &JsValue) -> Result<Self, String> {
+        from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))
     }
 }

@@ -11,7 +11,7 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 const MIN_TAG_LABEL_LENGTH: usize = 1;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -52,10 +52,15 @@ impl PubkyAppTag {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppTag {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     /// Serialize to JSON for WASM.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 
     /// Getter for `uri`.
@@ -72,7 +77,7 @@ impl PubkyAppTag {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppTag {}
+impl Json for PubkyAppTag {}
 
 impl HasPath for PubkyAppTag {
     const PATH_SEGMENT: &'static str = "tags/";
