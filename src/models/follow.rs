@@ -1,12 +1,12 @@
 use crate::{
     common::timestamp,
     traits::{HasPubkyIdPath, Validatable},
-    APP_PATH, PUBLIC_PATH,
+    PubkyId, APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -31,7 +31,7 @@ pub struct PubkyAppFollow {
 }
 
 // #[cfg(target_arch = "wasm32")]
-// impl ToJson for PubkyAppFollow {}
+// impl Json for PubkyAppFollow {}
 
 impl PubkyAppFollow {
     /// Creates a new `PubkyAppFollow` instance.
@@ -44,17 +44,26 @@ impl PubkyAppFollow {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppFollow {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppFollow {}
+impl Json for PubkyAppFollow {}
 
 impl Validatable for PubkyAppFollow {
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the followee ID
+        if let Some(id) = id {
+            PubkyId::try_from(id)?;
+        }
         // TODO: additional follow validation? E.g., validate `created_at`?
         Ok(())
     }
@@ -92,7 +101,7 @@ mod tests {
     #[test]
     fn test_validate() {
         let follow = PubkyAppFollow::new();
-        let result = follow.validate("some_user_id");
+        let result = follow.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
         assert!(result.is_ok());
     }
 
@@ -105,8 +114,11 @@ mod tests {
         "#;
 
         let blob = follow_json.as_bytes();
-        let follow_parsed =
-            <PubkyAppFollow as Validatable>::try_from(blob, "some_user_id").unwrap();
+        let follow_parsed = <PubkyAppFollow as Validatable>::try_from(
+            blob,
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+        )
+        .unwrap();
 
         assert_eq!(follow_parsed.created_at, 1627849723);
     }

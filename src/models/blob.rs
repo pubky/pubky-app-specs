@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -31,10 +31,14 @@ impl PubkyAppBlob {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppBlob {
-    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 
     /// Getter for the blob data as a `Uint8Array`.
@@ -45,7 +49,7 @@ impl PubkyAppBlob {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppBlob {}
+impl Json for PubkyAppBlob {}
 
 impl HashId for PubkyAppBlob {
     fn get_id_data(&self) -> String {
@@ -75,9 +79,13 @@ impl HasPath for PubkyAppBlob {
 }
 
 impl Validatable for PubkyAppBlob {
-    fn validate(&self, id: &str) -> Result<(), String> {
-        // Validate the tag ID
-        self.validate_id(id)
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the blob ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        };
+
+        Ok(())
     }
 }
 

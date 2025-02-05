@@ -9,7 +9,7 @@ use std::str::FromStr;
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -77,14 +77,18 @@ impl PubkyAppFile {
     pub fn content_type(&self) -> String {
         self.content_type.clone()
     }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppFile {}
+impl Json for PubkyAppFile {}
 
 impl PubkyAppFile {
     /// Creates a new `PubkyAppFile` instance.
@@ -138,8 +142,11 @@ impl Validatable for PubkyAppFile {
         }
     }
 
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the file ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate name
         let name_length = self.name.chars().count();
@@ -226,7 +233,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -239,7 +246,7 @@ mod tests {
             1024,
         );
         let invalid_id = "INVALIDID";
-        let result = file.validate(invalid_id);
+        let result = file.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 
@@ -252,7 +259,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 
@@ -265,7 +272,7 @@ mod tests {
             MAX_SIZE + 1,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 
@@ -278,7 +285,7 @@ mod tests {
             MAX_SIZE + 1,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 

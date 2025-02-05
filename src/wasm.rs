@@ -44,9 +44,14 @@ impl Meta {
 
 impl Meta {
     /// Internal helper. Generates meta's `id`, `path`, and `url`.
-    pub fn from_object(object_id: String, pubky_id: PubkyId, path: String) -> Self {
+    pub fn from_object(object_id: Option<&str>, pubky_id: PubkyId, path: String) -> Self {
+        let id = match object_id {
+            Some(id) => id.to_string(),
+            None => "".to_string(),
+        };
+
         Self {
-            id: object_id,
+            id,
             url: format!("{}{}{}", PROTOCOL, pubky_id, path),
             path,
         }
@@ -157,11 +162,11 @@ impl PubkySpecsBuilder {
 
         // 2) Build user domain object
         let user = PubkyAppUser::new(name, bio, image, links_vec, status);
-        user.validate("")?; // No ID-based validation for user
+        user.validate(None)?; // No ID-based validation for user
 
         // 3) Create the path and meta
         let path = user.create_path();
-        let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
+        let meta = Meta::from_object(None, self.pubky_id.clone(), path);
 
         // 4) Return a typed struct containing both
         Ok(UserResult { user, meta })
@@ -200,10 +205,10 @@ impl PubkySpecsBuilder {
         let feed = PubkyAppFeed::new(tags_vec, reach, layout, sort, content, name);
 
         let feed_id = feed.create_id();
-        feed.validate(&feed_id)?;
+        feed.validate(Some(&feed_id))?;
 
         let path = feed.create_path();
-        let meta = Meta::from_object(feed_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
 
         Ok(FeedResult { feed, meta })
     }
@@ -222,10 +227,10 @@ impl PubkySpecsBuilder {
     ) -> Result<FileResult, String> {
         let file = PubkyAppFile::new(name, src, content_type, size);
         let file_id = file.create_id();
-        file.validate(&file_id)?;
+        file.validate(Some(&file_id))?;
 
         let path = file.create_path();
-        let meta = Meta::from_object(file_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
 
         Ok(FileResult { file, meta })
     }
@@ -245,10 +250,33 @@ impl PubkySpecsBuilder {
     ) -> Result<PostResult, String> {
         let post = PubkyAppPost::new(content, kind, parent, embed, attachments);
         let post_id = post.create_id();
-        post.validate(&post_id)?;
+        post.validate(Some(&post_id))?;
 
         let path = post.create_path();
-        let meta = Meta::from_object(post_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
+    /// Edits an existing post by updating its content while preserving its original ID and timestamp.
+    #[wasm_bindgen(js_name = editPost)]
+    pub fn edit_post(
+        &self,
+        original_post: PubkyAppPost,
+        post_id: String,
+        new_content: String,
+    ) -> Result<PostResult, String> {
+        // Make a mutable copy so we can change its content.
+        let mut post = original_post;
+        post.content = new_content;
+
+        // Re-sanitize the post (this should preserve the original created_at timestamp).
+        post = post.sanitize();
+        post.validate(Some(&post_id))?;
+
+        // Recreate the path and meta using the unchanged ID.
+        let path = [PUBLIC_PATH, APP_PATH, PubkyAppPost::PATH_SEGMENT, &post_id].concat();
+        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
     }
@@ -261,10 +289,10 @@ impl PubkySpecsBuilder {
     pub fn create_tag(&self, uri: String, label: String) -> Result<TagResult, String> {
         let tag = PubkyAppTag::new(uri, label);
         let tag_id = tag.create_id();
-        tag.validate(&tag_id)?;
+        tag.validate(Some(&tag_id))?;
 
         let path = tag.create_path();
-        let meta = Meta::from_object(tag_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&tag_id), self.pubky_id.clone(), path);
 
         Ok(TagResult { tag, meta })
     }
@@ -277,10 +305,10 @@ impl PubkySpecsBuilder {
     pub fn create_bookmark(&self, uri: String) -> Result<BookmarkResult, String> {
         let bookmark = PubkyAppBookmark::new(uri);
         let bookmark_id = bookmark.create_id();
-        bookmark.validate(&bookmark_id)?;
+        bookmark.validate(Some(&bookmark_id))?;
 
         let path = bookmark.create_path();
-        let meta = Meta::from_object(bookmark_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&bookmark_id), self.pubky_id.clone(), path);
 
         Ok(BookmarkResult { bookmark, meta })
     }
@@ -292,11 +320,11 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createFollow)]
     pub fn create_follow(&self, followee_id: String) -> Result<FollowResult, String> {
         let follow = PubkyAppFollow::new();
-        follow.validate(&followee_id)?; // No ID in follow, so we pass user ID or empty
+        follow.validate(Some(&followee_id))?; // No ID in follow, so we pass user ID or empty
 
         // Path requires the user ID
         let path = follow.create_path(&followee_id);
-        let meta = Meta::from_object(followee_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&followee_id), self.pubky_id.clone(), path);
 
         Ok(FollowResult { follow, meta })
     }
@@ -308,10 +336,10 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createMute)]
     pub fn create_mute(&self, mutee_id: String) -> Result<MuteResult, String> {
         let mute = PubkyAppMute::new();
-        mute.validate(&mutee_id)?;
+        mute.validate(Some(&mutee_id))?;
 
         let path = mute.create_path(&mutee_id);
-        let meta = Meta::from_object(mutee_id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
     }
@@ -323,10 +351,10 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createLastRead)]
     pub fn create_last_read(&self) -> Result<LastReadResult, String> {
         let last_read = PubkyAppLastRead::new();
-        last_read.validate("")?;
+        last_read.validate(None)?;
 
         let path = last_read.create_path();
-        let meta = Meta::from_object("".to_string(), self.pubky_id.clone(), path);
+        let meta = Meta::from_object(None, self.pubky_id.clone(), path);
 
         Ok(LastReadResult { last_read, meta })
     }
@@ -345,10 +373,10 @@ impl PubkySpecsBuilder {
 
         // Generate ID and path
         let id = blob.create_id();
-        blob.validate(&id)?;
+        blob.validate(Some(&id))?;
 
         let path = blob.create_path();
-        let meta = Meta::from_object(id, self.pubky_id.clone(), path);
+        let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
 
         Ok(BlobResult { blob, meta })
     }

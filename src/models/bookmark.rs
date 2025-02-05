@@ -6,7 +6,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -42,9 +42,14 @@ impl PubkyAppBookmark {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppBookmark {
     /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 
     /// Getter for `uri`.
@@ -55,7 +60,7 @@ impl PubkyAppBookmark {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppBookmark {}
+impl Json for PubkyAppBookmark {}
 
 impl HashId for PubkyAppBookmark {
     /// Bookmark ID is created based on the hash of the URI bookmarked.
@@ -73,8 +78,11 @@ impl HasPath for PubkyAppBookmark {
 }
 
 impl Validatable for PubkyAppBookmark {
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the bookmark ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
         // Additional bookmark validation can be added here.
         Ok(())
     }
@@ -113,7 +121,7 @@ mod tests {
         let bookmark =
             PubkyAppBookmark::new("pubky://user_id/pub/pubky.app/posts/post_id".to_string());
         let id = bookmark.create_id();
-        let result = bookmark.validate(&id);
+        let result = bookmark.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -121,7 +129,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let bookmark = PubkyAppBookmark::new("user_id/pub/pubky.app/posts/post_id".to_string());
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(invalid_id);
+        let result = bookmark.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 

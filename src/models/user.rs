@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -65,14 +65,20 @@ impl PubkyAppUser {
     pub fn status(&self) -> Option<String> {
         self.status.clone()
     }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppUser {}
+impl Json for PubkyAppUser {}
 
 /// Represents a user's single link with a title and URL.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -194,7 +200,7 @@ impl Validatable for PubkyAppUser {
         }
     }
 
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         // Validate name length
         let name_length = self.name.chars().count();
         if !(MIN_USERNAME_LENGTH..=MAX_USERNAME_LENGTH).contains(&name_length) {
@@ -222,7 +228,7 @@ impl Validatable for PubkyAppUser {
             }
 
             for link in links {
-                link.validate(_id)?;
+                link.validate(None)?;
             }
         }
 
@@ -269,7 +275,7 @@ impl Validatable for PubkyAppUserLink {
         PubkyAppUserLink { title, url }
     }
 
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         if self.title.chars().count() > MAX_LINK_TITLE_LENGTH {
             return Err("Validation Error: Link title exceeds maximum length".to_string());
         }
@@ -371,7 +377,7 @@ mod tests {
             Some("Exploring the decentralized web.".to_string()),
         );
 
-        let result = user.validate("");
+        let result = user.validate(None);
         assert!(result.is_ok());
     }
 
@@ -385,7 +391,7 @@ mod tests {
             None,
         );
 
-        let result = user.validate("");
+        let result = user.validate(None);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
