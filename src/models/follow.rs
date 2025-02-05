@@ -114,8 +114,11 @@ mod tests {
         "#;
 
         let blob = follow_json.as_bytes();
-        let follow_parsed =
-            <PubkyAppFollow as Validatable>::try_from(blob, "some_user_id").unwrap();
+        let follow_parsed = <PubkyAppFollow as Validatable>::try_from(
+            blob,
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+        )
+        .unwrap();
 
         assert_eq!(follow_parsed.created_at, 1627849723);
     }
