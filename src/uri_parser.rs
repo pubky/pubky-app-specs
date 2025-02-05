@@ -4,11 +4,12 @@ use crate::{
     PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
     PUBLIC_PATH,
 };
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use url::Url;
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize)]
 pub enum Resource {
     User,
     Post(String),
@@ -64,7 +65,7 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ParsedUri {
     pub user_id: PubkyId,
     pub resource: Resource,
@@ -128,8 +129,8 @@ impl TryFrom<&str> for ParsedUri {
                 let resource_type = format!("{}/", res_type);
                 match resource_type.as_str() {
                     PubkyAppPost::PATH_SEGMENT => Resource::Post(id.to_string()),
-                    PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Follow)?,
-                    PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(*id).map(Resource::Mute)?,
+                    PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(id).map(Resource::Follow)?,
+                    PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(id).map(Resource::Mute)?,
                     PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.to_string()),
                     PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.to_string()),
                     PubkyAppFile::PATH_SEGMENT => Resource::File(id.to_string()),
