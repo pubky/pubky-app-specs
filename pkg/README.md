@@ -165,3 +165,30 @@ This library supports many more domain objects beyond `User` and `Post`. Here ar
 - **LastRead**: `createLastRead(...)`
 
 Each has a `meta` field for storing relevant IDs/paths and a typed data object.
+
+## 📌 Parsing a Pubky URI
+
+The `parse_uri()` function converts a Pubky URI string into a strongly typed object.
+
+**Usage:**
+
+```js
+import { parse_uri } from "pubky-app-specs";
+
+try {
+  const result = parse_uri("pubky://userID/pub/pubky.app/posts/postID");
+  console.log(result.user_id); // "userID"
+  console.log(result.resource); // e.g. "posts"
+  console.log(result.resource_id); // "postID" or null
+} catch (error) {
+  console.error("URI parse error:", error);
+}
+```
+
+**Returns:**
+
+A `ParsedUriResult` object with:
+
+- **user_id:** The parsed user identifier.
+- **resource:** A string indicating the resource type.
+- **resource_id:** An optional resource identifier.

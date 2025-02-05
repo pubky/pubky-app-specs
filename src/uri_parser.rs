@@ -1,14 +1,13 @@
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use url::Url;
-
 use crate::{
     traits::{HasPath, HasPubkyIdPath},
     PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
     PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
     PUBLIC_PATH,
 };
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use std::fmt;
+use url::Url;
 
 #[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize)]
 pub enum Resource {
