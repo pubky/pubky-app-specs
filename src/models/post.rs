@@ -62,7 +62,7 @@ impl FromStr for PubkyAppPostKind {
 
 /// Represents embedded content within a post
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPostEmbed {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -143,11 +143,7 @@ impl PubkyAppPost {
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        let post: Self = serde_wasm_bindgen::from_value(js_value.clone())
-            .map_err(|e| format!("Error parsing js object: {}", e))?;
-        let post = post.sanitize();
-        post.validate(&post.create_id())?;
-        Ok(post)
+        Self::import_json(js_value)
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
@@ -244,8 +240,11 @@ impl Validatable for PubkyAppPost {
         }
     }
 
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the post ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate content length
         match self.kind {
@@ -361,7 +360,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(&id);
+        let result = post.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -376,7 +375,7 @@ mod tests {
         );
 
         let invalid_id = "INVALIDID12345";
-        let result = post.validate(invalid_id);
+        let result = post.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 

@@ -79,9 +79,13 @@ impl HasPath for PubkyAppBlob {
 }
 
 impl Validatable for PubkyAppBlob {
-    fn validate(&self, id: &str) -> Result<(), String> {
-        // Validate the tag ID
-        self.validate_id(id)
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the blob ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        };
+
+        Ok(())
     }
 }
 

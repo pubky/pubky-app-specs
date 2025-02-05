@@ -127,9 +127,11 @@ impl Validatable for PubkyAppTag {
         }
     }
 
-    fn validate(&self, id: &str) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the tag ID
-        self.validate_id(id)?;
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate label length
         match self.label.chars().count() {
@@ -251,7 +253,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(&id);
+        let result = tag.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -264,7 +266,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(&id);
+        let result = tag.validate(Some(&id));
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -281,7 +283,7 @@ mod tests {
         };
 
         let invalid_id = "INVALIDID";
-        let result = tag.validate(invalid_id);
+        let result = tag.validate(Some(invalid_id));
         assert!(result.is_err());
         // You can check the specific error message if necessary
     }
@@ -337,7 +339,7 @@ mod tests {
         };
         let tag_id = tag.create_id();
 
-        if let Err(e) = tag.validate(&tag_id) {
+        if let Err(e) = tag.validate(Some(&tag_id)) {
             assert_eq!(
                 e.to_string(),
                 format!("Validation Error: Invalid URI format: {}", tag.uri),
@@ -354,7 +356,7 @@ mod tests {
         // Precomputed earlier
         let label_id = tag.create_id();
 
-        if let Err(e) = tag.validate(&label_id) {
+        if let Err(e) = tag.validate(Some(&label_id)) {
             assert_eq!(
                 e.to_string(),
                 "Validation Error: Tag label exceeds maximum length".to_string(),

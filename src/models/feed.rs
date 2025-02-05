@@ -108,6 +108,13 @@ impl PubkyAppFeedConfig {
     }
 }
 
+impl Validatable for PubkyAppFeedConfig {
+    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+        // TODO: validate config?
+        Ok(())
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 impl Json for PubkyAppFeedConfig {}
 
@@ -196,8 +203,11 @@ impl HasPath for PubkyAppFeed {
 }
 
 impl Validatable for PubkyAppFeed {
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the feed ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate name
         if self.name.trim().is_empty() {
@@ -328,7 +338,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(&feed_id);
+        let result = feed.validate(Some(&feed_id));
         assert!(result.is_ok());
     }
 
@@ -343,7 +353,7 @@ mod tests {
             "Rust Bitcoiners".to_string(),
         );
         let invalid_id = "INVALIDID";
-        let result = feed.validate(invalid_id);
+        let result = feed.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 

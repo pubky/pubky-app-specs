@@ -109,11 +109,11 @@ pub trait Validatable: Sized + DeserializeOwned {
     fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
-        instance.validate(id)?;
+        instance.validate(Some(id))?;
         Ok(instance)
     }
 
-    fn validate(&self, id: &str) -> Result<(), String>;
+    fn validate(&self, id: Option<&str>) -> Result<(), String>;
 
     fn sanitize(self) -> Self {
         self
@@ -139,12 +139,16 @@ use wasm_bindgen::JsValue;
 
 /// Provides a `.to_json()` method returning a `JsValue` with all fields in plain JSON.
 #[cfg(target_arch = "wasm32")]
-pub trait Json: Serialize + DeserializeOwned {
+pub trait Json: Serialize + DeserializeOwned + Validatable {
     fn export_json(&self) -> Result<JsValue, String> {
         to_value(&self).map_err(|e| format!("JSON serialization error: {}", e))
     }
 
     fn import_json(js_value: &JsValue) -> Result<Self, String> {
-        from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))
+        let object: Self =
+            from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))?;
+        let object = object.sanitize();
+        object.validate(None)?;
+        Ok(object)
     }
 }

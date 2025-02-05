@@ -142,8 +142,11 @@ impl Validatable for PubkyAppFile {
         }
     }
 
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the file ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate name
         let name_length = self.name.chars().count();
@@ -230,7 +233,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -243,7 +246,7 @@ mod tests {
             1024,
         );
         let invalid_id = "INVALIDID";
-        let result = file.validate(invalid_id);
+        let result = file.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 
@@ -256,7 +259,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 
@@ -269,7 +272,7 @@ mod tests {
             MAX_SIZE + 1,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 
@@ -282,7 +285,7 @@ mod tests {
             MAX_SIZE + 1,
         );
         let id = file.create_id();
-        let result = file.validate(&id);
+        let result = file.validate(Some(&id));
         assert!(result.is_err());
     }
 

@@ -48,7 +48,7 @@ impl PubkyAppLastRead {
 impl Json for PubkyAppLastRead {}
 
 impl Validatable for PubkyAppLastRead {
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         // Validate timestamp is a positive integer
         if self.timestamp <= 0 {
             return Err("Validation Error: Timestamp must be a positive integer".into());
@@ -88,14 +88,14 @@ mod tests {
     #[test]
     fn test_validate() {
         let last_read = PubkyAppLastRead::new();
-        let result = last_read.validate("");
+        let result = last_read.validate(None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_timestamp() {
         let last_read = PubkyAppLastRead { timestamp: -1 };
-        let result = last_read.validate("");
+        let result = last_read.validate(None);
         assert!(result.is_err());
     }
 

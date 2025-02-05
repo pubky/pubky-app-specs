@@ -1,7 +1,7 @@
 use crate::{
     common::timestamp,
     traits::{HasPubkyIdPath, Validatable},
-    APP_PATH, PUBLIC_PATH,
+    PubkyId, APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 
@@ -59,7 +59,11 @@ impl PubkyAppFollow {
 impl Json for PubkyAppFollow {}
 
 impl Validatable for PubkyAppFollow {
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the followee ID
+        if let Some(id) = id {
+            PubkyId::try_from(id)?;
+        }
         // TODO: additional follow validation? E.g., validate `created_at`?
         Ok(())
     }
@@ -97,7 +101,7 @@ mod tests {
     #[test]
     fn test_validate() {
         let follow = PubkyAppFollow::new();
-        let result = follow.validate("some_user_id");
+        let result = follow.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
         assert!(result.is_ok());
     }
 

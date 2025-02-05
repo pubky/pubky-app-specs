@@ -78,8 +78,11 @@ impl HasPath for PubkyAppBookmark {
 }
 
 impl Validatable for PubkyAppBookmark {
-    fn validate(&self, id: &str) -> Result<(), String> {
-        self.validate_id(id)?;
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the bookmark ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
         // Additional bookmark validation can be added here.
         Ok(())
     }
@@ -118,7 +121,7 @@ mod tests {
         let bookmark =
             PubkyAppBookmark::new("pubky://user_id/pub/pubky.app/posts/post_id".to_string());
         let id = bookmark.create_id();
-        let result = bookmark.validate(&id);
+        let result = bookmark.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -126,7 +129,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let bookmark = PubkyAppBookmark::new("user_id/pub/pubky.app/posts/post_id".to_string());
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(invalid_id);
+        let result = bookmark.validate(Some(invalid_id));
         assert!(result.is_err());
     }
 
