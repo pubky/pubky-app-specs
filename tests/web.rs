@@ -2,7 +2,9 @@
 
 extern crate wasm_bindgen_test;
 use js_sys::Array;
-use pubky_app_specs::{parse_uri, PubkyAppUserLink, PubkySpecsBuilder};
+use pubky_app_specs::{
+    parse_uri, PubkyAppPost, PubkyAppPostKind, PubkyAppUserLink, PubkySpecsBuilder,
+};
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -16,18 +18,24 @@ fn test_create_follow() {
             .expect("Valid pubky ID");
 
     let result = specs
-        .create_follow("followee_123".to_string())
+        .create_follow("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
         .expect("create_follow should not fail");
     let meta = result.meta();
     let follow = result.follow();
 
     // Now we can call the Rust getter methods directly:
-    assert_eq!(meta.path(), "/pub/pubky.app/follows/followee_123");
+    assert_eq!(
+        meta.path(),
+        "/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+    );
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/followee_123"
+        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
     );
-    assert_eq!(meta.id(), "followee_123");
+    assert_eq!(
+        meta.id(),
+        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+    );
     assert!(follow.created_at > 0);
 }
 
@@ -137,6 +145,29 @@ fn test_create_user_with_minimal_data() {
     assert_eq!(user.image(), None);
     assert!(user.links().is_none());
     assert_eq!(user.status(), None);
+}
+
+#[wasm_bindgen_test]
+fn test_post_from_json() {
+    // A JSON string representing a post.
+    let post_json = r#"
+    {
+        "content": "Hello from JSON!",
+        "kind": "long",
+        "parent": null,
+        "embed": null,
+        "attachments": null
+    }
+    "#;
+    // Convert the JSON string into a JsValue.
+    let js_value = js_sys::JSON::parse(post_json).expect("Failed to parse JSON string");
+    // Use the new factory method to create a WASM PubkyAppPost.
+    let post = PubkyAppPost::from_json(&js_value).expect("Post should deserialize successfully");
+
+    assert_eq!(post.content, "Hello from JSON!");
+    assert_eq!(post.kind, PubkyAppPostKind::Long);
+    assert_eq!(post.embed, None);
+    assert_eq!(post.attachments, None);
 }
 
 #[wasm_bindgen_test]

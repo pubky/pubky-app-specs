@@ -6,7 +6,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -33,18 +33,22 @@ impl PubkyAppLastRead {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppLastRead {
-    /// Serialize to JSON for WASM.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppLastRead {}
+impl Json for PubkyAppLastRead {}
 
 impl Validatable for PubkyAppLastRead {
-    fn validate(&self, _id: &str) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         // Validate timestamp is a positive integer
         if self.timestamp <= 0 {
             return Err("Validation Error: Timestamp must be a positive integer".into());
@@ -84,14 +88,14 @@ mod tests {
     #[test]
     fn test_validate() {
         let last_read = PubkyAppLastRead::new();
-        let result = last_read.validate("");
+        let result = last_read.validate(None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_timestamp() {
         let last_read = PubkyAppLastRead { timestamp: -1 };
-        let result = last_read.validate("");
+        let result = last_read.validate(None);
         assert!(result.is_err());
     }
 

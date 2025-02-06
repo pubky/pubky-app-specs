@@ -11,7 +11,7 @@ const MAX_TAG_LABEL_LENGTH: usize = 20;
 const MIN_TAG_LABEL_LENGTH: usize = 1;
 
 #[cfg(target_arch = "wasm32")]
-use crate::traits::ToJson;
+use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -52,10 +52,15 @@ impl PubkyAppTag {
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkyAppTag {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
+    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
+        Self::import_json(js_value)
+    }
+
     /// Serialize to JSON for WASM.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn json(&self) -> Result<JsValue, JsValue> {
-        self.to_json()
+    pub fn to_json(&self) -> Result<JsValue, String> {
+        self.export_json()
     }
 
     /// Getter for `uri`.
@@ -72,7 +77,7 @@ impl PubkyAppTag {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl ToJson for PubkyAppTag {}
+impl Json for PubkyAppTag {}
 
 impl HasPath for PubkyAppTag {
     const PATH_SEGMENT: &'static str = "tags/";
@@ -122,9 +127,11 @@ impl Validatable for PubkyAppTag {
         }
     }
 
-    fn validate(&self, id: &str) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the tag ID
-        self.validate_id(id)?;
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         // Validate label length
         match self.label.chars().count() {
@@ -246,7 +253,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(&id);
+        let result = tag.validate(Some(&id));
         assert!(result.is_ok());
     }
 
@@ -259,7 +266,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(&id);
+        let result = tag.validate(Some(&id));
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -276,7 +283,7 @@ mod tests {
         };
 
         let invalid_id = "INVALIDID";
-        let result = tag.validate(invalid_id);
+        let result = tag.validate(Some(invalid_id));
         assert!(result.is_err());
         // You can check the specific error message if necessary
     }
@@ -332,7 +339,7 @@ mod tests {
         };
         let tag_id = tag.create_id();
 
-        if let Err(e) = tag.validate(&tag_id) {
+        if let Err(e) = tag.validate(Some(&tag_id)) {
             assert_eq!(
                 e.to_string(),
                 format!("Validation Error: Invalid URI format: {}", tag.uri),
@@ -349,7 +356,7 @@ mod tests {
         // Precomputed earlier
         let label_id = tag.create_id();
 
-        if let Err(e) = tag.validate(&label_id) {
+        if let Err(e) = tag.validate(Some(&label_id)) {
             assert_eq!(
                 e.to_string(),
                 "Validation Error: Tag label exceeds maximum length".to_string(),
