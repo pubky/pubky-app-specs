@@ -2,6 +2,8 @@ use crate::{
     traits::{HasPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
+use base32::{encode, Alphabet};
+use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
@@ -11,8 +13,6 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-
-const SAMPLE_SIZE: usize = 2 * 1024;
 
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
@@ -53,20 +53,22 @@ impl Json for PubkyAppBlob {}
 
 impl HashId for PubkyAppBlob {
     fn get_id_data(&self) -> String {
-        // Get the start and end samples
-        let start = &self.0[..SAMPLE_SIZE.min(self.0.len())];
-        let end = if self.0.len() > SAMPLE_SIZE {
-            &self.0[self.0.len() - SAMPLE_SIZE..]
-        } else {
-            &[]
-        };
+        // data string id hashing is not needed for PubkyAppBlob as we hash the entire blob
+        "".to_string()
+    }
 
-        // Combine the samples
-        let mut combined = Vec::with_capacity(start.len() + end.len());
-        combined.extend_from_slice(start);
-        combined.extend_from_slice(end);
+    fn create_id(&self) -> String {
+        // Create a Blake3 hash of the blob data
+        let mut hasher = Hasher::new();
+        hasher.update(&self.0);
+        let blake3_hash = hasher.finalize();
 
-        base32::encode(base32::Alphabet::Crockford, &combined)
+        // Get the first half of the hash bytes
+        let half_hash_length = blake3_hash.as_bytes().len() / 2;
+        let half_hash = &blake3_hash.as_bytes()[..half_hash_length];
+
+        // Encode the first half of the hash in Base32 using the Z-base32 alphabet
+        encode(Alphabet::Crockford, half_hash)
     }
 }
 
@@ -79,6 +81,12 @@ impl HasPath for PubkyAppBlob {
 }
 
 impl Validatable for PubkyAppBlob {
+    fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
+        let instance = Self(blob.to_vec());
+        instance.validate(Some(id))?;
+        Ok(instance)
+    }
+
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the blob ID
         if let Some(id) = id {
@@ -95,9 +103,9 @@ mod tests {
     use crate::traits::HashId;
 
     #[test]
-    fn test_get_id_data_size_is_smaller_than_sample() {
-        let blob = PubkyAppBlob(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        let id = blob.get_id_data();
-        assert_eq!(id, "041061050R3GG28A");
+    fn test_create_id_from_small_blob() {
+        let blob = PubkyAppBlob(vec![1, 2]);
+        let id = blob.create_id();
+        assert_eq!(id, "PZBQ010FF079VVZPQG1RNFN6DR");
     }
 }

@@ -267,10 +267,10 @@ mod tests {
 
     #[test]
     fn test_import_blob() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/8FACA7A6XMYH0GD9KBXMQ373PR";
+        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/CDW1T5RM4PHP64QT0P6RE4PNT0";
         // For a blob, assume the JSON is an array of numbers representing the data.
-        let blob_json = r#"[1,2,3,4]"#;
-        let result = PubkyAppObject::from_uri(uri, blob_json.as_bytes());
+        let blob: Vec<u8> = vec![1, 2, 3, 4];
+        let result = PubkyAppObject::from_uri(uri, &blob);
         assert!(
             result.is_ok(),
             "Expected a successful import for blob, got error: {:?}",
