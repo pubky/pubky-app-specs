@@ -25,7 +25,7 @@ const MAX_STATUS_LENGTH: usize = 50;
 
 /// URI: /pub/pubky.app/profile.json
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUser {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -39,6 +39,19 @@ pub struct PubkyAppUser {
     pub links: Option<Vec<PubkyAppUserLink>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
+}
+
+impl Default for PubkyAppUser {
+    fn default() -> Self {
+        PubkyAppUser {
+            name: "anonymous".to_string(),
+            bio: None,
+            image: None,
+            links: None,
+            status: None,
+        }
+        .sanitize()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
