@@ -8,12 +8,12 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     anyhow::Result,
-    pubky::PubkyClient,
+    pubky::Client,
+    pubky::{Keypair, PublicKey},
     pubky_app_specs::{
         traits::{HasPath, Validatable},
         PubkyAppUser, PROTOCOL,
     },
-    pubky_common::crypto::{Keypair, PublicKey},
     serde_json::to_vec,
 };
 // Replace this with your actual homeserver public key
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     // Step 1: Initialize the Pubky client
     println!("\nStep 1: Initializing the Pubky client...");
 
-    let client = PubkyClient::default();
+    let client = Client::builder().build()?;
     let homeserver = PublicKey::try_from(HOMESERVER).expect("Invalid homeserver public key.");
 
     println!("Pubky client initialized successfully.");
@@ -78,7 +78,9 @@ async fn main() -> Result<()> {
     let content = to_vec(&user_profile)?;
 
     client
-        .put(url.as_str(), &content)
+        .put(url.as_str())
+        .body(content.clone())
+        .send()
         .await
         .expect("Failed to write the user profile to the homeserver.");
 
@@ -91,11 +93,13 @@ async fn main() -> Result<()> {
     // Step 6: Retrieve the user profile from the homeserver
     println!("\nStep 6: Retrieving the user profile from the homeserver...");
 
-    let retrieved_content = client
+    let response = client
         .get(url.as_str())
+        .send()
         .await
-        .expect("Failed to retrieve the user profile from the homeserver.")
-        .unwrap();
+        .expect("Failed to retrieve the user profile from the homeserver.");
+
+    let retrieved_content = response.bytes().await?;
 
     let retrieved_profile = <PubkyAppUser as Validatable>::try_from(&retrieved_content, "")
         .expect("Failed to deserialize the retrieved user profile.");
