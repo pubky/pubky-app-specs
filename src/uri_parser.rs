@@ -115,11 +115,11 @@ impl TryFrom<&str> for ParsedUri {
         }
 
         // 4. Determine the resource from the remaining segments.
-        let resource = match &segments[2..] {
+        let resource = match segments[2..] {
             // No extra segments.
             [] => Resource::Unknown,
             // A single segment: must exactly match an identifier-less route.
-            [segment] => match *segment {
+            [segment] => match segment {
                 PubkyAppUser::PATH_SEGMENT => Resource::User,
                 PubkyAppLastRead::PATH_SEGMENT => Resource::LastRead,
                 _ => Resource::Unknown,

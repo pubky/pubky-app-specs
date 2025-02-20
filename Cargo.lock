@@ -1486,7 +1486,6 @@ dependencies = [
  "blake3",
  "js-sys",
  "mime",
- "pkarr",
  "pubky",
  "serde",
  "serde-wasm-bindgen",
