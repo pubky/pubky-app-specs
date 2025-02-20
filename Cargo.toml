@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pkarr = { version = "3.3.3", default-features = false, features = ["keys"] }
-serde = { version = "1.0.217", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 serde_json = "1.0.138"
 url = "2.5.4"
 base32 = "0.5.1"
