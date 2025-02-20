@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.3.1_
+_Version 0.3.2_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
