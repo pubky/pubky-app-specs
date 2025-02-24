@@ -12,7 +12,7 @@ documentation = "https://github.com/pubky/pubky-app-specs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pkarr = { version = "3.3.3", default-features = false, features = ["keys"] }
+pkarr = { version = "3.5.0", default-features = false, features = ["keys"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 url = "2.5.4"
