@@ -32,7 +32,7 @@ wasm-bindgen-test = "0.3.50"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 pubky = "0.4.1"
-tokio = { version = "1.43.0", features = ["full"] }
+tokio = { version = "1.44.1", features = ["full"] }
 anyhow = "1.0.95"
 
 [features]
