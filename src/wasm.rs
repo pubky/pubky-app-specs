@@ -223,7 +223,7 @@ impl PubkySpecsBuilder {
         name: String,
         src: String,
         content_type: String,
-        size: i64,
+        size: usize,
     ) -> Result<FileResult, String> {
         let file = PubkyAppFile::new(name, src, content_type, size);
         let file_id = file.create_id();

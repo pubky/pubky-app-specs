@@ -1,4 +1,5 @@
 use crate::{
+    common::MAX_SIZE,
     traits::{HasPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -88,6 +89,11 @@ impl Validatable for PubkyAppBlob {
     }
 
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Check if the blob data exceeds 10MB.
+        if self.0.len() > MAX_SIZE {
+            return Err("Validation Error: Blob size exceeds maximum limit of 100MB".to_string());
+        }
+
         // Validate the blob ID
         if let Some(id) = id {
             self.validate_id(id)?;

@@ -12,7 +12,7 @@ _Version 0.3.2_
 Build with
 
 ```bash
-wasm-pack build --target bundler
+./build.sh
 ```
 
 Test with
