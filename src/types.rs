@@ -1,4 +1,4 @@
-use pkarr::PublicKey;
+use base32::{decode, Alphabet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -15,12 +15,21 @@ use utoipa::ToSchema;
 pub struct PubkyId(String);
 
 impl PubkyId {
-    pub fn try_from(str: &str) -> Result<Self, String> {
+    pub fn try_from(s: &str) -> Result<Self, String> {
         // Validate string is a valid Pkarr public key
-        match PublicKey::try_from(str) {
-            Ok(_) => Ok(PubkyId(str.to_string())),
-            Err(e) => Err(format!("Validation Error: Not a valid pubky id: {}", e)),
+        // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
+        // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
+        // We avoid pkarr as a dependency by doing writing our own validation instead.
+        if s.len() != 52 {
+            return Err("Validation Error: the string is not 52 utf chars".to_string());
         }
+
+        match decode(Alphabet::Z, s) {
+            Some(_) => (),
+            None => return Err("Validation Error: invalid public key encoding".to_string()),
+        };
+
+        Ok(PubkyId(s.to_string()))
     }
 }
 
