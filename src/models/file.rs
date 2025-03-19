@@ -1,5 +1,5 @@
 use crate::{
-    common::timestamp,
+    common::{timestamp, MAX_SIZE},
     traits::{HasPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -19,7 +19,6 @@ use utoipa::ToSchema;
 const MIN_NAME_LENGTH: usize = 1;
 const MAX_NAME_LENGTH: usize = 255;
 const MAX_SRC_LENGTH: usize = 1024;
-const MAX_SIZE: i64 = 10 * (1 << 20); // 10 MB
 
 const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
@@ -58,7 +57,7 @@ pub struct PubkyAppFile {
     pub src: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content_type: String,
-    pub size: i64,
+    pub size: usize,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -92,7 +91,7 @@ impl Json for PubkyAppFile {}
 
 impl PubkyAppFile {
     /// Creates a new `PubkyAppFile` instance.
-    pub fn new(name: String, src: String, content_type: String, size: i64) -> Self {
+    pub fn new(name: String, src: String, content_type: String, size: usize) -> Self {
         let created_at = timestamp();
         Self {
             name,
@@ -282,7 +281,7 @@ mod tests {
             "example.png".to_string(),
             "not_a_url".to_string(),
             "notavalid/content_type".to_string(),
-            MAX_SIZE + 1,
+            MAX_SIZE,
         );
         let id = file.create_id();
         let result = file.validate(Some(&id));
