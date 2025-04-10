@@ -1,4 +1,4 @@
-pub static VERSION: &str = "0.3.0";
+pub static VERSION: &str = "0.3.4";
 pub static PUBLIC_PATH: &str = "/pub/";
 pub static APP_PATH: &str = "pubky.app/";
 pub static PROTOCOL: &str = "pubky://";
