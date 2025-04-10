@@ -1,5 +1,5 @@
 use crate::{
-    traits::{HasPath, TimestampId, Validatable},
+    traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
@@ -179,11 +179,11 @@ impl PubkyAppPost {
 
 impl TimestampId for PubkyAppPost {}
 
-impl HasPath for PubkyAppPost {
+impl HasIdPath for PubkyAppPost {
     const PATH_SEGMENT: &'static str = "posts/";
 
-    fn create_path(&self) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
+    fn create_path(&self, id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
 
@@ -319,7 +319,7 @@ mod tests {
         );
 
         let post_id = post.create_id();
-        let path = post.create_path();
+        let path = post.create_path(&post_id);
 
         // Check if the path starts with the expected prefix
         let prefix = format!("{}{}posts/", PUBLIC_PATH, APP_PATH);

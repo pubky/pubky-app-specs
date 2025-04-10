@@ -1,6 +1,6 @@
 use crate::{
     common::timestamp,
-    traits::{HasPath, HashId, Validatable},
+    traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
@@ -69,11 +69,11 @@ impl HashId for PubkyAppBookmark {
     }
 }
 
-impl HasPath for PubkyAppBookmark {
+impl HasIdPath for PubkyAppBookmark {
     const PATH_SEGMENT: &'static str = "bookmarks/";
 
-    fn create_path(&self) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
+    fn create_path(&self, id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
 
@@ -112,7 +112,7 @@ mod tests {
         };
         let expected_id = bookmark.create_id();
         let expected_path = format!("{}{}bookmarks/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = bookmark.create_path();
+        let path = bookmark.create_path(&expected_id);
         assert_eq!(path, expected_path);
     }
 

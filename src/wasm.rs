@@ -1,4 +1,4 @@
-use crate::traits::{HasPath, HasPubkyIdPath, HashId, TimestampId, Validatable};
+use crate::traits::{HasIdPath, HasPath, HashId, TimestampId, Validatable};
 use crate::*;
 use serde_wasm_bindgen::from_value;
 use std::str::FromStr;
@@ -207,7 +207,7 @@ impl PubkySpecsBuilder {
         let feed_id = feed.create_id();
         feed.validate(Some(&feed_id))?;
 
-        let path = feed.create_path();
+        let path = feed.create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
 
         Ok(FeedResult { feed, meta })
@@ -229,7 +229,7 @@ impl PubkySpecsBuilder {
         let file_id = file.create_id();
         file.validate(Some(&file_id))?;
 
-        let path = file.create_path();
+        let path = file.create_path(&file_id);
         let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
 
         Ok(FileResult { file, meta })
@@ -252,7 +252,7 @@ impl PubkySpecsBuilder {
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
-        let path = post.create_path();
+        let path = post.create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
@@ -291,7 +291,7 @@ impl PubkySpecsBuilder {
         let tag_id = tag.create_id();
         tag.validate(Some(&tag_id))?;
 
-        let path = tag.create_path();
+        let path = tag.create_path(&tag_id);
         let meta = Meta::from_object(Some(&tag_id), self.pubky_id.clone(), path);
 
         Ok(TagResult { tag, meta })
@@ -307,7 +307,7 @@ impl PubkySpecsBuilder {
         let bookmark_id = bookmark.create_id();
         bookmark.validate(Some(&bookmark_id))?;
 
-        let path = bookmark.create_path();
+        let path = bookmark.create_path(&bookmark_id);
         let meta = Meta::from_object(Some(&bookmark_id), self.pubky_id.clone(), path);
 
         Ok(BookmarkResult { bookmark, meta })
@@ -375,7 +375,7 @@ impl PubkySpecsBuilder {
         let id = blob.create_id();
         blob.validate(Some(&id))?;
 
-        let path = blob.create_path();
+        let path = blob.create_path(&id);
         let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
 
         Ok(BlobResult { blob, meta })
