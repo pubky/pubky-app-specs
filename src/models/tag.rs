@@ -1,6 +1,6 @@
 use crate::{
     common::timestamp,
-    traits::{HasPath, HashId, Validatable},
+    traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
@@ -79,11 +79,11 @@ impl PubkyAppTag {
 #[cfg(target_arch = "wasm32")]
 impl Json for PubkyAppTag {}
 
-impl HasPath for PubkyAppTag {
+impl HasIdPath for PubkyAppTag {
     const PATH_SEGMENT: &'static str = "tags/";
 
-    fn create_path(&self) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
+    fn create_path(&self, id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
 
@@ -227,7 +227,7 @@ mod tests {
 
         let expected_id = tag.create_id();
         let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = tag.create_path();
+        let path = tag.create_path(&expected_id);
 
         assert_eq!(path, expected_path);
     }

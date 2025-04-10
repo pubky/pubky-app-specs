@@ -1,6 +1,6 @@
 use crate::{
     common::{timestamp, MAX_SIZE},
-    traits::{HasPath, TimestampId, Validatable},
+    traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use mime::Mime;
@@ -106,11 +106,11 @@ impl PubkyAppFile {
 
 impl TimestampId for PubkyAppFile {}
 
-impl HasPath for PubkyAppFile {
+impl HasIdPath for PubkyAppFile {
     const PATH_SEGMENT: &'static str = "files/";
 
-    fn create_path(&self) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
+    fn create_path(&self, id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
 
@@ -213,7 +213,7 @@ mod tests {
             1024,
         );
         let file_id = file.create_id();
-        let path = file.create_path();
+        let path = file.create_path(&file_id);
 
         // Check if the path starts with the expected prefix
         let prefix = format!("{}{}files/", PUBLIC_PATH, APP_PATH);

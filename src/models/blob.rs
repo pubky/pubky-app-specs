@@ -1,6 +1,6 @@
 use crate::{
     common::MAX_SIZE,
-    traits::{HasPath, HashId, Validatable},
+    traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use base32::{encode, Alphabet};
@@ -73,11 +73,11 @@ impl HashId for PubkyAppBlob {
     }
 }
 
-impl HasPath for PubkyAppBlob {
+impl HasIdPath for PubkyAppBlob {
     const PATH_SEGMENT: &'static str = "blobs/";
 
-    fn create_path(&self) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, &self.create_id()].concat()
+    fn create_path(&self, id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
 

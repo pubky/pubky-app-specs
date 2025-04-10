@@ -1,5 +1,5 @@
 use crate::{
-    traits::{HasPath, HasPubkyIdPath},
+    traits::{HasIdPath, HasPath},
     PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
     PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
     PUBLIC_PATH,
