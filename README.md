@@ -138,7 +138,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 | `content`     | String   | Content of the post.                 | Required. Max length: 1000 (short), 50000 (long). Cannot be `"[DELETED]"`. |
 | `kind`        | String   | Type of post.                        | Required. Must be a valid `PubkyAppPostKind` value.                        |
 | `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
-| `embed`       | Object   | Embedded content (type + URI).       | Optional. URI must be valid if present.                                    |
+| `embed`       | Object   | Reposted content (type + URI).       | Optional. URI must be valid if present.                                    |
 | `attachments` | Array    | List of attachment URIs.             | Optional. Each must be a valid URI.                                        |
 
 **Post Kinds:**
