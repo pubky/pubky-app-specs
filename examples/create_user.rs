@@ -46,8 +46,10 @@ async fn main() -> Result<()> {
     // Step 3: Sign up a new identity on the homeserver
     println!("\nStep 3: Signing up the new identity on the homeserver...");
 
+    // This step will likely fail "as is" as homeservers are no requiring sign up tokens.
+    // Here we provide `None` signup token.
     client
-        .signup(&keypair, &homeserver)
+        .signup(&keypair, &homeserver, None)
         .await
         .expect("Failed to sign up the user on the homeserver.");
 
