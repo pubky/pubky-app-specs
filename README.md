@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.3.4_
+_Version 0.3.5_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -135,7 +135,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 
 | **Field**     | **Type** | **Description**                      | **Validation Rules**                                                       |
 | ------------- | -------- | ------------------------------------ | -------------------------------------------------------------------------- |
-| `content`     | String   | Content of the post.                 | Required. Max length: 1000 (short), 50000 (long). Cannot be `"[DELETED]"`. |
+| `content`     | String   | Content of the post.                 | Required. Max length: 2000 (short), 50000 (long). Cannot be `"[DELETED]"`. |
 | `kind`        | String   | Type of post.                        | Required. Must be a valid `PubkyAppPostKind` value.                        |
 | `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
 | `embed`       | Object   | Reposted content (type + URI).       | Optional. URI must be valid if present.                                    |

@@ -7,7 +7,7 @@ use std::{fmt, str::FromStr};
 use url::Url;
 
 // Validation
-const MAX_SHORT_CONTENT_LENGTH: usize = 1000;
+const MAX_SHORT_CONTENT_LENGTH: usize = 2000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 
 #[cfg(target_arch = "wasm32")]

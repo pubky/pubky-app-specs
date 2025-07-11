@@ -1,6 +1,6 @@
 [package]
 name = "pubky-app-specs"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 description = "Pubky.app Data Model Specifications"
 homepage = "https://pubky.app"
