@@ -2,7 +2,7 @@
   "name": "pubky-app-specs",
   "type": "module",
   "description": "Pubky.app Data Model Specifications",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "license": "MIT",
   "collaborators": [
     "SHAcollision"
@@ -12,13 +12,17 @@
     "url": "git+https://github.com/pubky/pubky-app-specs.git"
   },
   "files": [
+    "index.cjs",
+    "index.js",
+    "pubky_app_specs.d.ts",
     "pubky_app_specs_bg.wasm",
     "pubky_app_specs.js",
     "pubky_app_specs.d.ts"
   ],
-  "main": "pubky_app_specs.js",
-  "homepage": "https://pubky.app",
+  "main": "index.cjs",
+  "browser": "index.js",
   "types": "pubky_app_specs.d.ts",
+  "homepage": "https://pubky.app",
   "sideEffects": [
     "./snippets/*"
   ]

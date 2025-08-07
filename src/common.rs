@@ -1,4 +1,4 @@
-pub static VERSION: &str = "0.3.4";
+pub static VERSION: &str = "0.4.0";
 pub static PUBLIC_PATH: &str = "/pub/";
 pub static APP_PATH: &str = "pubky.app/";
 pub static PROTOCOL: &str = "pubky://";
@@ -12,9 +12,7 @@ use js_sys::Date;
 /// Returns the current timestamp in microseconds since the UNIX epoch.
 #[cfg(target_arch = "wasm32")]
 pub fn timestamp() -> i64 {
-    // Use JS Date.now() which returns ms since Unix epoch
     let ms = Date::now() as i64;
-    // Convert to microseconds if you like
     ms * 1_000
 }
 
