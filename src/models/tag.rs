@@ -82,7 +82,7 @@ impl Json for PubkyAppTag {}
 impl HasIdPath for PubkyAppTag {
     const PATH_SEGMENT: &'static str = "tags/";
 
-    fn create_path(&self, id: &str) -> String {
+    fn create_path(id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
@@ -227,7 +227,7 @@ mod tests {
 
         let expected_id = tag.create_id();
         let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = tag.create_path(&expected_id);
+        let path = PubkyAppTag::create_path(&expected_id);
 
         assert_eq!(path, expected_path);
     }

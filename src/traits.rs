@@ -127,7 +127,7 @@ pub trait HasPath {
 
 pub trait HasIdPath {
     const PATH_SEGMENT: &'static str;
-    fn create_path(&self, id: &str) -> String;
+    fn create_path(id: &str) -> String;
 }
 
 #[cfg(target_arch = "wasm32")]
