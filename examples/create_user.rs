@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
         "{protocol}{pubky_id}{path}",
         protocol = PROTOCOL,
         pubky_id = user_id,
-        path = user_profile.create_path()
+        path = PubkyAppUser::create_path()
     );
     let content = to_vec(&user_profile)?;
 
