@@ -30,6 +30,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
+    /// The resource this is a tag on
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -158,7 +159,7 @@ impl Validatable for PubkyAppTag {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{traits::Validatable, APP_PATH};
+    use crate::{traits::Validatable, user_uri_builder, APP_PATH};
 
     #[test]
     fn test_label_id() {
@@ -290,23 +291,22 @@ mod tests {
 
     #[test]
     fn test_try_from_valid() {
-        let tag_json = r#"
-        {
-            "uri": "pubky://user_pubky_id/pub/pubky.app/profile.json",
-            "label": "Cool Tag",
-            "created_at": 1627849723000
-        }
-        "#;
+        let user_uri = user_uri_builder("user_pubky_id".into());
+        let tag_json = format!(
+            r#"
+            {{
+                "uri": "{user_uri}",
+                "label": "Cool Tag",
+                "created_at": 1627849723000
+            }}
+        "#
+        );
 
-        let id = PubkyAppTag::new(
-            "pubky://user_pubky_id/pub/pubky.app/profile.json".to_string(),
-            "Cool Tag".to_string(),
-        )
-        .create_id();
+        let id = PubkyAppTag::new(user_uri.clone(), "Cool Tag".to_string()).create_id();
 
         let blob = tag_json.as_bytes();
         let tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
-        assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
+        assert_eq!(tag.uri, user_uri);
         assert_eq!(tag.label, "cooltag"); // After sanitization
     }
 

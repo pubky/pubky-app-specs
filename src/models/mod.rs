@@ -92,6 +92,8 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
+    use crate::user_uri_builder;
+
     use super::*;
 
     // These tests assume that the respective try_from implementations for each model
@@ -99,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_import_user() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let user_json = r#"{
             "name": "Alice",
             "bio": "Hello, I am Alice",
@@ -107,7 +109,7 @@ mod tests {
             "links": null,
             "status": "active"
         }"#;
-        let result = PubkyAppObject::from_uri(uri, user_json.as_bytes());
+        let result = PubkyAppObject::from_uri(&uri, user_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for user, got error: {:?}",

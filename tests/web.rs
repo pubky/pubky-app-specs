@@ -78,10 +78,10 @@ fn test_create_user_rust_api() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
+    assert_eq!(meta.path(), PubkyAppUser::create_path());
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(meta.id(), "");
 
@@ -132,10 +132,10 @@ fn test_create_user_with_minimal_data() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
+    assert_eq!(meta.path(), PubkyAppUser::create_path());
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(meta.id(), "");
 

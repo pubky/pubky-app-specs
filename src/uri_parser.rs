@@ -150,6 +150,8 @@ impl TryFrom<&str> for ParsedUri {
 #[cfg(test)]
 mod tests {
 
+    use crate::user_uri_builder;
+
     use super::*;
 
     const USER_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
@@ -180,9 +182,8 @@ mod tests {
 
     #[test]
     fn test_user() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::User,
@@ -195,8 +196,8 @@ mod tests {
     #[test]
     fn test_valid_user_uri() {
         // A valid user URI ends with profile.json.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
-        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid user URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::User);
     }
