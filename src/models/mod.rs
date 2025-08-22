@@ -92,7 +92,7 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::user_uri_builder;
+    use crate::{post_uri_builder, user_uri_builder};
 
     use super::*;
 
@@ -130,7 +130,10 @@ mod tests {
 
     #[test]
     fn test_import_post() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+        let uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
         let post_json = r#"{
             "content": "Hello World!",
             "kind": "short",
@@ -138,7 +141,7 @@ mod tests {
             "embed": null,
             "attachments": null
         }"#;
-        let result = PubkyAppObject::from_uri(uri, post_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri.as_str(), post_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for post, got error: {:?}",
@@ -194,11 +197,18 @@ mod tests {
 
     #[test]
     fn test_import_bookmark() {
+        let post_uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
+
         let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
-        let bookmark_json = r#"{
-            "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
-            "created_at": 1627849725
-        }"#;
+        let bookmark_json = format!(
+            r#"{{
+                "uri": "{post_uri}",
+                "created_at": 1627849725
+            }}"#
+        );
         let result = PubkyAppObject::from_uri(uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
@@ -207,11 +217,7 @@ mod tests {
         );
         match result.unwrap() {
             PubkyAppObject::Bookmark(bookmark) => {
-                assert_eq!(
-                    bookmark.uri,
-                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
-                    "Bookmark URI mismatch"
-                );
+                assert_eq!(bookmark.uri, post_uri, "Bookmark URI mismatch");
             }
             other => panic!("Expected a Bookmark object, got {:?}", other),
         }
@@ -219,12 +225,19 @@ mod tests {
 
     #[test]
     fn test_import_tag() {
+        let post_uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
+
         let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG";
-        let tag_json = r#"{
-            "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+        let tag_json = format!(
+            r#"{{
+            "uri": "{post_uri}",
             "label": "cool",
             "created_at": 1627849726
-        }"#;
+        }}"#
+        );
         let result = PubkyAppObject::from_uri(uri, tag_json.as_bytes());
         assert!(
             result.is_ok(),

@@ -3,7 +3,8 @@
 extern crate wasm_bindgen_test;
 use js_sys::Array;
 use pubky_app_specs::{
-    parse_uri, PubkyAppPost, PubkyAppPostKind, PubkyAppUserLink, PubkySpecsBuilder,
+    parse_uri, post_uri_builder, PubkyAppPost, PubkyAppPostKind, PubkyAppUserLink,
+    PubkySpecsBuilder,
 };
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
@@ -173,7 +174,10 @@ fn test_post_from_json() {
 #[wasm_bindgen_test]
 fn test_parse_uri() {
     // A valid URI for a post resource.
-    let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+    let uri = post_uri_builder(
+        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+        "0032SSN7Q4EVG".into(),
+    );
 
     // Call the wasm-exposed parse_uri function.
     let parsed = parse_uri(uri).expect("Expected valid URI parsing");
