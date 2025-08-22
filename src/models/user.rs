@@ -308,7 +308,7 @@ impl Validatable for PubkyAppUserLink {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use crate::{APP_PATH, PUBLIC_PATH};
+    use crate::{user_path_builder, APP_PATH, PUBLIC_PATH};
 
     #[test]
     fn test_new() {
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_create_path() {
-        let path = PubkyAppUser::create_path();
+        let path = user_path_builder();
         assert_eq!(path, format!("{}{}profile.json", PUBLIC_PATH, APP_PATH));
     }
 

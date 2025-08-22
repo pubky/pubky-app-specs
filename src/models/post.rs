@@ -276,7 +276,7 @@ impl Validatable for PubkyAppPost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{traits::Validatable, PUBLIC_PATH};
+    use crate::{post_path_builder, traits::Validatable, APP_PATH, PUBLIC_PATH};
 
     #[test]
     fn test_create_id() {
@@ -319,7 +319,7 @@ mod tests {
         );
 
         let post_id = post.create_id();
-        let path = PubkyAppPost::create_path(&post_id);
+        let path = post_path_builder(&post_id);
 
         // Check if the path starts with the expected prefix
         let prefix = format!("{}{}posts/", PUBLIC_PATH, APP_PATH);

@@ -10,10 +10,7 @@ use {
     anyhow::Result,
     pubky::Client,
     pubky::{Keypair, PublicKey},
-    pubky_app_specs::{
-        traits::{HasPath, Validatable},
-        PubkyAppUser, PROTOCOL,
-    },
+    pubky_app_specs::{traits::Validatable, user_uri_builder, PubkyAppUser},
     serde_json::to_vec,
 };
 // Replace this with your actual homeserver public key
@@ -71,12 +68,7 @@ async fn main() -> Result<()> {
     // Step 5: Write the user profile to the homeserver
     println!("\nStep 5: Writing the user profile to the homeserver...");
 
-    let url = format!(
-        "{protocol}{pubky_id}{path}",
-        protocol = PROTOCOL,
-        pubky_id = user_id,
-        path = PubkyAppUser::create_path()
-    );
+    let url = user_uri_builder(user_id);
     let content = to_vec(&user_profile)?;
 
     client
