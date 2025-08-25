@@ -6,14 +6,13 @@ import { readFile, writeFile, rename } from "node:fs/promises";
 import { fileURLToPath } from 'node:url';
 import path, { dirname } from 'node:path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const cargoTomlContent = await readFile(path.join(__dirname, "../../Cargo.toml"), "utf8");
 const cargoPackageName = /\[package\]\nname = "(.*?)"/.exec(cargoTomlContent)[1]
 const name = cargoPackageName.replace(/-/g, '_')
 
-const content = await readFile(path.join(__dirname, `../../dist/nodejs/${name}.js`), "utf8");
+const content = await readFile(path.join(__dirname, `../../bindings/js/dist/nodejs/${name}.js`), "utf8");
 
 const patched = content
   // use global TextDecoder TextEncoder
@@ -26,9 +25,9 @@ const patched = content
   .replace(/\nmodule.exports.(.*?) = function/g, "\nimports.$1 = $1;\nexport function $1")
   // Add exports to 'imports'
   .replace(/\nmodule\.exports\.(.*?)\s+/g, "\nimports.$1")
-  // Export default
-  .replace(/$/, 'export default imports')
-  // inline wasm bytes
+  // Remove default export of imports
+  .replace(/export default imports$/, '')
+  // Replace inline wasm bytes with __toBinary function and embedded base64 bytes
   .replace(
     /\nconst path.*\nconst bytes.*\n/,
     `
@@ -49,39 +48,25 @@ var __toBinary = /* @__PURE__ */ (() => {
   };
 })();
 
-const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../dist/nodejs/${name}_bg.wasm`), "base64"))
-    });
-`,
+const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../bindings/js/dist/nodejs/${name}_bg.wasm`), "base64"))});
+`
   );
 
-await writeFile(path.join(__dirname, `../../dist/index.js`), patched + "\nglobalThis['pubky'] = imports");
+// Write the patched JavaScript file with additional exports
+// This creates the final index.js that will be used by Node.js/browser consumers
+await writeFile(path.join(__dirname, `../../bindings/js/index.js`), patched 
+  + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
+  + "// Re-export enums so Next.js can statically import them\n"
+  + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
+  + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n" // Export enum for named imports  
+  + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"  // Export enum for named imports
+  + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n"); // Export enum for named imports
 
 // Move outside of nodejs
-
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
   rename(
-    path.join(__dirname, `../../dist/nodejs/${name}${suffix}`),
-    path.join(__dirname, `../../dist/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
+    path.join(__dirname, `../../bindings/js/dist/nodejs/${name}${suffix}`),
+    path.join(__dirname, `../../bindings/js/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
   ))
 )
 
-// Add index.cjs headers
-
-// const indexcjsPath = path.join(__dirname, `../../dist/index.cjs`);
-
-// const headerContent = await readFile(path.join(__dirname, `../../pkg/node-header.cjs`), 'utf8');
-// const indexcjsContent = await readFile(indexcjsPath, 'utf8');
-
-// await writeFile(indexcjsPath, headerContent + '\n' + indexcjsContent, 'utf8')
-
-await writeFile(
-  path.join(__dirname, "../../dist/index.js"),
-  patched
-    + "\nglobalThis['pubky'] = imports\n"
-    + "// Re-export enums so Next.js can statically import them\n"
-    + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"
-    + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n"
-    + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"
-    + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n",
-  "utf8"
-);

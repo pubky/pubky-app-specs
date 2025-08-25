@@ -1,0 +1,8 @@
+pubky*
+index.js
+index.cjs
+index.d.ts
+index_bg.wasm   
+dist*
+test/node_modules*
+package-lock.json

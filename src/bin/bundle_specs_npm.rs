@@ -5,10 +5,11 @@ use std::process::{Command, ExitStatus};
 // If the process hangs, try `cargo clean` to remove all locks.
 
 fn main() {
-    println!("Building wasm for pubky-app-specs...");
+    println!("🏗️ Building wasm for pubky-app-specs...");
 
     build_wasm("nodejs").unwrap();
     patch().unwrap();
+    println!("📦 Pubky-app-specs JS binding package built successfully!");
 }
 
 fn build_wasm(target: &str) -> io::Result<ExitStatus> {
@@ -22,14 +23,9 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
             "--target",
             target,
             "--out-dir",
-            &format!("dist/{}", target),
+            &format!("bindings/js/dist/{}", target),
         ])
         .output()?;
-
-    println!(
-        "wasm-pack {target} output: {}",
-        String::from_utf8_lossy(&output.stdout)
-    );
 
     if !output.status.success() {
         eprintln!(
@@ -44,15 +40,11 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
 fn patch() -> io::Result<ExitStatus> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 
-    println!("{manifest_dir}/src/bin/patch.mjs");
+    println!("🩹 Applying patch to generate isomorphic code for web and nodejs from {manifest_dir}/src/bin/patch.mjs ...");
+
     let output = Command::new("node")
         .args([format!("{manifest_dir}/src/bin/patch.mjs")])
         .output()?;
-
-    println!(
-        "patch.mjs output: {}",
-        String::from_utf8_lossy(&output.stdout)
-    );
 
     if !output.status.success() {
         eprintln!(

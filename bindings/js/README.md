@@ -1,4 +1,4 @@
-# 🦄 Pubky App Specs (WASM) · `pubky-app-specs`
+# Pubky App Specs · `pubky-app-specs`
 
 A WASM library for building and validating structured JSON models compatible with Pubky.App social powered by [`@synonymdev/pubky`](https://www.npmjs.com/package/@synonymdev/pubky). It handles domain objects like **Users**, **Posts**, **Feeds**, **Bookmarks**, **Tags**, and more. Each object is:
 
@@ -24,27 +24,28 @@ npm install pubky-app-specs
 yarn add pubky-app-specs
 ```
 
-> **Note**: This package uses WASM. Ensure your bundler or environment supports loading WASM modules (e.g. Next.js, Vite, etc.).
+> **Note**: This package uses WASM with embedded bytes for automatic initialization. No manual WASM loading required - just import and use!
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Initialize** the WASM module.
+1. **Import** the library.
 2. **Construct** a `PubkySpecsBuilder(pubkyId)` object.
 3. **Create** validated domain objects (User, Post, Tag, etc.).
 4. **Store** them on the [PubKy homeserver](https://github.com/synonymdev/pubky) or any distributed storage solution you prefer.
 
-### Import & Initialize
+### Import & Usage
 
 ```js
-import init, { PubkySpecsBuilder } from "pubky-app-specs";
+// ES Modules
+import { PubkySpecsBuilder } from "pubky-app-specs";
 
-async function loadSpecs(pubkyId) {
-  // 1. Initialize WASM
-  await init();
+// OR CommonJS
+const { PubkySpecsBuilder } = require("pubky-app-specs/index.cjs");
 
-  // 2. Create a specs builder instance
+function loadSpecs(pubkyId) {
+  // Create a specs builder instance - WASM is already initialized
   const specs = new PubkySpecsBuilder(pubkyId);
   return specs;
 }
@@ -67,7 +68,7 @@ async function createUser(pubkyId) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create user object with minimal fields
-  const userResult = specs.createUser(
+  const {user, meta} = specs.createUser(
     "Alice", // Name
     "Hello from WASM", // Bio
     null, // Image URL or File
@@ -75,11 +76,11 @@ async function createUser(pubkyId) {
     "active" // Status
   );
 
-  // userResult.meta contains { id, path, url }.
-  // userResult.user is the Rust "PubkyAppUser" object.
+  // meta contains { id, path, url }.
+  // user is the Rust "PubkyAppUser" object.
 
   // We bring the Rust object to JS using the .toJson() method.
-  const userJson = userResult.user.toJson();
+  const userJson = user.toJson();
 
   // Store in homeserver via pubky
   const response = await client.fetch(userResult.meta.url, {
@@ -109,7 +110,7 @@ async function createPost(pubkyId, content) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create the Post object referencing your (optional) attachment
-  const postResult = specs.createPost(
+  const {post, meta} = specs.createPost(
     content,
     PubkyAppPostKind.Short,
     null, // parent post
@@ -118,14 +119,14 @@ async function createPost(pubkyId, content) {
   );
 
   // Store the post
-  const postJson = postResult.post.toJson();
-  await client.fetch(postResult.meta.url, {
+  const postJson = post.toJson();
+  await client.fetch(meta.url, {
     method: "PUT",
     body: JSON.stringify(postJson),
   });
 
-  console.log("Post stored at:", postResult.meta.url);
-  return postResult;
+  console.log("Post stored at:", meta.url);
+  return {post, meta};
 }
 ```
 
@@ -139,12 +140,12 @@ async function followUser(myPubkyId, userToFollow) {
   const client = new Client();
   const specs = new PubkySpecsBuilder(myPubkyId);
 
-  const followResult = specs.createFollow(userToFollow);
+  const {follow, meta} = specs.createFollow(userToFollow);
 
   // We only need to store the JSON in the homeserver
-  await client.fetch(followResult.meta.url, {
+  await client.fetch(meta.url, {
     method: "PUT",
-    body: JSON.stringify(followResult.follow.toJson()),
+    body: JSON.stringify(follow.toJson()),
   });
 
   console.log(`Successfully followed: ${userToFollow}`);
