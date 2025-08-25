@@ -77,11 +77,15 @@ pub struct PubkySpecsBuilder {
 /// It also generates getters for both fields.
 ///
 /// # Usage
-/// ```rust
+/// ```
+/// # use pubky_app_specs::*;
+/// # use wasm_bindgen::prelude::*;
 /// result_struct!(PostResult, post, PubkyAppPost);
 /// ```
 /// Expands to:
-/// ```rust
+/// ```
+/// # use pubky_app_specs::*;
+/// # use wasm_bindgen::prelude::*;
 /// #[wasm_bindgen]
 /// pub struct PostResult {
 ///     post: PubkyAppPost,
