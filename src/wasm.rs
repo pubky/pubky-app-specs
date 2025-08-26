@@ -165,7 +165,7 @@ impl PubkySpecsBuilder {
         user.validate(None)?; // No ID-based validation for user
 
         // 3) Create the path and meta
-        let path = user_path_builder();
+        let path = PubkyAppUser::create_path();
         let meta = Meta::from_object(None, self.pubky_id.clone(), path);
 
         // 4) Return a typed struct containing both
@@ -252,7 +252,7 @@ impl PubkySpecsBuilder {
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
-        let path = post_path_builder(&post_id);
+        let path = PubkyAppPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
@@ -275,7 +275,7 @@ impl PubkySpecsBuilder {
         post.validate(Some(&post_id))?;
 
         // Recreate the path and meta using the unchanged ID.
-        let path = post_path_builder(&post_id);
+        let path = PubkyAppPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
