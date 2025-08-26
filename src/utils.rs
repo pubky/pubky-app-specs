@@ -1,7 +1,7 @@
 use crate::{
     common::*,
     traits::{HasIdPath, HasPath},
-    PubkyAppBookmark, PubkyAppFollow, PubkyAppMute, PubkyAppPost, PubkyAppUser,
+    PubkyAppBookmark, PubkyAppFollow, PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -75,4 +75,17 @@ pub fn bookmark_path_builder(id: &str) -> String {
 pub fn bookmark_uri_builder(author_id: String, bookmark_id: String) -> String {
     let bookmark_path = bookmark_path_builder(&bookmark_id);
     [PROTOCOL, &author_id, &bookmark_path].concat()
+}
+
+/// Builds a Tag Path of the form "/pub/pubky.app/tags/<tag_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = tagPathBuilder))]
+pub fn tag_path_builder(id: &str) -> String {
+    PubkyAppTag::create_path(id)
+}
+
+/// Builds a Tag URI of the form "pubky://<author_id>/pub/pubky.app/tags/<tag_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = tagUriBuilder))]
+pub fn tag_uri_builder(author_id: String, tag_id: String) -> String {
+    let tag_path = tag_path_builder(&tag_id);
+    [PROTOCOL, &author_id, &tag_path].concat()
 }

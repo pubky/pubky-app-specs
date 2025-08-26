@@ -239,7 +239,10 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG";
+        let uri = tag_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "86805FC1CSFZD4W6HZ09S24QWG".into(),
+        );
         let tag_json = format!(
             r#"{{
             "uri": "{post_uri}",
@@ -247,7 +250,7 @@ mod tests {
             "created_at": 1627849726
         }}"#
         );
-        let result = PubkyAppObject::from_uri(uri, tag_json.as_bytes());
+        let result = PubkyAppObject::from_uri(&uri, tag_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for tag, got error: {:?}",
