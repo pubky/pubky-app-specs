@@ -30,6 +30,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
+    /// The URI of the resource this is a tag on
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -82,7 +83,7 @@ impl Json for PubkyAppTag {}
 impl HasIdPath for PubkyAppTag {
     const PATH_SEGMENT: &'static str = "tags/";
 
-    fn create_path(&self, id: &str) -> String {
+    fn create_path(id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
@@ -145,28 +146,25 @@ impl Validatable for PubkyAppTag {
         };
 
         // Validate URI format
-        match Url::parse(&self.uri) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(format!(
-                "Validation Error: Invalid URI format: {}",
-                self.uri
-            )),
-        }
+        Url::parse(&self.uri)
+            .map(|_| ())
+            .map_err(|_| format!("Validation Error: Invalid URI format: {}", self.uri))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{traits::Validatable, APP_PATH};
+    use crate::{post_uri_builder, traits::Validatable, user_uri_builder, APP_PATH};
 
     #[test]
     fn test_label_id() {
+        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         // Precomputed earlier
         let tag_id = "CBYS8P6VJPHC5XXT4WDW26662W";
         // Create new tag
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri.clone(),
             created_at: 1627849723,
             label: "cool".to_string(),
         };
@@ -178,7 +176,7 @@ mod tests {
         assert_eq!(new_tag_id, tag_id);
 
         let wrong_tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri,
             created_at: 1627849723,
             label: "co0l".to_string(),
         };
@@ -219,23 +217,28 @@ mod tests {
 
     #[test]
     fn test_create_path() {
+        let post_uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032FNCGXE3R0".into(),
+        );
         let tag = PubkyAppTag {
-            uri: "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032FNCGXE3R0".to_string(),
+            uri: post_uri,
             created_at: 1627849723000,
             label: "cool".to_string(),
         };
 
         let expected_id = tag.create_id();
         let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = tag.create_path(&expected_id);
+        let path = PubkyAppTag::create_path(&expected_id);
 
         assert_eq!(path, expected_path);
     }
 
     #[test]
     fn test_sanitize() {
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            uri: post_uri,
             label: "   CoOl  ".to_string(),
             created_at: 1627849723000,
         };
@@ -246,8 +249,9 @@ mod tests {
 
     #[test]
     fn test_validate_valid() {
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            uri: post_uri,
             label: "cool".to_string(),
             created_at: 1627849723000,
         };
@@ -259,8 +263,9 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_label_length() {
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            uri: post_uri,
             label: "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
             created_at: 1627849723000,
         };
@@ -276,8 +281,9 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_id() {
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/0000000000000".to_string(),
+            uri: post_uri,
             label: "cool".to_string(),
             created_at: 1627849723000,
         };
@@ -285,28 +291,41 @@ mod tests {
         let invalid_id = "INVALIDID";
         let result = tag.validate(Some(invalid_id));
         assert!(result.is_err());
-        // You can check the specific error message if necessary
+    }
+
+    #[test]
+    fn test_validate_invalid_uri() {
+        let tag = PubkyAppTag {
+            uri: "user_id/pub/pubky.app/posts/post_id".into(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(Some(&id));
+        assert!(result
+            .unwrap_err()
+            .starts_with("Validation Error: Invalid URI format"));
     }
 
     #[test]
     fn test_try_from_valid() {
-        let tag_json = r#"
-        {
-            "uri": "pubky://user_pubky_id/pub/pubky.app/profile.json",
-            "label": "Cool Tag",
-            "created_at": 1627849723000
-        }
-        "#;
+        let user_uri = user_uri_builder("user_pubky_id".into());
+        let tag_json = format!(
+            r#"
+            {{
+                "uri": "{user_uri}",
+                "label": "Cool Tag",
+                "created_at": 1627849723000
+            }}
+        "#
+        );
 
-        let id = PubkyAppTag::new(
-            "pubky://user_pubky_id/pub/pubky.app/profile.json".to_string(),
-            "Cool Tag".to_string(),
-        )
-        .create_id();
+        let id = PubkyAppTag::new(user_uri.clone(), "Cool Tag".to_string()).create_id();
 
         let blob = tag_json.as_bytes();
         let tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
-        assert_eq!(tag.uri, "pubky://user_pubky_id/pub/pubky.app/profile.json");
+        assert_eq!(tag.uri, user_uri);
         assert_eq!(tag.label, "cooltag"); // After sanitization
     }
 
@@ -333,7 +352,7 @@ mod tests {
     #[test]
     fn test_incorrect_label() {
         let tag = PubkyAppTag {
-            uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: "cool".to_string(),
         };
@@ -348,7 +367,7 @@ mod tests {
         };
 
         let tag = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: "coolc00lcolaca0g00llooll".to_string(),
         };
@@ -371,7 +390,7 @@ mod tests {
         let label = "cool";
 
         let leading_whitespace = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: " cool".to_string(),
         };
@@ -379,7 +398,7 @@ mod tests {
         assert_eq!(sanitazed_label.label, label);
 
         let trailing_whitespace = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: " cool".to_string(),
         };
@@ -387,7 +406,7 @@ mod tests {
         assert_eq!(sanitazed_label.label, label);
 
         let space_between = PubkyAppTag {
-            uri: "pubky://user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: "   co ol ".to_string(),
         };

@@ -143,7 +143,7 @@ impl PubkyAppUser {
 impl HasPath for PubkyAppUser {
     const PATH_SEGMENT: &'static str = "profile.json";
 
-    fn create_path(&self) -> String {
+    fn create_path() -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT].concat()
     }
 }
@@ -342,8 +342,7 @@ mod tests {
 
     #[test]
     fn test_create_path() {
-        let user = PubkyAppUser::default();
-        let path = user.create_path();
+        let path = PubkyAppUser::create_path();
         assert_eq!(path, format!("{}{}profile.json", PUBLIC_PATH, APP_PATH));
     }
 

@@ -77,11 +77,11 @@ pub struct PubkySpecsBuilder {
 /// It also generates getters for both fields.
 ///
 /// # Usage
-/// ```rust
+/// ```ignore
 /// result_struct!(PostResult, post, PubkyAppPost);
 /// ```
 /// Expands to:
-/// ```rust
+/// ```ignore
 /// #[wasm_bindgen]
 /// pub struct PostResult {
 ///     post: PubkyAppPost,
@@ -165,7 +165,7 @@ impl PubkySpecsBuilder {
         user.validate(None)?; // No ID-based validation for user
 
         // 3) Create the path and meta
-        let path = user.create_path();
+        let path = PubkyAppUser::create_path();
         let meta = Meta::from_object(None, self.pubky_id.clone(), path);
 
         // 4) Return a typed struct containing both
@@ -207,7 +207,7 @@ impl PubkySpecsBuilder {
         let feed_id = feed.create_id();
         feed.validate(Some(&feed_id))?;
 
-        let path = feed.create_path(&feed_id);
+        let path = PubkyAppFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
 
         Ok(FeedResult { feed, meta })
@@ -229,7 +229,7 @@ impl PubkySpecsBuilder {
         let file_id = file.create_id();
         file.validate(Some(&file_id))?;
 
-        let path = file.create_path(&file_id);
+        let path = PubkyAppFile::create_path(&file_id);
         let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
 
         Ok(FileResult { file, meta })
@@ -252,7 +252,7 @@ impl PubkySpecsBuilder {
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
-        let path = post.create_path(&post_id);
+        let path = PubkyAppPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
@@ -275,7 +275,7 @@ impl PubkySpecsBuilder {
         post.validate(Some(&post_id))?;
 
         // Recreate the path and meta using the unchanged ID.
-        let path = [PUBLIC_PATH, APP_PATH, PubkyAppPost::PATH_SEGMENT, &post_id].concat();
+        let path = PubkyAppPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
@@ -291,7 +291,7 @@ impl PubkySpecsBuilder {
         let tag_id = tag.create_id();
         tag.validate(Some(&tag_id))?;
 
-        let path = tag.create_path(&tag_id);
+        let path = PubkyAppTag::create_path(&tag_id);
         let meta = Meta::from_object(Some(&tag_id), self.pubky_id.clone(), path);
 
         Ok(TagResult { tag, meta })
@@ -307,7 +307,7 @@ impl PubkySpecsBuilder {
         let bookmark_id = bookmark.create_id();
         bookmark.validate(Some(&bookmark_id))?;
 
-        let path = bookmark.create_path(&bookmark_id);
+        let path = PubkyAppBookmark::create_path(&bookmark_id);
         let meta = Meta::from_object(Some(&bookmark_id), self.pubky_id.clone(), path);
 
         Ok(BookmarkResult { bookmark, meta })
@@ -323,7 +323,7 @@ impl PubkySpecsBuilder {
         follow.validate(Some(&followee_id))?; // No ID in follow, so we pass user ID or empty
 
         // Path requires the user ID
-        let path = follow.create_path(&followee_id);
+        let path = PubkyAppFollow::create_path(&followee_id);
         let meta = Meta::from_object(Some(&followee_id), self.pubky_id.clone(), path);
 
         Ok(FollowResult { follow, meta })
@@ -338,7 +338,7 @@ impl PubkySpecsBuilder {
         let mute = PubkyAppMute::new();
         mute.validate(Some(&mutee_id))?;
 
-        let path = mute.create_path(&mutee_id);
+        let path = PubkyAppMute::create_path(&mutee_id);
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
@@ -353,7 +353,7 @@ impl PubkySpecsBuilder {
         let last_read = PubkyAppLastRead::new();
         last_read.validate(None)?;
 
-        let path = last_read.create_path();
+        let path = PubkyAppLastRead::create_path();
         let meta = Meta::from_object(None, self.pubky_id.clone(), path);
 
         Ok(LastReadResult { last_read, meta })
@@ -375,7 +375,7 @@ impl PubkySpecsBuilder {
         let id = blob.create_id();
         blob.validate(Some(&id))?;
 
-        let path = blob.create_path(&id);
+        let path = PubkyAppBlob::create_path(&id);
         let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
 
         Ok(BlobResult { blob, meta })

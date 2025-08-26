@@ -34,8 +34,8 @@ pub enum PubkyAppObject {
 impl PubkyAppObject {
     /// Given a URI and a blob (raw data from the homeserver),
     /// this function returns the fully formed PubkyAppObject.
-    pub fn from_uri(uri: &str, blob: &[u8]) -> Result<Self, String> {
-        let parsed_uri = ParsedUri::try_from(uri)?;
+    pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {
+        let parsed_uri = ParsedUri::try_from(uri.as_ref())?;
         Self::from_resource(&parsed_uri.resource, blob)
     }
 
@@ -92,6 +92,8 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::*;
+
     use super::*;
 
     // These tests assume that the respective try_from implementations for each model
@@ -99,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_import_user() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let user_json = r#"{
             "name": "Alice",
             "bio": "Hello, I am Alice",
@@ -128,7 +130,10 @@ mod tests {
 
     #[test]
     fn test_import_post() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+        let uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
         let post_json = r#"{
             "content": "Hello World!",
             "kind": "short",
@@ -152,7 +157,10 @@ mod tests {
 
     #[test]
     fn test_import_follow() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let uri = follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy".into(),
+        );
         let follow_json = r#"{
             "created_at": 1627849723
         }"#;
@@ -172,7 +180,10 @@ mod tests {
 
     #[test]
     fn test_import_mute() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let uri = mute_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy".into(),
+        );
         let mute_json = r#"{
             "created_at": 1627849724
         }"#;
@@ -192,11 +203,21 @@ mod tests {
 
     #[test]
     fn test_import_bookmark() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
-        let bookmark_json = r#"{
-            "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
-            "created_at": 1627849725
-        }"#;
+        let post_uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
+
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
+        let bookmark_json = format!(
+            r#"{{
+                "uri": "{post_uri}",
+                "created_at": 1627849725
+            }}"#
+        );
         let result = PubkyAppObject::from_uri(uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
@@ -205,11 +226,7 @@ mod tests {
         );
         match result.unwrap() {
             PubkyAppObject::Bookmark(bookmark) => {
-                assert_eq!(
-                    bookmark.uri,
-                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
-                    "Bookmark URI mismatch"
-                );
+                assert_eq!(bookmark.uri, post_uri, "Bookmark URI mismatch");
             }
             other => panic!("Expected a Bookmark object, got {:?}", other),
         }
@@ -217,12 +234,22 @@ mod tests {
 
     #[test]
     fn test_import_tag() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG";
-        let tag_json = r#"{
-            "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+        let post_uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
+
+        let uri = tag_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "86805FC1CSFZD4W6HZ09S24QWG".into(),
+        );
+        let tag_json = format!(
+            r#"{{
+            "uri": "{post_uri}",
             "label": "cool",
             "created_at": 1627849726
-        }"#;
+        }}"#
+        );
         let result = PubkyAppObject::from_uri(uri, tag_json.as_bytes());
         assert!(
             result.is_ok(),
@@ -239,7 +266,10 @@ mod tests {
 
     #[test]
     fn test_import_file() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG";
+        let uri = file_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
         let file_json = r#"{
             "name": "example.png",
             "created_at": 1627849727,
@@ -267,7 +297,10 @@ mod tests {
 
     #[test]
     fn test_import_blob() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/CDW1T5RM4PHP64QT0P6RE4PNT0";
+        let uri = blob_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "CDW1T5RM4PHP64QT0P6RE4PNT0".into(),
+        );
         // For a blob, assume the JSON is an array of numbers representing the data.
         let blob: Vec<u8> = vec![1, 2, 3, 4];
         let result = PubkyAppObject::from_uri(uri, &blob);
@@ -287,7 +320,10 @@ mod tests {
 
     #[test]
     fn test_import_feed() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G";
+        let uri = feed_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "5F2NDB2HJGJ2HJBY6MPQ0H5R0G".into(),
+        );
         let feed_json = r#"{
             "feed": {
                 "tags": [],
@@ -316,7 +352,7 @@ mod tests {
     #[test]
     fn test_import_last_read() {
         let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read";
+            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let last_read_json = r#"{
             "timestamp": 1627849729
         }"#;

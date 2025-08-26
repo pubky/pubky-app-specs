@@ -15,8 +15,8 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-/// Represents a file uploaded by the user.
-/// URI: /pub/pubky.app/files/:file_id
+/// Represents a blob, which backs a file uploaded by the user.
+/// URI: /pub/pubky.app/blobs/:blob_id
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -76,7 +76,7 @@ impl HashId for PubkyAppBlob {
 impl HasIdPath for PubkyAppBlob {
     const PATH_SEGMENT: &'static str = "blobs/";
 
-    fn create_path(&self, id: &str) -> String {
+    fn create_path(id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }
