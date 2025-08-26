@@ -342,8 +342,7 @@ mod tests {
     #[test]
     fn test_incorrect_label() {
         let tag = PubkyAppTag {
-            // TODO Valid post URI?
-            uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: "cool".to_string(),
         };

@@ -96,13 +96,12 @@ mod tests {
     #[test]
     fn test_create_bookmark_id() {
         let bookmark = PubkyAppBookmark {
-            // TODO Valid post URI?
-            uri: "user_id/pub/pubky.app/posts/post_id".to_string(),
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
         };
 
         let bookmark_id = bookmark.create_id();
-        assert_eq!(bookmark_id, "AF7KQ6NEV5XV1EG5DVJ2E74JJ4");
+        assert_eq!(bookmark_id, "2GN0JCHX9NYXPECQDS8KSMSE7M");
     }
 
     #[test]
@@ -129,8 +128,8 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_id() {
-        // TODO Valid post URI?
-        let bookmark = PubkyAppBookmark::new("user_id/pub/pubky.app/posts/post_id".to_string());
+        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
+        let bookmark = PubkyAppBookmark::new(post_uri);
         let invalid_id = "INVALIDID";
         let result = bookmark.validate(Some(invalid_id));
         assert!(result.is_err());
@@ -145,8 +144,7 @@ mod tests {
         }
         "#;
 
-        // TODO Valid post URI?
-        let uri = "user_id/pub/pubky.app/posts/post_id".to_string();
+        let uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkyAppBookmark::new(uri.clone());
         let id = bookmark.create_id();
 
