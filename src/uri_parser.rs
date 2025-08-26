@@ -280,7 +280,10 @@ mod tests {
 
     #[test]
     fn test_valid_file_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/file003";
+        let uri = file_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "file003".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid file URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::File("file003".to_string()));

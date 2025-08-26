@@ -266,7 +266,10 @@ mod tests {
 
     #[test]
     fn test_import_file() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG";
+        let uri = file_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
         let file_json = r#"{
             "name": "example.png",
             "created_at": 1627849727,
@@ -274,7 +277,7 @@ mod tests {
             "content_type": "image/png",
             "size": 1024
         }"#;
-        let result = PubkyAppObject::from_uri(uri, file_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri.as_str(), file_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for file, got error: {:?}",
