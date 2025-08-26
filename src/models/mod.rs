@@ -92,7 +92,7 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::{follow_uri_builder, post_uri_builder, user_uri_builder};
+    use crate::{follow_uri_builder, mute_uri_builder, post_uri_builder, user_uri_builder};
 
     use super::*;
 
@@ -180,11 +180,14 @@ mod tests {
 
     #[test]
     fn test_import_mute() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let uri = mute_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy".into(),
+        );
         let mute_json = r#"{
             "created_at": 1627849724
         }"#;
-        let result = PubkyAppObject::from_uri(uri, mute_json.as_bytes());
+        let result = PubkyAppObject::from_uri(&uri, mute_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for mute, got error: {:?}",

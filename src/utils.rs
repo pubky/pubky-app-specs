@@ -1,7 +1,7 @@
 use crate::{
     common::*,
     traits::{HasIdPath, HasPath},
-    PubkyAppFollow, PubkyAppPost, PubkyAppUser,
+    PubkyAppFollow, PubkyAppMute, PubkyAppPost, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -49,4 +49,17 @@ pub fn follow_path_builder(id: &str) -> String {
 pub fn follow_uri_builder(author_id: String, follow_id: String) -> String {
     let follow_path = follow_path_builder(&follow_id);
     [PROTOCOL, &author_id, &follow_path].concat()
+}
+
+/// Builds a Mute Path of the form "/pub/pubky.app/mutes/<mute_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = mutePathBuilder))]
+pub fn mute_path_builder(id: &str) -> String {
+    PubkyAppMute::create_path(id)
+}
+
+/// Builds a Mute URI of the form "pubky://<author_id>/pub/pubky.app/mutes/<mute_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = muteUriBuilder))]
+pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
+    let mute_path = mute_path_builder(&mute_id);
+    [PROTOCOL, &author_id, &mute_path].concat()
 }
