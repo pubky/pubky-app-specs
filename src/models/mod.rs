@@ -92,7 +92,7 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::{post_uri_builder, user_uri_builder};
+    use crate::{follow_uri_builder, post_uri_builder, user_uri_builder};
 
     use super::*;
 
@@ -157,11 +157,14 @@ mod tests {
 
     #[test]
     fn test_import_follow() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let uri = follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy".into(),
+        );
         let follow_json = r#"{
             "created_at": 1627849723
         }"#;
-        let result = PubkyAppObject::from_uri(uri, follow_json.as_bytes());
+        let result = PubkyAppObject::from_uri(&uri, follow_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for follow, got error: {:?}",

@@ -3,8 +3,8 @@
 extern crate wasm_bindgen_test;
 use js_sys::Array;
 use pubky_app_specs::{
-    parse_uri, post_uri_builder, user_path_builder, user_uri_builder, PubkyAppPost,
-    PubkyAppPostKind, PubkyAppUserLink, PubkySpecsBuilder,
+    follow_path_builder, follow_uri_builder, parse_uri, post_uri_builder, user_path_builder,
+    user_uri_builder, PubkyAppPost, PubkyAppPostKind, PubkyAppUserLink, PubkySpecsBuilder,
 };
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
@@ -27,11 +27,14 @@ fn test_create_follow() {
     // Now we can call the Rust getter methods directly:
     assert_eq!(
         meta.path(),
-        "/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+        follow_path_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+        follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into()
+        )
     );
     assert_eq!(
         meta.id(),

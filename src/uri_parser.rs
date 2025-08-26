@@ -150,7 +150,7 @@ impl TryFrom<&str> for ParsedUri {
 #[cfg(test)]
 mod tests {
 
-    use crate::{post_uri_builder, user_uri_builder};
+    use crate::{follow_uri_builder, post_uri_builder, user_uri_builder};
 
     use super::*;
 
@@ -227,8 +227,12 @@ mod tests {
     #[test]
     fn test_valid_follow_uri() {
         // A valid follow URI.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
-        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid follow URI");
+        // TODO Is this a valid Follow URI, where the author follows themselves?
+        let uri = follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+        );
+        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid follow URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         // Assuming PubkyId::try_from("def456") returns a PubkyId that equals PubkyId::try_from("def456")
         assert_eq!(
