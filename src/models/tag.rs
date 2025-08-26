@@ -30,7 +30,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
-    /// The resource this is a tag on
+    /// The URI of the resource this is a tag on
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -146,13 +146,9 @@ impl Validatable for PubkyAppTag {
         };
 
         // Validate URI format
-        match Url::parse(&self.uri) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(format!(
-                "Validation Error: Invalid URI format: {}",
-                self.uri
-            )),
-        }
+        Url::parse(&self.uri)
+            .map(|_| ())
+            .map_err(|_| format!("Validation Error: Invalid URI format: {}", self.uri))
     }
 }
 
@@ -295,7 +291,21 @@ mod tests {
         let invalid_id = "INVALIDID";
         let result = tag.validate(Some(invalid_id));
         assert!(result.is_err());
-        // You can check the specific error message if necessary
+    }
+
+    #[test]
+    fn test_validate_invalid_uri() {
+        let tag = PubkyAppTag {
+            uri: "user_id/pub/pubky.app/posts/post_id".into(),
+            label: "cool".to_string(),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(Some(&id));
+        assert!(result
+            .unwrap_err()
+            .starts_with("Validation Error: Invalid URI format"));
     }
 
     #[test]

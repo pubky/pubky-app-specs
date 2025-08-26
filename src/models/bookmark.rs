@@ -4,6 +4,7 @@ use crate::{
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -25,6 +26,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
+    /// The URI of the resource this is a bookmark of
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     pub created_at: i64,
@@ -84,7 +86,11 @@ impl Validatable for PubkyAppBookmark {
             self.validate_id(id)?;
         }
         // Additional bookmark validation can be added here.
-        Ok(())
+
+        // Validate URI format
+        Url::parse(&self.uri)
+            .map(|_| ())
+            .map_err(|_| format!("Validation Error: Invalid URI format: {}", self.uri))
     }
 }
 
@@ -136,10 +142,22 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_invalid_uri() {
+        let post_uri = "user_id/pub/pubky.app/posts/post_id".to_string();
+        let bookmark = PubkyAppBookmark::new(post_uri);
+
+        let id = bookmark.create_id();
+        let res = bookmark.validate(Some(&id));
+        assert!(res
+            .unwrap_err()
+            .starts_with("Validation Error: Invalid URI format"));
+    }
+
+    #[test]
     fn test_try_from_valid() {
         let bookmark_json = r#"
         {
-            "uri": "user_id/pub/pubky.app/posts/post_id",
+            "uri": "pubky://user_id/pub/pubky.app/posts/post_id",
             "created_at": 1627849723
         }
         "#;
