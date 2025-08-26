@@ -1,8 +1,8 @@
 use crate::{
     common::*,
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFile, PubkyAppFollow, PubkyAppMute, PubkyAppPost,
-    PubkyAppTag, PubkyAppUser,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppMute,
+    PubkyAppPost, PubkyAppTag, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -115,4 +115,17 @@ pub fn blob_path_builder(id: &str) -> String {
 pub fn blob_uri_builder(author_id: String, blob_id: String) -> String {
     let blob_path = blob_path_builder(&blob_id);
     [PROTOCOL, &author_id, &blob_path].concat()
+}
+
+/// Builds a Feed Path of the form "/pub/pubky.app/feeds/<feed_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = feedPathBuilder))]
+pub fn feed_path_builder(id: &str) -> String {
+    PubkyAppFeed::create_path(id)
+}
+
+/// Builds a Feed URI of the form "pubky://<author_id>/pub/pubky.app/feeds/<feed_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = feedUriBuilder))]
+pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
+    let feed_path = feed_path_builder(&feed_id);
+    [PROTOCOL, &author_id, &feed_path].concat()
 }

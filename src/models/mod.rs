@@ -320,7 +320,10 @@ mod tests {
 
     #[test]
     fn test_import_feed() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G";
+        let uri = feed_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "5F2NDB2HJGJ2HJBY6MPQ0H5R0G".into(),
+        );
         let feed_json = r#"{
             "feed": {
                 "tags": [],
