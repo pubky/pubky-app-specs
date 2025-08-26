@@ -240,9 +240,9 @@ mod tests {
 
     #[test]
     fn test_sanitize() {
-        let ppst_uri = post_uri_builder("user_id".into(), "0000000000000".into());
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
-            uri: ppst_uri,
+            uri: post_uri,
             label: "   CoOl  ".to_string(),
             created_at: 1627849723000,
         };
