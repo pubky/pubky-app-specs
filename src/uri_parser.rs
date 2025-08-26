@@ -147,6 +147,14 @@ impl TryFrom<&str> for ParsedUri {
     }
 }
 
+impl TryFrom<String> for ParsedUri {
+    type Error = String;
+
+    fn try_from(uri: String) -> Result<Self, Self::Error> {
+        ParsedUri::try_from(uri.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::utils::*;
@@ -161,7 +169,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "".into(),
         );
-        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::Unknown,
@@ -175,7 +183,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "00".into(),
         );
-        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::Bookmark("00".to_string()),
@@ -186,7 +194,7 @@ mod tests {
     #[test]
     fn test_user() {
         let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
-        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::User,
@@ -200,7 +208,7 @@ mod tests {
     fn test_valid_user_uri() {
         // A valid user URI ends with profile.json.
         let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
-        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid user URI");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::User);
     }
@@ -222,7 +230,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "0032SSN7Q4EVG".into(),
         );
-        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid post URI");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid post URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Post("0032SSN7Q4EVG".to_string()));
     }
@@ -235,7 +243,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
         );
-        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid follow URI");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid follow URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         // Assuming PubkyId::try_from("def456") returns a PubkyId that equals PubkyId::try_from("def456")
         assert_eq!(
@@ -251,7 +259,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             bookmark_id.into(),
         );
-        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid bookmark URI");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid bookmark URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Bookmark(bookmark_id.to_string()));
     }
@@ -262,7 +270,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
         );
-        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid tag URI");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid tag URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
             parsed.resource,
