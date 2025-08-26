@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_import_last_read() {
         let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read";
+            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let last_read_json = r#"{
             "timestamp": 1627849729
         }"#;

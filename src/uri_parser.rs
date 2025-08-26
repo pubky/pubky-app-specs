@@ -217,7 +217,7 @@ mod tests {
     fn test_valid_last_read_uri() {
         // A valid last_read URI ends with last_read.
         let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read";
+            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid last_read URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::LastRead);
