@@ -238,7 +238,6 @@ mod tests {
     #[test]
     fn test_valid_follow_uri() {
         // A valid follow URI.
-        // TODO Is this a valid Follow URI, where the author follows themselves?
         let uri = follow_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
