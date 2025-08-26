@@ -23,7 +23,7 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
             "--target",
             target,
             "--out-dir",
-            &format!("bindings/js/dist/{}", target),
+            &format!("pkg/dist/{}", target),
         ])
         .output()?;
 

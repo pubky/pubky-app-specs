@@ -12,7 +12,7 @@ const cargoTomlContent = await readFile(path.join(__dirname, "../../Cargo.toml")
 const cargoPackageName = /\[package\]\nname = "(.*?)"/.exec(cargoTomlContent)[1]
 const name = cargoPackageName.replace(/-/g, '_')
 
-const content = await readFile(path.join(__dirname, `../../bindings/js/dist/nodejs/${name}.js`), "utf8");
+const content = await readFile(path.join(__dirname, `../../pkg/dist/nodejs/${name}.js`), "utf8");
 
 const patched = content
   // use global TextDecoder TextEncoder
@@ -48,13 +48,13 @@ var __toBinary = /* @__PURE__ */ (() => {
   };
 })();
 
-const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../bindings/js/dist/nodejs/${name}_bg.wasm`), "base64"))});
+const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../pkg/dist/nodejs/${name}_bg.wasm`), "base64"))});
 `
   );
 
 // Write the patched JavaScript file with additional exports
 // This creates the final index.js that will be used by Node.js/browser consumers
-await writeFile(path.join(__dirname, `../../bindings/js/index.js`), patched 
+await writeFile(path.join(__dirname, `../../pkg/index.js`), patched 
   + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
   + "// Re-export enums so Next.js can statically import them\n"
   + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
@@ -65,8 +65,8 @@ await writeFile(path.join(__dirname, `../../bindings/js/index.js`), patched
 // Move outside of nodejs
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
   rename(
-    path.join(__dirname, `../../bindings/js/dist/nodejs/${name}${suffix}`),
-    path.join(__dirname, `../../bindings/js/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
+    path.join(__dirname, `../../pkg/dist/nodejs/${name}${suffix}`),
+    path.join(__dirname, `../../pkg/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
   ))
 )
 
