@@ -34,8 +34,8 @@ pub enum PubkyAppObject {
 impl PubkyAppObject {
     /// Given a URI and a blob (raw data from the homeserver),
     /// this function returns the fully formed PubkyAppObject.
-    pub fn from_uri(uri: &str, blob: &[u8]) -> Result<Self, String> {
-        let parsed_uri = ParsedUri::try_from(uri)?;
+    pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {
+        let parsed_uri = ParsedUri::try_from(uri.as_ref())?;
         Self::from_resource(&parsed_uri.resource, blob)
     }
 
@@ -109,7 +109,7 @@ mod tests {
             "links": null,
             "status": "active"
         }"#;
-        let result = PubkyAppObject::from_uri(&uri, user_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, user_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for user, got error: {:?}",
@@ -141,7 +141,7 @@ mod tests {
             "embed": null,
             "attachments": null
         }"#;
-        let result = PubkyAppObject::from_uri(uri.as_str(), post_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, post_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for post, got error: {:?}",
@@ -164,7 +164,7 @@ mod tests {
         let follow_json = r#"{
             "created_at": 1627849723
         }"#;
-        let result = PubkyAppObject::from_uri(&uri, follow_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, follow_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for follow, got error: {:?}",
@@ -187,7 +187,7 @@ mod tests {
         let mute_json = r#"{
             "created_at": 1627849724
         }"#;
-        let result = PubkyAppObject::from_uri(&uri, mute_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, mute_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for mute, got error: {:?}",
@@ -218,7 +218,7 @@ mod tests {
                 "created_at": 1627849725
             }}"#
         );
-        let result = PubkyAppObject::from_uri(&uri, bookmark_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for bookmark, got error: {:?}",
@@ -250,7 +250,7 @@ mod tests {
             "created_at": 1627849726
         }}"#
         );
-        let result = PubkyAppObject::from_uri(&uri, tag_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, tag_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for tag, got error: {:?}",
@@ -277,7 +277,7 @@ mod tests {
             "content_type": "image/png",
             "size": 1024
         }"#;
-        let result = PubkyAppObject::from_uri(uri.as_str(), file_json.as_bytes());
+        let result = PubkyAppObject::from_uri(uri, file_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for file, got error: {:?}",
