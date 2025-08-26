@@ -185,13 +185,13 @@ impl Validatable for PubkyAppFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Validatable;
+    use crate::{blob_uri_builder, traits::Validatable};
 
     #[test]
     fn test_new() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );
@@ -208,7 +208,7 @@ mod tests {
     fn test_create_path() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );
@@ -227,7 +227,7 @@ mod tests {
     fn test_validate_valid() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );
@@ -240,7 +240,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );
@@ -253,7 +253,7 @@ mod tests {
     fn test_validate_invalid_content_type() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "notavalid/content_type".to_string(),
             1024,
         );
@@ -266,7 +266,7 @@ mod tests {
     fn test_validate_invalid_size() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "notavalid/content_type".to_string(),
             MAX_SIZE + 1,
         );
@@ -302,7 +302,7 @@ mod tests {
 
         let file = PubkyAppFile::new(
             "example.png".to_string(),
-            "pubky://user_id/pub/pubky.app/blobs/id".to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );

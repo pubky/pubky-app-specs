@@ -1,8 +1,8 @@
 use crate::{
     common::*,
     traits::{HasIdPath, HasPath},
-    PubkyAppBookmark, PubkyAppFile, PubkyAppFollow, PubkyAppMute, PubkyAppPost, PubkyAppTag,
-    PubkyAppUser,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppFile, PubkyAppFollow, PubkyAppMute, PubkyAppPost,
+    PubkyAppTag, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -102,4 +102,17 @@ pub fn file_path_builder(id: &str) -> String {
 pub fn file_uri_builder(author_id: String, file_id: String) -> String {
     let file_path = file_path_builder(&file_id);
     [PROTOCOL, &author_id, &file_path].concat()
+}
+
+/// Builds a Blob Path of the form "/pub/pubky.app/blobs/<blob_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = blobPathBuilder))]
+pub fn blob_path_builder(id: &str) -> String {
+    PubkyAppBlob::create_path(id)
+}
+
+/// Builds a Blob URI of the form "pubky://<author_id>/pub/pubky.app/blobs/<blob_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = blobUriBuilder))]
+pub fn blob_uri_builder(author_id: String, blob_id: String) -> String {
+    let blob_path = blob_path_builder(&blob_id);
+    [PROTOCOL, &author_id, &blob_path].concat()
 }

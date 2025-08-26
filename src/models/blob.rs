@@ -15,8 +15,8 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-/// Represents a file uploaded by the user.
-/// URI: /pub/pubky.app/files/:file_id
+/// Represents a blob, which backs a file uploaded by the user.
+/// URI: /pub/pubky.app/blobs/:blob_id
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

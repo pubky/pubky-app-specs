@@ -291,7 +291,10 @@ mod tests {
 
     #[test]
     fn test_valid_blob_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = blob_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid blob URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
