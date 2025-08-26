@@ -149,8 +149,7 @@ impl TryFrom<&str> for ParsedUri {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::{follow_uri_builder, post_uri_builder, user_uri_builder};
+    use crate::utils::*;
 
     use super::*;
 
@@ -158,9 +157,11 @@ mod tests {
 
     #[test]
     fn test_empty_bookmark_uri() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/";
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "".into(),
+        );
+        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::Unknown,
@@ -170,9 +171,11 @@ mod tests {
 
     #[test]
     fn test_some_bookmark_uri() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/00";
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "00".into(),
+        );
+        let parsed_uri = ParsedUri::try_from(uri.as_str()).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
             Resource::Bookmark("00".to_string()),
@@ -243,13 +246,14 @@ mod tests {
 
     #[test]
     fn test_valid_bookmark_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
-        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid bookmark URI");
-        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
-        assert_eq!(
-            parsed.resource,
-            Resource::Bookmark("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
+        let bookmark_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            bookmark_id.into(),
         );
+        let parsed = ParsedUri::try_from(uri.as_str()).expect("Failed to parse valid bookmark URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.resource, Resource::Bookmark(bookmark_id.to_string()));
     }
 
     #[test]

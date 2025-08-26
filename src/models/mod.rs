@@ -92,7 +92,7 @@ impl PubkyAppObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::{follow_uri_builder, mute_uri_builder, post_uri_builder, user_uri_builder};
+    use crate::utils::*;
 
     use super::*;
 
@@ -208,14 +208,17 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
         let bookmark_json = format!(
             r#"{{
                 "uri": "{post_uri}",
                 "created_at": 1627849725
             }}"#
         );
-        let result = PubkyAppObject::from_uri(uri, bookmark_json.as_bytes());
+        let result = PubkyAppObject::from_uri(&uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for bookmark, got error: {:?}",
