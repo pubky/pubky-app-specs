@@ -2,8 +2,10 @@
 
 extern crate wasm_bindgen_test;
 use js_sys::Array;
+use pubky_app_specs::traits::{HasIdPath, HasPath};
 use pubky_app_specs::{
-    parse_uri, PubkyAppPost, PubkyAppPostKind, PubkyAppUserLink, PubkySpecsBuilder,
+    follow_uri_builder, parse_uri, post_uri_builder, user_uri_builder, PubkyAppFollow,
+    PubkyAppPost, PubkyAppPostKind, PubkyAppUser, PubkyAppUserLink, PubkySpecsBuilder,
 };
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
@@ -26,11 +28,14 @@ fn test_create_follow() {
     // Now we can call the Rust getter methods directly:
     assert_eq!(
         meta.path(),
-        "/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+        PubkyAppFollow::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+        follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into()
+        )
     );
     assert_eq!(
         meta.id(),
@@ -78,10 +83,10 @@ fn test_create_user_rust_api() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
+    assert_eq!(meta.path(), PubkyAppUser::create_path());
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(meta.id(), "");
 
@@ -132,10 +137,10 @@ fn test_create_user_with_minimal_data() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), "/pub/pubky.app/profile.json");
+    assert_eq!(meta.path(), PubkyAppUser::create_path());
     assert_eq!(
         meta.url(),
-        "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
     );
     assert_eq!(meta.id(), "");
 
@@ -173,10 +178,13 @@ fn test_post_from_json() {
 #[wasm_bindgen_test]
 fn test_parse_uri() {
     // A valid URI for a post resource.
-    let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+    let uri = post_uri_builder(
+        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+        "0032SSN7Q4EVG".into(),
+    );
 
     // Call the wasm-exposed parse_uri function.
-    let parsed = parse_uri(uri).expect("Expected valid URI parsing");
+    let parsed = parse_uri(&uri).expect("Expected valid URI parsing");
 
     // Verify the user ID is correctly parsed.
     assert_eq!(
