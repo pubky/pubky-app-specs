@@ -98,7 +98,7 @@ await writeFile(path.join(__dirname, `../../pkg/index.js`), patchedWithAsync
 // Move outside of nodejs
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
   rename(
-    path.join(__dirname, `../../pkg/dist/nodejs/${name}${suffix}`),
+    path.join(__dirname, `../../pkg/nodejs/${name}${suffix}`),
     path.join(__dirname, `../../pkg/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
   ))
 )

@@ -1,5 +1,5 @@
-const { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed } = require("../index.js");
-const assert = require("assert");
+import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed } from "./index.js";
+import assert from "assert";
 
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";

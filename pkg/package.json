@@ -23,9 +23,13 @@
   "types": "pubky_app_specs.d.ts",
   "homepage": "https://pubky.app",
   "sideEffects": false,
+  "devDependencies": {
+    "mocha": "^10.2.0"
+  },
   "scripts": {
     "build": "cargo run --bin bundle_specs_npm",
-    "example": "node example.js"
+    "example": "node example.js",
+    "test": "mocha test.js"
   },
   "keywords": [
     "pubky-app",
