@@ -34,12 +34,12 @@ jobs:
     - name: Build WASM package
       run: |
         # Change to the js directory and run build wasm
-        cd ./bindings/js
+        cd ./pkg
         npm run build
 
     - name: Run JS tests
       run: |        
-        cd ./bindings/js/test
+        cd ./pkg
         npm install
         echo "Running JavaScript tests..."
         npm run test
