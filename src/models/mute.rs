@@ -66,7 +66,7 @@ impl Validatable for PubkyAppMute {
 impl HasIdPath for PubkyAppMute {
     const PATH_SEGMENT: &'static str = "mutes/";
 
-    fn create_path(&self, pubky_id: &str) -> String {
+    fn create_path(pubky_id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
     }
 }
@@ -88,8 +88,8 @@ mod tests {
 
     #[test]
     fn test_create_path_with_id() {
-        let mute = PubkyAppMute::new();
-        let path = mute.create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
+        let path =
+            PubkyAppMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
         assert_eq!(
             path,
             "/pub/pubky.app/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"

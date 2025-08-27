@@ -18,7 +18,7 @@ url = "2.5.4"
 base32 = "0.5.1"
 blake3 = "1.8.2"
 mime = "0.3"
-utoipa = { version = "5.3.1", optional = true }
+utoipa = { version = "5.4.0", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.100"
@@ -31,7 +31,7 @@ wasm-bindgen-test = "0.3.50"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 pubky = "0.5.0-rc.2"
-tokio = { version = "1.45.1", features = ["full"] }
+tokio = { version = "1.47.1", features = ["full"] }
 anyhow = "1.0.95"
 
 [features]

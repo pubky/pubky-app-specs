@@ -147,8 +147,17 @@ impl TryFrom<&str> for ParsedUri {
     }
 }
 
+impl TryFrom<String> for ParsedUri {
+    type Error = String;
+
+    fn try_from(uri: String) -> Result<Self, Self::Error> {
+        ParsedUri::try_from(uri.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::utils::*;
 
     use super::*;
 
@@ -156,8 +165,10 @@ mod tests {
 
     #[test]
     fn test_empty_bookmark_uri() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/";
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "".into(),
+        );
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -168,8 +179,10 @@ mod tests {
 
     #[test]
     fn test_some_bookmark_uri() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/00";
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "00".into(),
+        );
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -180,8 +193,7 @@ mod tests {
 
     #[test]
     fn test_user() {
-        let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -195,7 +207,7 @@ mod tests {
     #[test]
     fn test_valid_user_uri() {
         // A valid user URI ends with profile.json.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::User);
@@ -205,7 +217,7 @@ mod tests {
     fn test_valid_last_read_uri() {
         // A valid last_read URI ends with last_read.
         let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read";
+            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid last_read URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::LastRead);
@@ -214,7 +226,10 @@ mod tests {
     #[test]
     fn test_valid_post_uri() {
         // A valid post URI includes the posts/ segment followed by an identifier.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG";
+        let uri = post_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "0032SSN7Q4EVG".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid post URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Post("0032SSN7Q4EVG".to_string()));
@@ -223,7 +238,10 @@ mod tests {
     #[test]
     fn test_valid_follow_uri() {
         // A valid follow URI.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let uri = follow_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid follow URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         // Assuming PubkyId::try_from("def456") returns a PubkyId that equals PubkyId::try_from("def456")
@@ -235,18 +253,22 @@ mod tests {
 
     #[test]
     fn test_valid_bookmark_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let bookmark_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = bookmark_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            bookmark_id.into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid bookmark URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
-        assert_eq!(
-            parsed.resource,
-            Resource::Bookmark("8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string())
-        );
+        assert_eq!(parsed.resource, Resource::Bookmark(bookmark_id.to_string()));
     }
 
     #[test]
     fn test_valid_tag_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = tag_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid tag URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
@@ -257,7 +279,10 @@ mod tests {
 
     #[test]
     fn test_valid_file_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/file003";
+        let uri = file_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "file003".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid file URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::File("file003".to_string()));
@@ -265,7 +290,10 @@ mod tests {
 
     #[test]
     fn test_valid_blob_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = blob_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid blob URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
@@ -276,7 +304,10 @@ mod tests {
 
     #[test]
     fn test_valid_feed_uri() {
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let uri = feed_uri_builder(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
+            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+        );
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid feed URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(

@@ -72,7 +72,7 @@ impl Validatable for PubkyAppFollow {
 impl HasIdPath for PubkyAppFollow {
     const PATH_SEGMENT: &'static str = "follows/";
 
-    fn create_path(&self, pubky_id: &str) -> String {
+    fn create_path(pubky_id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
     }
 }
@@ -93,8 +93,7 @@ mod tests {
 
     #[test]
     fn test_create_path_with_id() {
-        let mute = PubkyAppFollow::new();
-        let path = mute.create_path("user_id123");
+        let path = PubkyAppFollow::create_path("user_id123");
         assert_eq!(path, "/pub/pubky.app/follows/user_id123");
     }
 

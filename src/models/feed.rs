@@ -197,7 +197,7 @@ impl HashId for PubkyAppFeed {
 impl HasIdPath for PubkyAppFeed {
     const PATH_SEGMENT: &'static str = "feeds/";
 
-    fn create_path(&self, id: &str) -> String {
+    fn create_path(id: &str) -> String {
         [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
     }
 }

@@ -122,12 +122,12 @@ pub trait Validatable: Sized + DeserializeOwned {
 
 pub trait HasPath {
     const PATH_SEGMENT: &'static str;
-    fn create_path(&self) -> String;
+    fn create_path() -> String;
 }
 
 pub trait HasIdPath {
     const PATH_SEGMENT: &'static str;
-    fn create_path(&self, id: &str) -> String;
+    fn create_path(id: &str) -> String;
 }
 
 #[cfg(target_arch = "wasm32")]
