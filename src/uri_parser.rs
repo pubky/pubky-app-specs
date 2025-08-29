@@ -206,11 +206,18 @@ mod tests {
 
     #[test]
     fn test_valid_user_uri() {
+        let user_id = PubkyId::try_from(USER_ID).unwrap();
+
         // A valid user URI ends with profile.json.
-        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let uri = user_uri_builder(USER_ID.into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
-        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.user_id, user_id);
         assert_eq!(parsed.resource, Resource::User);
+
+        // Repeat same checks for ParsedUri derived directly from PubkyId
+        let parsed_uri_from_pubky_id = user_id.to_uri();
+        assert_eq!(parsed_uri_from_pubky_id.user_id, user_id);
+        assert_eq!(parsed_uri_from_pubky_id.resource, Resource::User);
     }
 
     #[test]
