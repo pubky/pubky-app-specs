@@ -1,4 +1,4 @@
-import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed } from "./index.js";
+import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder } from "./index.js";
 import assert from "assert";
 
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
@@ -60,24 +60,29 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     it("should create reply post with parent reference", () => {
-      const parentPost = `pubky://${RIO}/pub/pubky.app/posts/0033SSE3B1FQ0`
+      const parentPostUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SSE3B1FQ0`
+      const parentPostUri = postUriBuilder(RIO, "0033SSE3B1FQ0")
+      assert.strictEqual(parentPostUri, parentPostUriRaw, "Parent post URI should match");
 
       const { post: replyPost } = specsBuilder.createPost(
         "This is a reply to the first post!", 
         PubkyAppPostKind.Short, 
-        parentPost, 
+        parentPostUriRaw, 
         null, 
         null
       );
 
       // Test reply content
       const replyJson = replyPost.toJson();
-      assert.strictEqual(replyJson.parent, parentPost, "Reply should reference parent URL");
+      assert.strictEqual(replyJson.parent, parentPostUriRaw, "Reply should reference parent URL");
     });
 
     it("should create repost with embed", () => {
-      const embedUri = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
-      const embed = new PubkyAppPostEmbed(embedUri, PubkyAppPostKind.Video);
+      const embedUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+      const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
+      assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
+
+      const embed = new PubkyAppPostEmbed(embedUriRaw, PubkyAppPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
         "This is a repost to random post!", 
         PubkyAppPostKind.Short, 
@@ -89,15 +94,18 @@ describe("PubkySpecs Example Objects Tests", () => {
       // Test repost content
       const repostJson = repost.toJson();
       assert.ok(repostJson.embed, "Repost should have embed");
-      assert.strictEqual(repostJson.embed.uri, embedUri, "Embed URI should match");
+      assert.strictEqual(repostJson.embed.uri, embedUriRaw, "Embed URI should match");
       assert.strictEqual(repostJson.embed.kind, "video", "Embed kind should match");
     });
   });
 
   describe("Bookmark Pubky-app-specs", () => {
     it("should create bookmark with correct properties", () => {
-      const bookmarkUri = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
-      const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(bookmarkUri);
+      const postUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+
+      const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(postUriRaw);
+      const bookmarkUriFromBuilder = bookmarkUriBuilder(OTTO, bookmarkMeta.id)
+      assert.strictEqual(bookmarkUriFromBuilder, bookmarkMeta.url, "Bookmark URI should match");
 
       // Test meta properties
       assert.ok(bookmarkMeta.id, "Bookmark should have an ID");
@@ -109,7 +117,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       // Test bookmark content
       const bookmarkJson = bookmark.toJson();
-      assert.strictEqual(bookmarkJson.uri, bookmarkUri, "Bookmark URI should match");
+      assert.strictEqual(bookmarkJson.uri, postUriRaw, "Bookmark URI should match");
       assert.ok(bookmarkJson.created_at, "Bookmark should have created_at timestamp");
       assert.ok(typeof bookmarkJson.created_at === "number", "created_at should be a number");
     });
@@ -118,6 +126,8 @@ describe("PubkySpecs Example Objects Tests", () => {
   describe("Follow Pubky-app-specs", () => {
     it("should create follow with correct properties", () => {
       const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
+      const followUriFromBuilder = followUriBuilder(OTTO, RIO)
+      assert.strictEqual(followUriFromBuilder, followMeta.url, "Follow URI should match");
 
       // Test meta properties
       assert.strictEqual(followMeta.id, RIO, "Follow ID should be the user being followed");
@@ -136,8 +146,11 @@ describe("PubkySpecs Example Objects Tests", () => {
 
   describe("Tag Pubky-app-specs", () => {
     it("should create tag with correct properties", () => {
-      const tagUri = `pubky://${OTTO}/pub/pubky.app/profile.json`;
-      const { tag, meta: tagMeta } = specsBuilder.createTag(tagUri, "otto");
+      const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
+      const userUriFromBuilder = userUriBuilder(OTTO)
+      assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
+
+      const { tag, meta: tagMeta } = specsBuilder.createTag(userUriRaw, "otto");
 
       // Test meta properties
       assert.ok(tagMeta.id, "Tag should have an ID");
@@ -149,7 +162,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       // Test tag content
       const tagJson = tag.toJson();
-      assert.strictEqual(tagJson.uri, tagUri, "Tag URI should match");
+      assert.strictEqual(tagJson.uri, userUriRaw, "Tag URI should match");
       assert.strictEqual(tagJson.label, "otto", "Tag label should match");
       assert.ok(tagJson.created_at, "Tag should have created_at timestamp");
       assert.ok(typeof tagJson.created_at === "number", "created_at should be a number");
