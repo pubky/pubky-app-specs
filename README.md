@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.3.5_
+_Version 0.4.0_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -9,41 +9,49 @@ _Version 0.3.5_
 
 ### JS package
 
-Build with
+The package is available as an npm module [pubky-app-specs](https://www.npmjs.com/package/pubky-app-specs). Alternatively, you can build from source using the provided build scripts:
 
 ```bash
-./build.sh
+cd pkg
+npm run build
 ```
 
-Test with
+Test with:
 
 ```bash
-wasm-pack test --headless --firefox
+cd pkg
+npm run install
+npm run test
 ```
+
+Examples with:
+
+```bash
+cd pkg
+npm run example
+```
+
+---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Quick Start](#quick-start)
-3. [Data Models](#data-models)
-   - [PubkyAppUser](#pubkyappuser)
-   - [PubkyAppFile](#pubkyappfile)
-   - [PubkyAppPost](#pubkyapppost)
-   - [PubkyAppTag](#pubkyapptag)
-   - [PubkyAppBookmark](#pubkyappbookmark)
-   - [PubkyAppFollow](#pubkyappfollow)
-   - [PubkyAppMute](#pubkyappmute)
-   - [PubkyAppFeed](#pubkyappfeed)
-   - [PubkyAppLastRead](#pubkyapplastread)
-4. [Validation Rules](#validation-rules)
-   - [Common Rules](#common-rules)
-   - [ID Generation](#id-generation)
-5. [Glossary](#glossary)
-6. [Examples](#examples)
-   - [PubkyAppUser](#example-pubkyappuser)
-   - [PubkyAppPost](#example-pubkyapppost)
-   - [PubkyAppTag](#example-pubkyapptag)
-7. [License](#license)
+- [Pubky.app Data Model Specification](#pubkyapp-data-model-specification)
+    - [JS package](#js-package)
+  - [Table of Contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [Quick Start](#quick-start)
+    - [Concepts:](#concepts)
+  - [Data Models](#data-models)
+    - [PubkyAppUser](#pubkyappuser)
+    - [PubkyAppFile](#pubkyappfile)
+    - [PubkyAppPost](#pubkyapppost)
+    - [PubkyAppTag](#pubkyapptag)
+    - [PubkyAppBookmark](#pubkyappbookmark)
+    - [PubkyAppFollow](#pubkyappfollow)
+    - [PubkyAppFeed](#pubkyappfeed)
+  - [Validation Rules](#validation-rules)
+    - [Common Rules](#common-rules)
+  - [License](#license)
 
 ---
 

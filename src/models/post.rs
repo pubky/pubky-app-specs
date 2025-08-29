@@ -80,8 +80,17 @@ impl PubkyAppPostEmbed {
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn kind(&self) -> PubkyAppPostKind {
-        self.kind.clone()
+    pub fn kind(&self) -> String {
+        match self.kind {
+            PubkyAppPostKind::Short => "Short".to_string(),
+            PubkyAppPostKind::Long => "Long".to_string(),
+            PubkyAppPostKind::Image => "Image".to_string(),
+            PubkyAppPostKind::Video => "Video".to_string(),
+            PubkyAppPostKind::Link => "Link".to_string(),
+            PubkyAppPostKind::File => "File".to_string(),
+        }
+        // pub fn kind(&self) -> PubkyAppPostKind {
+        //     self.kind.clone()
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
@@ -122,8 +131,17 @@ impl PubkyAppPost {
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn kind(&self) -> PubkyAppPostKind {
-        self.kind.clone()
+    pub fn kind(&self) -> String {
+        match self.kind {
+            PubkyAppPostKind::Short => "Short".to_string(),
+            PubkyAppPostKind::Long => "Long".to_string(),
+            PubkyAppPostKind::Image => "Image".to_string(),
+            PubkyAppPostKind::Video => "Video".to_string(),
+            PubkyAppPostKind::Link => "Link".to_string(),
+            PubkyAppPostKind::File => "File".to_string(),
+        }
+        // pub fn kind(&self) -> PubkyAppPostKind {
+        //     self.kind.clone()
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]

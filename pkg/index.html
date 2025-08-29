@@ -6,23 +6,34 @@
   </head>
   <body>
     <script type="module">
-      import init, { PubkySpecsBuilder } from "./pubky_app_specs.js";
+      // TIP: We can use the following command to test that file: python3 -m http.server 8000
+      import { PubkySpecsBuilder, PubkyAppPostKind, PubkyAppPostEmbed } from "./index.js";
 
       async function main() {
         try {
-          // 1) Initialize and await
-          // Option A: If your .wasm is at the same path as "pubky_app_specs_bg.wasm", do:
-          await init();
 
-          // Option B (often safer): explicitly provide the .wasm URL
-          // await init("./pubky_app_specs_bg.wasm");
-
-          // 2) Now call the function
-          const specs = new PubkySpecsBuilder("our_user");
-          const result = specs.createFollow("other_user");
-          console.log("Success:", result);
+          // Test various functions like the example.js
+          const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
+          const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
+          
+          const specsBuilder = new PubkySpecsBuilder(OTTO);
+          
+          // Create a user
+          const { user, meta: userMeta } = specsBuilder.createUser("Alice Smith", "Software Developer", null, null, "active");
+          console.log("User created:", userMeta.url);
+          
+          // Create a post
+          const { post, meta: postMeta } = specsBuilder.createPost("Hello from browser!", PubkyAppPostKind.Short, null, null, null);
+          console.log("Post created:", postMeta.url);
+          
+          // Create a follow
+          const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
+          console.log("Follow created:", followMeta.url);
+          
+          console.log("All tests passed!");
+          
         } catch (err) {
-          console.error("Error creating follow:", err);
+          console.error("Error:", err);
         }
       }
 
