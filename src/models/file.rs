@@ -175,7 +175,7 @@ impl Validatable for PubkyAppFile {
         }
 
         // Validate size
-        if self.size <= 0 || self.size > MAX_SIZE {
+        if self.size == 0 || self.size > MAX_SIZE {
             return Err("Validation Error: Invalid size".into());
         }
         Ok(())
