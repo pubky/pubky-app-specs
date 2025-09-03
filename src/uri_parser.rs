@@ -165,10 +165,7 @@ mod tests {
 
     #[test]
     fn test_empty_bookmark_uri() {
-        let uri = bookmark_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "".into(),
-        );
+        let uri = bookmark_uri_builder(USER_ID.into(), "".into());
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -179,10 +176,7 @@ mod tests {
 
     #[test]
     fn test_some_bookmark_uri() {
-        let uri = bookmark_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "00".into(),
-        );
+        let uri = bookmark_uri_builder(USER_ID.into(), "00".into());
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -193,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_user() {
-        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let uri = user_uri_builder(USER_ID.into());
         let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
         assert_eq!(
             parsed_uri.resource,
@@ -206,18 +200,24 @@ mod tests {
 
     #[test]
     fn test_valid_user_uri() {
+        let user_id = PubkyId::try_from(USER_ID).unwrap();
+
         // A valid user URI ends with profile.json.
-        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let uri = user_uri_builder(USER_ID.into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
-        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        assert_eq!(parsed.user_id, user_id);
         assert_eq!(parsed.resource, Resource::User);
+
+        // Repeat same checks for ParsedUri derived directly from PubkyId
+        let parsed_uri_from_pubky_id = user_id.to_uri();
+        assert_eq!(parsed_uri_from_pubky_id.user_id, user_id);
+        assert_eq!(parsed_uri_from_pubky_id.resource, Resource::User);
     }
 
     #[test]
     fn test_valid_last_read_uri() {
         // A valid last_read URI ends with last_read.
-        let uri =
-            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let uri = last_read_uri_builder(USER_ID.into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid last_read URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::LastRead);
@@ -226,10 +226,7 @@ mod tests {
     #[test]
     fn test_valid_post_uri() {
         // A valid post URI includes the posts/ segment followed by an identifier.
-        let uri = post_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "0032SSN7Q4EVG".into(),
-        );
+        let uri = post_uri_builder(USER_ID.into(), "0032SSN7Q4EVG".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid post URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Post("0032SSN7Q4EVG".to_string()));
@@ -238,10 +235,7 @@ mod tests {
     #[test]
     fn test_valid_follow_uri() {
         // A valid follow URI.
-        let uri = follow_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-        );
+        let uri = follow_uri_builder(USER_ID.into(), USER_ID.into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid follow URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         // Assuming PubkyId::try_from("def456") returns a PubkyId that equals PubkyId::try_from("def456")
@@ -254,10 +248,7 @@ mod tests {
     #[test]
     fn test_valid_bookmark_uri() {
         let bookmark_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
-        let uri = bookmark_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            bookmark_id.into(),
-        );
+        let uri = bookmark_uri_builder(USER_ID.into(), bookmark_id.into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid bookmark URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Bookmark(bookmark_id.to_string()));
@@ -265,10 +256,7 @@ mod tests {
 
     #[test]
     fn test_valid_tag_uri() {
-        let uri = tag_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
-        );
+        let uri = tag_uri_builder(USER_ID.into(), "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid tag URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
@@ -279,10 +267,7 @@ mod tests {
 
     #[test]
     fn test_valid_file_uri() {
-        let uri = file_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "file003".into(),
-        );
+        let uri = file_uri_builder(USER_ID.into(), "file003".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid file URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::File("file003".to_string()));
@@ -290,10 +275,7 @@ mod tests {
 
     #[test]
     fn test_valid_blob_uri() {
-        let uri = blob_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
-        );
+        let uri = blob_uri_builder(USER_ID.into(), "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid blob URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
@@ -304,10 +286,7 @@ mod tests {
 
     #[test]
     fn test_valid_feed_uri() {
-        let uri = feed_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
-        );
+        let uri = feed_uri_builder(USER_ID.into(), "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into());
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid feed URI");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(
@@ -320,7 +299,7 @@ mod tests {
     fn test_no_resource_segments() {
         // When there are no segments beyond the public and app paths,
         // the resource should be Unknown.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/";
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/");
         let parsed =
             ParsedUri::try_from(uri).expect("Failed to parse URI with no resource segments");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
@@ -330,7 +309,7 @@ mod tests {
     #[test]
     fn test_unknown_resource() {
         // Unknown resource type yields Resource::Unknown.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/xyz";
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/unknown/xyz");
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse URI with unknown resource");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Unknown);
@@ -340,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_invalid_scheme() {
-        let uri = "http://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json";
+        let uri = format!("http://{USER_ID}/pub/pubky.app/profile.json");
         let result = ParsedUri::try_from(uri);
         assert!(result.is_err());
     }
@@ -348,7 +327,7 @@ mod tests {
     #[test]
     fn test_invalid_public_path() {
         // Change the public path so it doesn't match.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/invalid/pubky.app/profile.json";
+        let uri = format!("pubky://{USER_ID}/invalid/pubky.app/profile.json");
         let result = ParsedUri::try_from(uri);
         assert!(result.is_err());
     }
@@ -356,7 +335,7 @@ mod tests {
     #[test]
     fn test_invalid_app_path() {
         // Change the app path so it doesn't match.
-        let uri = "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/other.app/profile.json";
+        let uri = format!("pubky://{USER_ID}/pub/other.app/profile.json");
         let result = ParsedUri::try_from(uri);
         assert!(result.is_err());
     }
