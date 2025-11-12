@@ -9,6 +9,7 @@ use url::Url;
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
 const MIN_TAG_LABEL_LENGTH: usize = 1;
+const INVALID_CHARS: &[char] = &[',', ':'];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -111,14 +112,10 @@ impl Validatable for PubkyAppTag {
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
-            Ok(url) => {
-                // If the URL is valid, reformat it to a sanitized string representation
-                url.to_string()
-            }
-            Err(_) => {
-                // If the URL is invalid, return as-is for error reporting later
-                self.uri.trim().to_string()
-            }
+            // If the URL is valid, reformat it to a sanitized string representation
+            Ok(url) => url.to_string(),
+            // If the URL is invalid, return as-is for error reporting later
+            Err(_) => self.uri.trim().to_string(),
         };
 
         PubkyAppTag {
@@ -144,6 +141,11 @@ impl Validatable for PubkyAppTag {
             }
             _ => (),
         };
+
+        // Validate label chars
+        if let Some(c) = self.label.chars().find(|c| INVALID_CHARS.contains(c)) {
+            return Err(format!("Validation Error: Tag label has invalid char: {c}"));
+        }
 
         // Validate URI format
         Url::parse(&self.uri)
@@ -290,6 +292,20 @@ mod tests {
 
         let invalid_id = "INVALIDID";
         let result = tag.validate(Some(invalid_id));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_char() {
+        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
+        let tag = PubkyAppTag {
+            uri: post_uri,
+            label: format!("invalidchar{}", INVALID_CHARS[0]),
+            created_at: 1627849723000,
+        };
+
+        let id = tag.create_id();
+        let result = tag.validate(Some(&id));
         assert!(result.is_err());
     }
 
