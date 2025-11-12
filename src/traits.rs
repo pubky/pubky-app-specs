@@ -96,10 +96,7 @@ pub trait HashId {
     fn validate_id(&self, id: &str) -> Result<(), String> {
         let generated_id = self.create_id();
         if generated_id != id {
-            return Err(format!(
-                "Invalid ID: expected {}, found {}",
-                generated_id, id
-            ));
+            return Err(format!("Invalid ID: expected {generated_id}, found {id}"));
         }
         Ok(())
     }
