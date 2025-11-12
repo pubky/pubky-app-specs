@@ -7,6 +7,12 @@ homepage = "https://pubky.app"
 repository = "https://github.com/pubky/pubky-app-specs"
 license = "MIT"
 documentation = "https://github.com/pubky/pubky-app-specs"
+exclude = [
+    ".github",
+    "pkg",
+    "test",
+    "build.sh"
+]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
