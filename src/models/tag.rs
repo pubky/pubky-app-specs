@@ -100,15 +100,12 @@ impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
         // Remove spaces from the tag and keep it as one word
         // Returns a lowercase tag
-        let mut label = self
+        let label = self
             .label
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect::<String>()
             .to_lowercase();
-
-        // Enforce maximum label length safely
-        label = label.chars().take(MAX_TAG_LABEL_LENGTH).collect::<String>();
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
