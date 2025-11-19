@@ -9,7 +9,8 @@ use url::Url;
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
 const MIN_TAG_LABEL_LENGTH: usize = 1;
-const INVALID_CHARS: &[char] = &[' ', ',', ':'];
+/// Disallowed characters, in addition to whitespace chars
+const INVALID_CHARS: &[char] = &[',', ':'];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -133,7 +134,12 @@ impl Validatable for PubkyAppTag {
             _ => (),
         };
 
-        // Validate label chars
+        // Validate label chars: dissallow whitespace (space char, tab, newline, etc)
+        if let Some(_) = self.label.chars().find(|c| c.is_whitespace()) {
+            return Err(format!("Validation Error: Tag label has whitespace char"));
+        }
+
+        // Validate label chars: dissallow INVALID_CHARS
         if let Some(c) = self.label.chars().find(|c| INVALID_CHARS.contains(c)) {
             return Err(format!("Validation Error: Tag label has invalid char: {c}"));
         }
@@ -409,6 +415,14 @@ mod tests {
         };
         let trailing_whitespace_validate_res = trailing_whitespace.validate(None);
         assert!(trailing_whitespace_validate_res.is_err());
+
+        let trailing_newline = PubkyAppTag {
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
+            created_at: 1627849723,
+            label: "cool\n".to_string(),
+        };
+        let trailing_newline_validate_res = trailing_newline.validate(None);
+        assert!(trailing_newline_validate_res.is_err());
 
         let space_between = PubkyAppTag {
             uri: post_uri_builder("user_id".into(), "post_id".into()),
