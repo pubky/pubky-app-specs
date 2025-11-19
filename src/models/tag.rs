@@ -9,6 +9,7 @@ use url::Url;
 // Validation
 const MAX_TAG_LABEL_LENGTH: usize = 20;
 const MIN_TAG_LABEL_LENGTH: usize = 1;
+/// Disallowed characters, in addition to whitespace chars
 const INVALID_CHARS: &[char] = &[',', ':'];
 
 #[cfg(target_arch = "wasm32")]
@@ -98,17 +99,8 @@ impl HashId for PubkyAppTag {
 
 impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
-        // Remove spaces from the tag and keep it as one word
-        // Returns a lowercase tag
-        let mut label = self
-            .label
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>()
-            .to_lowercase();
-
-        // Enforce maximum label length safely
-        label = label.chars().take(MAX_TAG_LABEL_LENGTH).collect::<String>();
+        // Sanitize label
+        let label = self.label.to_lowercase();
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
@@ -142,7 +134,12 @@ impl Validatable for PubkyAppTag {
             _ => (),
         };
 
-        // Validate label chars
+        // Validate label chars: dissallow whitespace (space char, tab, newline, etc)
+        if let Some(_) = self.label.chars().find(|c| c.is_whitespace()) {
+            return Err(format!("Validation Error: Tag label has whitespace char"));
+        }
+
+        // Validate label chars: dissallow INVALID_CHARS
         if let Some(c) = self.label.chars().find(|c| INVALID_CHARS.contains(c)) {
             return Err(format!("Validation Error: Tag label has invalid char: {c}"));
         }
@@ -241,7 +238,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
-            label: "   CoOl  ".to_string(),
+            label: "CoOl".to_string(),
             created_at: 1627849723000,
         };
 
@@ -327,22 +324,23 @@ mod tests {
     #[test]
     fn test_try_from_valid() {
         let user_uri = user_uri_builder("user_pubky_id".into());
+        let tag_label = "CoolTag".to_string();
         let tag_json = format!(
             r#"
             {{
                 "uri": "{user_uri}",
-                "label": "Cool Tag",
+                "label": "{tag_label}",
                 "created_at": 1627849723000
             }}
         "#
         );
 
-        let id = PubkyAppTag::new(user_uri.clone(), "Cool Tag".to_string()).create_id();
+        let id = PubkyAppTag::new(user_uri.clone(), tag_label.clone()).create_id();
 
         let blob = tag_json.as_bytes();
-        let tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
-        assert_eq!(tag.uri, user_uri);
-        assert_eq!(tag.label, "cooltag"); // After sanitization
+        let sanitized_validated_tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
+        assert_eq!(sanitized_validated_tag.uri, user_uri);
+        assert_eq!(sanitized_validated_tag.label, "cooltag");
     }
 
     #[test]
@@ -350,7 +348,7 @@ mod tests {
         let tag_json = r#"
         {
             "uri": "invalid_uri",
-            "label": "Cool Tag",
+            "label": "CoolTag",
             "created_at": 1627849723000
         }
         "#;
@@ -402,31 +400,36 @@ mod tests {
 
     #[test]
     fn test_white_space_tag() {
-        // All the tags has to be that label after sanitation
-        let label = "cool";
-
         let leading_whitespace = PubkyAppTag {
             uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: " cool".to_string(),
         };
-        let mut sanitazed_label = leading_whitespace.sanitize();
-        assert_eq!(sanitazed_label.label, label);
+        let leading_whitespace_validate_res = leading_whitespace.validate(None);
+        assert!(leading_whitespace_validate_res.is_err());
 
         let trailing_whitespace = PubkyAppTag {
             uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
-            label: " cool".to_string(),
+            label: "cool ".to_string(),
         };
-        sanitazed_label = trailing_whitespace.sanitize();
-        assert_eq!(sanitazed_label.label, label);
+        let trailing_whitespace_validate_res = trailing_whitespace.validate(None);
+        assert!(trailing_whitespace_validate_res.is_err());
+
+        let trailing_newline = PubkyAppTag {
+            uri: post_uri_builder("user_id".into(), "post_id".into()),
+            created_at: 1627849723,
+            label: "cool\n".to_string(),
+        };
+        let trailing_newline_validate_res = trailing_newline.validate(None);
+        assert!(trailing_newline_validate_res.is_err());
 
         let space_between = PubkyAppTag {
             uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
             label: "   co ol ".to_string(),
         };
-        sanitazed_label = space_between.sanitize();
-        assert_eq!(sanitazed_label.label, "cool");
+        let space_between_validate_res = space_between.validate(None);
+        assert!(space_between_validate_res.is_err());
     }
 }
