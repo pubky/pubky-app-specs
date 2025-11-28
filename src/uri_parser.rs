@@ -71,6 +71,30 @@ pub struct ParsedUri {
     pub resource: Resource,
 }
 
+impl ParsedUri {
+    /// Converts the [ParsedUri] back into its URI string representation.
+    /// Returns an error if the resource is Unknown.
+    pub fn try_to_uri_str(&self) -> Result<String, String> {
+        use crate::traits::{HasIdPath, HasPath};
+
+        let path = match &self.resource {
+            Resource::User => PubkyAppUser::create_path(),
+            Resource::LastRead => PubkyAppLastRead::create_path(),
+            Resource::Post(id) => PubkyAppPost::create_path(id),
+            Resource::Follow(id) => PubkyAppFollow::create_path(&id.to_string()),
+            Resource::Mute(id) => PubkyAppMute::create_path(&id.to_string()),
+            Resource::Bookmark(id) => PubkyAppBookmark::create_path(id),
+            Resource::Tag(id) => PubkyAppTag::create_path(id),
+            Resource::File(id) => PubkyAppFile::create_path(id),
+            Resource::Blob(id) => PubkyAppBlob::create_path(id),
+            Resource::Feed(id) => PubkyAppFeed::create_path(id),
+            Resource::Unknown => return Err("Cannot convert Unknown resource to URI".to_string()),
+        };
+
+        Ok([PROTOCOL, &self.user_id.to_string(), &path].concat())
+    }
+}
+
 impl TryFrom<&str> for ParsedUri {
     type Error = String;
     fn try_from(uri: &str) -> Result<Self, Self::Error> {
@@ -353,5 +377,136 @@ mod tests {
         let uri = "not a url";
         let result = ParsedUri::try_from(uri);
         assert!(result.is_err());
+    }
+
+    // Reverse conversion tests: ParsedUri::try_to_uri_str should produce the same string as the builder functions
+
+    #[test]
+    fn test_user_uri_roundtrip() {
+        let original_uri = user_uri_builder(USER_ID.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse user URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "User URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_last_read_uri_roundtrip() {
+        let original_uri = last_read_uri_builder(USER_ID.into());
+        let parsed =
+            ParsedUri::try_from(original_uri.clone()).expect("Failed to parse last_read URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(
+            original_uri, reconstructed_uri,
+            "LastRead URI roundtrip failed"
+        );
+    }
+
+    #[test]
+    fn test_post_uri_roundtrip() {
+        let post_id = "0032SSN7Q4EVG";
+        let original_uri = post_uri_builder(USER_ID.into(), post_id.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse post URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "Post URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_follow_uri_roundtrip() {
+        let original_uri = follow_uri_builder(USER_ID.into(), USER_ID.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse follow URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(
+            original_uri, reconstructed_uri,
+            "Follow URI roundtrip failed"
+        );
+    }
+
+    #[test]
+    fn test_mute_uri_roundtrip() {
+        let original_uri = mute_uri_builder(USER_ID.into(), USER_ID.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse mute URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "Mute URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_bookmark_uri_roundtrip() {
+        let bookmark_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let original_uri = bookmark_uri_builder(USER_ID.into(), bookmark_id.into());
+        let parsed =
+            ParsedUri::try_from(original_uri.clone()).expect("Failed to parse bookmark URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(
+            original_uri, reconstructed_uri,
+            "Bookmark URI roundtrip failed"
+        );
+    }
+
+    #[test]
+    fn test_tag_uri_roundtrip() {
+        let tag_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let original_uri = tag_uri_builder(USER_ID.into(), tag_id.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse tag URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "Tag URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_file_uri_roundtrip() {
+        let file_id = "file003";
+        let original_uri = file_uri_builder(USER_ID.into(), file_id.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse file URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "File URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_blob_uri_roundtrip() {
+        let blob_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let original_uri = blob_uri_builder(USER_ID.into(), blob_id.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse blob URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "Blob URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_feed_uri_roundtrip() {
+        let feed_id = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        let original_uri = feed_uri_builder(USER_ID.into(), feed_id.into());
+        let parsed = ParsedUri::try_from(original_uri.clone()).expect("Failed to parse feed URI");
+        let reconstructed_uri = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert to URI string");
+        assert_eq!(original_uri, reconstructed_uri, "Feed URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_unknown_resource_to_uri_str_fails() {
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/unknown/xyz");
+        let parsed = ParsedUri::try_from(uri).expect("Failed to parse URI with unknown resource");
+        assert_eq!(parsed.resource, Resource::Unknown);
+        let result = parsed.try_to_uri_str();
+        assert!(
+            result.is_err(),
+            "Unknown resource should fail to convert to URI string"
+        );
     }
 }
