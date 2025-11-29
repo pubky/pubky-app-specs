@@ -42,6 +42,20 @@ impl PubkyId {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl From<pubky::PublicKey> for PubkyId {
+    fn from(pk: pubky::PublicKey) -> Self {
+        Self(pk.to_z32())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<pubky::Keypair> for PubkyId {
+    fn from(keypair: pubky::Keypair) -> Self {
+        Self::from(keypair.public_key())
+    }
+}
+
 impl fmt::Display for PubkyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
