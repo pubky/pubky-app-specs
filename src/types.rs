@@ -75,3 +75,123 @@ impl AsRef<str> for PubkyId {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    use pubky::Keypair;
+
+    #[test]
+    fn test_try_from_valid() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let result = PubkyId::try_from(valid_key);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_try_from_invalid_length() {
+        let invalid_key = "short";
+        let result = PubkyId::try_from(invalid_key);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: the string is not 52 utf chars"
+        );
+    }
+
+    #[test]
+    fn test_try_from_invalid_encoding() {
+        // 52 characters but invalid z-base-32 (contains invalid char '0')
+        let invalid_key = "0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0";
+        let result = PubkyId::try_from(invalid_key);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: invalid public key encoding"
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_from_public_key() {
+        // Create a keypair and extract the public key
+        let keypair = Keypair::random();
+        let public_key = keypair.public_key();
+        let expected_z32 = public_key.to_z32();
+
+        // Convert PublicKey to PubkyId
+        let pubky_id = PubkyId::from(public_key);
+
+        // Verify the PubkyId contains the correct z32 string
+        assert_eq!(pubky_id.as_ref(), expected_z32);
+        assert_eq!(pubky_id.to_string(), expected_z32);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_from_keypair() {
+        // Create a keypair
+        let keypair = Keypair::random();
+        let expected_z32 = keypair.public_key().to_z32();
+
+        // Convert Keypair to PubkyId
+        let pubky_id = PubkyId::from(keypair);
+
+        // Verify the PubkyId contains the correct z32 string (derived from public key)
+        assert_eq!(pubky_id.as_ref(), expected_z32);
+        assert_eq!(pubky_id.to_string(), expected_z32);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_from_public_key_produces_valid_pubky_id() {
+        // Ensure the PubkyId created from PublicKey is valid (52 char z32)
+        let keypair = Keypair::random();
+        let public_key = keypair.public_key();
+        let pubky_id = PubkyId::from(public_key);
+
+        // The inner string should be 52 characters (valid z32 public key)
+        assert_eq!(pubky_id.as_ref().len(), 52);
+
+        // Should also work with try_from validation
+        let result = PubkyId::try_from(pubky_id.as_ref());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_from_keypair_produces_valid_pubky_id() {
+        // Ensure the PubkyId created from Keypair is valid (52 char z32)
+        let keypair = Keypair::random();
+        let pubky_id = PubkyId::from(keypair);
+
+        // The inner string should be 52 characters (valid z32 public key)
+        assert_eq!(pubky_id.as_ref().len(), 52);
+
+        // Should also work with try_from validation
+        let result = PubkyId::try_from(pubky_id.as_ref());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_from_keypair_and_public_key_produce_same_result() {
+        // Create a keypair
+        let keypair = Keypair::random();
+        let public_key = keypair.public_key();
+
+        // Store expected value before moving keypair
+        let expected_z32 = keypair.public_key().to_z32();
+
+        // Convert both to PubkyId
+        let pubky_id_from_keypair = PubkyId::from(keypair);
+        let pubky_id_from_public_key = PubkyId::from(public_key);
+
+        // Both should produce the same PubkyId
+        assert_eq!(pubky_id_from_keypair, pubky_id_from_public_key);
+        assert_eq!(pubky_id_from_keypair.as_ref(), expected_z32);
+    }
+}
