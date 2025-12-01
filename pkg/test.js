@@ -167,6 +167,44 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(tagJson.created_at, "Tag should have created_at timestamp");
       assert.ok(typeof tagJson.created_at === "number", "created_at should be a number");
     });
+    it("cannot create a tag with invalid characters (comma, colon, space)", () => {
+      const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
+      const userUriFromBuilder = userUriBuilder(OTTO);
+      assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
+
+      const invalidCases = [
+        { label: "otto,rio", invalidChar: "," },
+        { label: "otto:rio", invalidChar: ":" },
+        { label: "otto rio", invalidChar: " " },
+      ];
+
+      invalidCases.forEach(({ label, invalidChar }) => {
+        assert.throws(
+          () => {
+            specsBuilder.createTag(userUriRaw, label);
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+
+            if (invalidChar === " ") {
+              // Current implementation uses a slightly different message for whitespace
+              assert.ok(
+                msg.startsWith("Validation Error: Tag label has"),
+                `Unexpected error message for whitespace: "${msg}"`
+              );
+            } else {
+              assert.strictEqual(
+                msg,
+                `Validation Error: Tag label has invalid char: ${invalidChar}`
+              );
+            }
+
+            return true;
+          },
+          `Expected validation error when creating tag with invalid char '${invalidChar}' in label`
+        );
+      });
+    });
   });
 
   describe("Mute Pubky-app-specs", () => {
