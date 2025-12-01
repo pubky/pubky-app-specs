@@ -1,7 +1,7 @@
 {
   "name": "pubky-app-specs",
   "description": "Pubky.app Data Model Specifications",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "MIT",
   "collaborators": [
     "SHAcollision"
