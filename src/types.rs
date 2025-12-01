@@ -184,7 +184,7 @@ mod tests {
         let public_key = keypair.public_key();
 
         // Store expected value before moving keypair
-        let expected_z32 = keypair.public_key().to_z32();
+        let expected_z32 = public_key.to_z32();
 
         // Convert both to PubkyId
         let pubky_id_from_keypair = PubkyId::from(keypair);
