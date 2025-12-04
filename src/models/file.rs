@@ -162,6 +162,9 @@ impl Validatable for PubkyAppFile {
         if self.src.chars().count() > MAX_SRC_LENGTH {
             return Err("Validation Error: src exceeds maximum length".into());
         }
+        // Validate URL format
+        Url::parse(&self.src)
+            .map_err(|_| "Validation Error: Invalid src URI format".to_string())?;
 
         // validate content type
         match Mime::from_str(&self.content_type) {
@@ -225,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),

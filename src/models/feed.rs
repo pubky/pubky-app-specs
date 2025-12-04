@@ -578,4 +578,64 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_feed_reach_from_str() {
+        // Valid cases
+        assert_eq!(
+            "following".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Following
+        );
+        assert_eq!(
+            "followers".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Followers
+        );
+        assert_eq!(
+            "friends".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Friends
+        );
+        assert_eq!(
+            "all".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::All
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedReach>().is_err());
+    }
+
+    #[test]
+    fn test_feed_layout_from_str() {
+        // Valid cases
+        assert_eq!(
+            "columns".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Columns
+        );
+        assert_eq!(
+            "wide".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Wide
+        );
+        assert_eq!(
+            "visual".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Visual
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedLayout>().is_err());
+    }
+
+    #[test]
+    fn test_feed_sort_from_str() {
+        // Valid cases
+        assert_eq!(
+            "recent".parse::<PubkyAppFeedSort>().unwrap(),
+            PubkyAppFeedSort::Recent
+        );
+        assert_eq!(
+            "popularity".parse::<PubkyAppFeedSort>().unwrap(),
+            PubkyAppFeedSort::Popularity
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedSort>().is_err());
+    }
 }

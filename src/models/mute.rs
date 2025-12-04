@@ -104,6 +104,13 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_invalid_id() {
+        let mute = PubkyAppMute::new();
+        let result = mute.validate(Some("not_a_valid_pubky_id"));
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_try_from_valid() {
         let mute_json = r#"
         {

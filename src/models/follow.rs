@@ -105,6 +105,13 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_invalid_id() {
+        let follow = PubkyAppFollow::new();
+        let result = follow.validate(Some("not_a_valid_pubky_id"));
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_try_from_valid() {
         let follow_json = r#"
         {

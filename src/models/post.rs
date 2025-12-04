@@ -11,7 +11,7 @@ const MAX_SHORT_CONTENT_LENGTH: usize = 2000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 // Reserved keyword used by the system to mark deleted posts with relationships
 const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
-const MAX_ATTACHMENTS: usize = 10;
+const MAX_ATTACHMENTS: usize = 3;
 const MAX_ATTACHMENT_URL_LENGTH: usize = 200;
 // Allowed protocols for attachment URLs: pubky://, http://, https://, ipfs://, ipns://
 const ALLOWED_ATTACHMENT_PROTOCOLS: &[&str] = &["pubky", "http", "https", "ipfs", "ipns"];
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let post = PubkyAppPost::new(
             "Valid content".to_string(),
             PubkyAppPostKind::Short,
@@ -536,25 +536,52 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_attachments_valid_all_protocols() {
-        // Test all allowed protocols together
+    fn test_validate_attachments_valid_protocols() {
+        // Test allowed protocols (limited to MAX_ATTACHMENTS)
+        let protocols = vec![
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+            "https://example.com/file.png".to_string(),
+            "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
+        ];
+        assert!(protocols.len() <= MAX_ATTACHMENTS, "Test uses more than MAX_ATTACHMENTS");
+
         let post = PubkyAppPost::new(
             "Valid content".to_string(),
             PubkyAppPostKind::Image,
             None,
             None,
-            Some(vec![
-                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "http://example.com/file.jpg".to_string(),
-                "https://example.com/file.png".to_string(),
-                "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
-                "ipns://example.com".to_string(),
-            ]),
+            Some(protocols),
         );
 
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_attachments_all_allowed_protocols() {
+        // Test each allowed protocol individually to ensure all are accepted
+        let allowed_protocols = vec![
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G",
+            "http://example.com/file.jpg",
+            "https://example.com/file.png",
+            "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+            "ipns://example.com",
+        ];
+
+        for protocol_url in allowed_protocols {
+            let post = PubkyAppPost::new(
+                "Valid content".to_string(),
+                PubkyAppPostKind::Image,
+                None,
+                None,
+                Some(vec![protocol_url.to_string()]),
+            );
+
+            let id = post.create_id();
+            let result = post.validate(Some(&id));
+            assert!(result.is_ok(), "Should accept protocol: {}", protocol_url);
+        }
     }
 
     #[test]

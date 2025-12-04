@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
@@ -425,5 +425,39 @@ mod tests {
         let sanitized = tag.sanitize();
         assert_eq!(sanitized.label, "co ol"); // Only leading/trailing whitespace trimmed
         assert!(sanitized.validate(None).is_err()); // Internal space should fail validation
+    }
+
+    #[test]
+    fn test_unicode_tag_labels() {
+        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
+
+        // Unicode tags should work (emoji, non-latin scripts)
+        let unicode_cases = vec![
+            ("比特币", "比特币"),     // Chinese characters
+            ("ビットコイン", "ビットコイン"), // Japanese katakana
+            ("🚀", "🚀"),           // Single emoji
+            ("café", "café"),       // Accented characters
+        ];
+
+        for (input, expected) in unicode_cases {
+            let tag = PubkyAppTag::new(post_uri.clone(), input.to_string());
+            assert_eq!(tag.label, expected, "Failed for input: {}", input);
+            assert!(
+                tag.validate(None).is_ok(),
+                "Should accept Unicode tag: {}",
+                input
+            );
+        }
+
+        // Test max length with multi-byte characters
+        // MAX_TAG_LABEL_LENGTH is 20, so 20 emoji should pass
+        let max_emoji_tag: String = "🔥".repeat(MAX_TAG_LABEL_LENGTH);
+        assert_eq!(max_emoji_tag.chars().count(), MAX_TAG_LABEL_LENGTH);
+        let tag = PubkyAppTag::new(post_uri.clone(), max_emoji_tag);
+        assert!(
+            tag.validate(None).is_ok(),
+            "Should accept {} emoji characters as tag",
+            MAX_TAG_LABEL_LENGTH
+        );
     }
 }

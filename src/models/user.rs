@@ -368,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let user = PubkyAppUser::new(
             "Alice".to_string(),
             Some("Maximalist".to_string()),
@@ -614,5 +614,42 @@ mod tests {
             );
             assert!(result.unwrap_err().contains("exceeds maximum length"));
         }
+    }
+
+    #[test]
+    fn test_unicode_character_counting() {
+        // Emoji name: 3 emoji characters (each is 1 char but multiple bytes)
+        // This verifies .chars().count() is used instead of .len()
+        let emoji_name = "Hi👋🏻Bob"; // 7 characters: H, i, 👋, 🏻, B, o, b
+        let user = PubkyAppUser::new(emoji_name.to_string(), None, None, None, None);
+        assert!(
+            user.validate(None).is_ok(),
+            "Should accept emoji in name (counts chars, not bytes)"
+        );
+
+        // Unicode bio with various scripts
+        let unicode_bio = "你好世界 🌍 مرحبا"; // Mix of Chinese, emoji, Arabic
+        let user_with_bio = PubkyAppUser::new(
+            "Alice".to_string(),
+            Some(unicode_bio.to_string()),
+            None,
+            None,
+            None,
+        );
+        assert!(
+            user_with_bio.validate(None).is_ok(),
+            "Should accept multi-script Unicode in bio"
+        );
+
+        // Test that emoji-heavy string at max length passes
+        // MAX_USERNAME_LENGTH is 50, so 50 emoji should pass
+        let max_emoji_name: String = "🔥".repeat(MAX_USERNAME_LENGTH);
+        assert_eq!(max_emoji_name.chars().count(), MAX_USERNAME_LENGTH);
+        let user_max_emoji = PubkyAppUser::new(max_emoji_name, None, None, None, None);
+        assert!(
+            user_max_emoji.validate(None).is_ok(),
+            "Should accept {} emoji characters as name",
+            MAX_USERNAME_LENGTH
+        );
     }
 }

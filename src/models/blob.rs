@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let blob = PubkyAppBlob(vec![1, 2, 3]);
         let id = blob.create_id();
         let result = blob.validate(Some(&id));
