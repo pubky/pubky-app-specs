@@ -105,17 +105,16 @@ import { Client } from "@synonymdev/pubky";
 import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
 
 async function createPost(pubkyId, content) {
-  // fileData can be a File (browser) or a raw Blob/Buffer (Node).
   const client = new Client();
   const specs = new PubkySpecsBuilder(pubkyId);
 
-  // Create the Post object referencing your (optional) attachment
+  // Create the Post object
   const {post, meta} = specs.createPost(
     content,
     PubkyAppPostKind.Short,
-    null, // parent post
-    null, // embed
-    null // attachments list of urls
+    null, // parent post URI (for replies)
+    null, // embed object (for reposts)
+    null  // attachments (array of file URLs, max 3)
   );
 
   // Store the post
@@ -130,7 +129,39 @@ async function createPost(pubkyId, content) {
 }
 ```
 
-### 3) Following a User
+### 3) Creating a Post with Attachments
+
+```js
+import { Client } from "@synonymdev/pubky";
+import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
+
+async function createPostWithAttachments(pubkyId, content, fileUrls) {
+  const client = new Client();
+  const specs = new PubkySpecsBuilder(pubkyId);
+
+  // Create post with attachments (max 3 allowed)
+  const {post, meta} = specs.createPost(
+    content,
+    PubkyAppPostKind.Image,
+    null, // parent
+    null, // embed
+    fileUrls // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
+  );
+
+  const postJson = post.toJson();
+  console.log("Attachments:", postJson.attachments);
+
+  await client.fetch(meta.url, {
+    method: "PUT",
+    body: JSON.stringify(postJson),
+  });
+
+  console.log("Post with attachments stored at:", meta.url);
+  return {post, meta};
+}
+```
+
+### 4) Following a User
 
 ```js
 import { Client } from "@synonymdev/pubky";
@@ -166,6 +197,40 @@ This library supports many more domain objects beyond `User` and `Post`. Here ar
 - **LastRead**: `createLastRead(...)`
 
 Each has a `meta` field for storing relevant IDs/paths and a typed data object.
+
+## 🔗 URI Builder Utilities
+
+These helper functions construct properly formatted Pubky URIs:
+
+```js
+import {
+  userUriBuilder,
+  postUriBuilder,
+  bookmarkUriBuilder,
+  followUriBuilder,
+  tagUriBuilder,
+  muteUriBuilder,
+  lastReadUriBuilder,
+  blobUriBuilder,
+  fileUriBuilder,
+} from "pubky-app-specs";
+
+const userId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
+const targetUserId = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
+
+// Build URIs for different resources
+userUriBuilder(userId);                    // pubky://{userId}/pub/pubky.app/profile.json
+postUriBuilder(userId, "0033SSE3B1FQ0");   // pubky://{userId}/pub/pubky.app/posts/{postId}
+bookmarkUriBuilder(userId, "ABC123");      // pubky://{userId}/pub/pubky.app/bookmarks/{bookmarkId}
+followUriBuilder(userId, targetUserId);    // pubky://{userId}/pub/pubky.app/follows/{targetUserId}
+tagUriBuilder(userId, "XYZ789");           // pubky://{userId}/pub/pubky.app/tags/{tagId}
+muteUriBuilder(userId, targetUserId);      // pubky://{userId}/pub/pubky.app/mutes/{targetUserId}
+lastReadUriBuilder(userId);                // pubky://{userId}/pub/pubky.app/last_read
+blobUriBuilder(userId, "BLOB123");         // pubky://{userId}/pub/pubky.app/blobs/{blobId}
+fileUriBuilder(userId, "FILE456");         // pubky://{userId}/pub/pubky.app/files/{fileId}
+```
+
+---
 
 ## 📌 Parsing a Pubky URI
 

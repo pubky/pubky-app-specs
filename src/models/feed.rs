@@ -1,5 +1,6 @@
 use crate::{
     common::timestamp,
+    models::tag::{sanitize_tag_label, validate_tag_label},
     traits::{HasIdPath, HashId, Validatable},
     PubkyAppPostKind, APP_PATH, PUBLIC_PATH,
 };
@@ -13,6 +14,9 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
+
+// Maximum number of tags allowed in a feed
+const MAX_TAGS: usize = 5;
 
 /// Enum representing the reach of the feed.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -109,8 +113,35 @@ impl PubkyAppFeedConfig {
 }
 
 impl Validatable for PubkyAppFeedConfig {
+    fn sanitize(self) -> Self {
+        // Sanitize tags: trim, lowercase, and filter out empty tags
+        let tags = self.tags.map(|tags| {
+            tags.into_iter()
+                .map(|tag| sanitize_tag_label(&tag))
+                .filter(|tag| !tag.is_empty())
+                .collect()
+        });
+
+        PubkyAppFeedConfig { tags, ..self }
+    }
+
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
-        // TODO: validate config?
+        // Validate tags
+        if let Some(tags) = &self.tags {
+            // Validate maximum number of tags
+            if tags.len() > MAX_TAGS {
+                return Err(format!(
+                    "Validation Error: Feed config cannot have more than {} tags",
+                    MAX_TAGS
+                ));
+            }
+
+            // Validate each tag using shared validation function
+            for tag in tags {
+                validate_tag_label(tag)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -214,7 +245,8 @@ impl Validatable for PubkyAppFeed {
             return Err("Validation Error: Feed name cannot be empty".into());
         }
 
-        // Additional validations can be added here
+        self.feed.validate(None)?;
+
         Ok(())
     }
 
@@ -222,15 +254,7 @@ impl Validatable for PubkyAppFeed {
         // Sanitize name
         let name = self.name.trim().to_string();
 
-        // Sanitize tags
-        let feed = PubkyAppFeedConfig {
-            tags: self.feed.tags.map(|tags| {
-                tags.into_iter()
-                    .map(|tag| tag.trim().to_lowercase())
-                    .collect()
-            }),
-            ..self.feed
-        };
+        let feed = self.feed.sanitize();
 
         PubkyAppFeed {
             feed,
@@ -282,7 +306,7 @@ impl FromStr for PubkyAppFeedSort {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Validatable;
+    use crate::{constants::MAX_TAG_LABEL_LENGTH, traits::Validatable};
 
     #[test]
     fn test_new() {
@@ -401,5 +425,217 @@ mod tests {
             feed_parsed.feed.tags,
             Some(vec!["bitcoin".to_string(), "rust".to_string()])
         );
+    }
+
+    #[test]
+    fn test_validate_too_many_tags() {
+        let feed = PubkyAppFeed::new(
+            Some(vec![
+                "tag1".to_string(),
+                "tag2".to_string(),
+                "tag3".to_string(),
+                "tag4".to_string(),
+                "tag5".to_string(),
+                "tag6".to_string(), // This exceeds MAX_TAGS
+            ]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        let result = feed.validate(Some(&feed_id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("more than 5 tags"));
+    }
+
+    #[test]
+    fn test_validate_tag_too_long() {
+        let feed = PubkyAppFeed::new(
+            Some(vec!["a".repeat(MAX_TAG_LABEL_LENGTH + 1)]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        let result = feed.validate(Some(&feed_id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn test_validate_tag_with_whitespace() {
+        let feed = PubkyAppFeed::new(
+            Some(vec!["bit coin".to_string()]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        let result = feed.validate(Some(&feed_id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("whitespace"));
+    }
+
+    #[test]
+    fn test_validate_tag_with_invalid_char() {
+        let feed = PubkyAppFeed::new(
+            Some(vec!["bitcoin,rust".to_string()]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        let result = feed.validate(Some(&feed_id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid character"));
+    }
+
+    #[test]
+    fn test_validate_max_tags() {
+        let feed = PubkyAppFeed::new(
+            Some(vec![
+                "tag1".to_string(),
+                "tag2".to_string(),
+                "tag3".to_string(),
+                "tag4".to_string(),
+                "tag5".to_string(),
+            ]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        let result = feed.validate(Some(&feed_id));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filters_empty_tags() {
+        let feed = PubkyAppFeed::new(
+            Some(vec![
+                "bitcoin".to_string(),
+                "  ".to_string(), // Empty after trim
+                "rust".to_string(),
+            ]),
+            PubkyAppFeedReach::Following,
+            PubkyAppFeedLayout::Columns,
+            PubkyAppFeedSort::Recent,
+            None,
+            "Test Feed".to_string(),
+        );
+
+        assert_eq!(
+            feed.feed.tags,
+            Some(vec!["bitcoin".to_string(), "rust".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_validate_tag_errors() {
+        // Test multiple tag validation errors in one test
+        let invalid_cases = vec![
+            (
+                "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
+                "exceeds maximum length",
+            ),
+            ("bit coin".to_string(), "whitespace"),
+            ("bitcoin,rust".to_string(), "invalid character"),
+        ];
+
+        for (invalid_tag, expected_error) in invalid_cases {
+            let feed = PubkyAppFeed::new(
+                Some(vec![invalid_tag.clone()]),
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+                "Test Feed".to_string(),
+            );
+            let feed_id = feed.create_id();
+
+            let result = feed.validate(Some(&feed_id));
+            assert!(result.is_err(), "Should reject tag: {}", invalid_tag);
+            assert!(
+                result.unwrap_err().contains(expected_error),
+                "Expected error containing '{}' for tag: {}",
+                expected_error,
+                invalid_tag
+            );
+        }
+    }
+
+    #[test]
+    fn test_feed_reach_from_str() {
+        // Valid cases
+        assert_eq!(
+            "following".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Following
+        );
+        assert_eq!(
+            "followers".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Followers
+        );
+        assert_eq!(
+            "friends".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::Friends
+        );
+        assert_eq!(
+            "all".parse::<PubkyAppFeedReach>().unwrap(),
+            PubkyAppFeedReach::All
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedReach>().is_err());
+    }
+
+    #[test]
+    fn test_feed_layout_from_str() {
+        // Valid cases
+        assert_eq!(
+            "columns".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Columns
+        );
+        assert_eq!(
+            "wide".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Wide
+        );
+        assert_eq!(
+            "visual".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Visual
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedLayout>().is_err());
+    }
+
+    #[test]
+    fn test_feed_sort_from_str() {
+        // Valid cases
+        assert_eq!(
+            "recent".parse::<PubkyAppFeedSort>().unwrap(),
+            PubkyAppFeedSort::Recent
+        );
+        assert_eq!(
+            "popularity".parse::<PubkyAppFeedSort>().unwrap(),
+            PubkyAppFeedSort::Popularity
+        );
+
+        // Invalid case
+        assert!("invalid".parse::<PubkyAppFeedSort>().is_err());
     }
 }

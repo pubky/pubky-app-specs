@@ -75,6 +75,23 @@ console.log("Repost Post URL:", repostMeta.url);
 console.log("Repost Data:", JSON.stringify(repost.toJson(), null, 2));
 console.log("-".repeat(60));
 
+console.log("📎 Creating Post with Attachments...");
+const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilder.createPost(
+  "Check out these photos from my trip!",
+  PubkyAppPostKind.Image,
+  null,
+  null,
+  [
+    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ52G`,
+    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
+  ]
+);
+console.log("Post ID:", postWithAttachmentsMeta.id);
+console.log("Post URL:", postWithAttachmentsMeta.url);
+console.log("Attachments:", postWithAttachments.toJson().attachments);
+console.log("Post Data:", JSON.stringify(postWithAttachments.toJson(), null, 2));
+console.log("-".repeat(60));
+
 console.log("🔖 Creating Bookmark...");
 let { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
   `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
