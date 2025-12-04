@@ -9,6 +9,12 @@ use url::Url;
 // Validation
 const MAX_SHORT_CONTENT_LENGTH: usize = 2000;
 const MAX_LONG_CONTENT_LENGTH: usize = 50000;
+// Reserved keyword used by the system to mark deleted posts with relationships
+const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
+const MAX_ATTACHMENTS: usize = 10;
+const MAX_ATTACHMENT_URL_LENGTH: usize = 200;
+// Allowed protocols for attachment URLs: pubky://, http://, https://, ipfs://, ipns://
+const ALLOWED_ATTACHMENT_PROTOCOLS: &[&str] = &["pubky", "http", "https", "ipfs", "ipns"];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -207,24 +213,8 @@ impl HasIdPath for PubkyAppPost {
 
 impl Validatable for PubkyAppPost {
     fn sanitize(self) -> Self {
-        // Sanitize content
-        let mut content = self.content.trim().to_string();
-
-        // We are using content keyword `[DELETED]` for deleted posts from a homeserver that still have relationships
-        // placed by other users (replies, tags, etc). This content is exactly matched by the client to apply effects to deleted content.
-        // Placing posts with content `[DELETED]` is not allowed.
-        if content == *"[DELETED]" {
-            content = "empty".to_string()
-        }
-
-        // Define content length limits based on PubkyAppPostKind
-        let max_content_length = match self.kind {
-            PubkyAppPostKind::Short => MAX_SHORT_CONTENT_LENGTH,
-            PubkyAppPostKind::Long => MAX_LONG_CONTENT_LENGTH,
-            _ => MAX_SHORT_CONTENT_LENGTH, // Default limit for other kinds
-        };
-
-        let content = content.chars().take(max_content_length).collect::<String>();
+        // Sanitize content: trim whitespace only
+        let content = self.content.trim().to_string();
 
         // Sanitize parent URI if present
         let parent = if let Some(uri_str) = &self.parent {
@@ -249,12 +239,32 @@ impl Validatable for PubkyAppPost {
             None
         };
 
+        // Sanitize attachments: normalize URLs and filter out invalid ones
+        let attachments = if let Some(attachments_vec) = &self.attachments {
+            let sanitized: Vec<String> = attachments_vec
+                .iter()
+                .filter_map(|url_str| {
+                    match Url::parse(url_str.trim()) {
+                        Ok(parsed_url) => Some(parsed_url.to_string()), // Valid URL, normalized
+                        Err(_) => None,                                 // Invalid URL, filter out
+                    }
+                })
+                .collect();
+            if sanitized.is_empty() {
+                None
+            } else {
+                Some(sanitized)
+            }
+        } else {
+            None
+        };
+
         PubkyAppPost {
             content,
             kind: self.kind,
             parent,
             embed,
-            attachments: self.attachments,
+            attachments,
         }
     }
 
@@ -264,28 +274,76 @@ impl Validatable for PubkyAppPost {
             self.validate_id(id)?;
         }
 
-        // Validate content length
-        match self.kind {
-            PubkyAppPostKind::Short => {
-                if self.content.chars().count() > MAX_SHORT_CONTENT_LENGTH {
-                    return Err(
-                        "Validation Error: Post content exceeds maximum length for Short kind"
-                            .into(),
-                    );
-                }
-            }
-            PubkyAppPostKind::Long => {
-                if self.content.chars().count() > MAX_LONG_CONTENT_LENGTH {
-                    return Err(
-                        "Validation Error: Post content exceeds maximum length for Short kind"
-                            .into(),
-                    );
-                }
-            }
-            _ => (),
+        // We use content keyword `[DELETED]` for deleted posts from a homeserver that still have relationships
+        // placed by other users (replies, tags, etc). This content is exactly matched by the client to apply effects to deleted content.
+        // Placing posts with content `[DELETED]` is not allowed.
+        if self.content == RESERVED_CONTENT_DELETED {
+            return Err(
+                "Validation Error: Content cannot be the reserved keyword '[DELETED]'".into(),
+            );
+        }
+
+        // Validate content length based on post kind
+        let (max_length, kind_name) = match self.kind {
+            PubkyAppPostKind::Short => (MAX_SHORT_CONTENT_LENGTH, "Short"),
+            PubkyAppPostKind::Long => (MAX_LONG_CONTENT_LENGTH, "Long"),
+            PubkyAppPostKind::Image
+            | PubkyAppPostKind::Video
+            | PubkyAppPostKind::Link
+            | PubkyAppPostKind::File => (MAX_SHORT_CONTENT_LENGTH, "Image/Video/Link/File"),
         };
 
-        // TODO: additional validation. Attachement URLs...?
+        if self.content.chars().count() > max_length {
+            return Err(format!(
+                "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
+                kind_name, max_length
+            ));
+        }
+
+        // Validate attachments
+        if let Some(attachments) = &self.attachments {
+            if attachments.len() > MAX_ATTACHMENTS {
+                return Err(format!(
+                    "Validation Error: Too many attachments (max: {})",
+                    MAX_ATTACHMENTS
+                ));
+            }
+
+            for (index, url) in attachments.iter().enumerate() {
+                if url.trim().is_empty() {
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} cannot be empty",
+                        index
+                    ));
+                }
+                if url.chars().count() > MAX_ATTACHMENT_URL_LENGTH {
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
+                        index, MAX_ATTACHMENT_URL_LENGTH
+                    ));
+                }
+                // Validate URL format and ensure it uses an allowed protocol
+                let parsed_url = Url::parse(url).map_err(|_| {
+                    format!(
+                        "Validation Error: Invalid attachment URL format at index {}",
+                        index
+                    )
+                })?;
+
+                // Ensure the URL uses an allowed protocol
+                if !ALLOWED_ATTACHMENT_PROTOCOLS.contains(&parsed_url.scheme()) {
+                    let allowed_protocols = ALLOWED_ATTACHMENT_PROTOCOLS
+                        .iter()
+                        .map(|p| format!("{}://", p))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} must use one of the allowed protocols: {}",
+                        index, allowed_protocols
+                    ));
+                }
+            }
+        }
 
         Ok(())
     }
@@ -358,13 +416,25 @@ mod tests {
                 kind: PubkyAppPostKind::Link,
                 uri: "invalid uri".to_string(),
             }),
-            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "invalid uri".to_string(), // Should be filtered out
+                "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(), // Should be trimmed and normalized
+            ]),
         );
 
         let sanitized_post = post.sanitize();
         assert_eq!(sanitized_post.content, content.trim());
         assert!(sanitized_post.parent.is_none());
         assert!(sanitized_post.embed.is_none());
+        assert!(sanitized_post.attachments.is_some());
+        let attachments = sanitized_post.attachments.unwrap();
+        assert_eq!(attachments.len(), 2); // Invalid URL should be filtered out
+        assert!(attachments[0].starts_with("pubky://"));
+        assert!(attachments[1].starts_with("pubky://"));
+        // Check that whitespace was trimmed
+        assert!(!attachments[1].starts_with("  pubky://"));
+        assert!(!attachments[1].ends_with("  "));
     }
 
     #[test]
@@ -425,6 +495,22 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_reserved_keyword() {
+        let post = PubkyAppPost::new(
+            "[DELETED]".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("reserved keyword"));
+    }
+
+    #[test]
     fn test_try_from_invalid_content() {
         let content = "[DELETED]".to_string();
         let post_json = format!(
@@ -442,8 +528,183 @@ mod tests {
             .create_id();
 
         let blob = post_json.as_bytes();
-        let post = <PubkyAppPost as Validatable>::try_from(blob, &id).unwrap();
+        let result = <PubkyAppPost as Validatable>::try_from(blob, &id);
 
-        assert_eq!(post.content, "empty"); // After sanitization
+        // Should fail validation because [DELETED] is a reserved keyword
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_validate_attachments_valid_all_protocols() {
+        // Test all allowed protocols together
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "http://example.com/file.jpg".to_string(),
+                "https://example.com/file.png".to_string(),
+                "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
+                "ipns://example.com".to_string(),
+            ]),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_attachments_too_many() {
+        let mut attachments = Vec::new();
+        for i in 0..MAX_ATTACHMENTS + 1 {
+            attachments.push(format!(
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
+                i
+            ));
+        }
+
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(attachments),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Too many attachments"));
+    }
+
+    #[test]
+    fn test_validate_attachments_invalid_protocol() {
+        // Test that disallowed protocols are rejected
+        let invalid_protocols = vec!["ftp://example.com/file", "file:///path/to/file"];
+
+        for invalid_url in invalid_protocols {
+            let post = PubkyAppPost {
+                content: "Valid content".to_string(),
+                kind: PubkyAppPostKind::Image,
+                parent: None,
+                embed: None,
+                attachments: Some(vec![invalid_url.to_string()]),
+            };
+
+            let id = post.create_id();
+            let result = post.validate(Some(&id));
+            assert!(result.is_err(), "Should reject protocol: {}", invalid_url);
+            assert!(result.unwrap_err().contains("protocol"));
+        }
+    }
+
+    #[test]
+    fn test_validate_attachments_invalid_url_format() {
+        // Create post directly without sanitization to test validation logic
+        let post = PubkyAppPost {
+            content: "Valid content".to_string(),
+            kind: PubkyAppPostKind::Image,
+            parent: None,
+            embed: None,
+            attachments: Some(vec!["not a valid url".to_string()]),
+        };
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
+    }
+
+    #[test]
+    fn test_validate_attachments_url_too_long() {
+        // Create a URL that exceeds MAX_ATTACHMENT_URL_LENGTH (200)
+        // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
+        // So we need a file ID that makes the total exceed 200
+        let long_file_id = "a".repeat(150); // This will make total > 200
+        let long_url = format!(
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
+            long_file_id
+        );
+
+        // Verify the URL is actually too long
+        assert!(
+            long_url.chars().count() > MAX_ATTACHMENT_URL_LENGTH,
+            "URL length {} should exceed {}",
+            long_url.chars().count(),
+            MAX_ATTACHMENT_URL_LENGTH
+        );
+
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![long_url]),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn test_validate_attachments_empty_url() {
+        // Create post directly without sanitization to test validation logic
+        let post = PubkyAppPost {
+            content: "Valid content".to_string(),
+            kind: PubkyAppPostKind::Image,
+            parent: None,
+            embed: None,
+            attachments: Some(vec!["   ".to_string()]), // Whitespace only
+        };
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_sanitize_attachments_filters_invalid() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "https://example.com/file.jpg".to_string(), // Valid
+                "invalid url".to_string(), // Should be filtered out
+                "not a url".to_string(),   // Should be filtered out
+            ]),
+        );
+
+        let sanitized = post.sanitize();
+        assert!(sanitized.attachments.is_some());
+        let attachments = sanitized.attachments.unwrap();
+        assert_eq!(attachments.len(), 2); // Only valid URLs should remain
+        assert!(attachments[0].starts_with("pubky://"));
+        assert!(attachments[1].starts_with("https://"));
+    }
+
+    #[test]
+    fn test_sanitize_attachments_all_invalid_becomes_none() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec!["invalid url".to_string(), "not a url".to_string()]),
+        );
+
+        let sanitized = post.sanitize();
+        assert!(sanitized.attachments.is_none()); // All invalid, should become None
     }
 }

@@ -150,13 +150,8 @@ impl HasPath for PubkyAppUser {
 
 impl Validatable for PubkyAppUser {
     fn sanitize(self) -> Self {
-        // Sanitize name
-        let sanitized_name = self.name.trim();
-        // Crop name to a maximum length of MAX_USERNAME_LENGTH characters
-        let mut name = sanitized_name
-            .chars()
-            .take(MAX_USERNAME_LENGTH)
-            .collect::<String>();
+        // Sanitize name: trim whitespace only
+        let mut name = self.name.trim().to_string();
 
         // We use username keyword `[DELETED]` for a user whose `profile.json` has been deleted
         // Therefore this is not a valid username.
@@ -164,10 +159,8 @@ impl Validatable for PubkyAppUser {
             name = "anonymous".to_string(); // default username
         }
 
-        // Sanitize bio
-        let bio = self
-            .bio
-            .map(|b| b.trim().chars().take(MAX_BIO_LENGTH).collect::<String>());
+        // Sanitize bio: trim whitespace only
+        let bio = self.bio.map(|b| b.trim().to_string());
 
         // Sanitize image URL with URL parsing
         let image = match &self.image {
@@ -175,30 +168,20 @@ impl Validatable for PubkyAppUser {
                 let sanitized_image_url = image_url.trim();
 
                 match Url::parse(sanitized_image_url) {
-                    Ok(_) => {
-                        // Ensure the URL is within the allowed limit
-                        let url = sanitized_image_url
-                            .chars()
-                            .take(MAX_IMAGE_LENGTH)
-                            .collect::<String>();
-                        Some(url) // Valid image URL
-                    }
+                    Ok(_) => Some(sanitized_image_url.to_string()), // Valid image URL, normalized
                     Err(_) => None, // Invalid image URL, set to None
                 }
             }
             None => None,
         };
 
-        // Sanitize status
-        let status = self
-            .status
-            .map(|s| s.trim().chars().take(MAX_STATUS_LENGTH).collect::<String>());
+        // Sanitize status: trim whitespace only
+        let status = self.status.map(|s| s.trim().to_string());
 
-        // Sanitize links
+        // Sanitize links: sanitize each link and filter out empty URLs
         let links = self.links.map(|links_vec| {
             links_vec
                 .into_iter()
-                .take(MAX_LINKS)
                 .map(|link| link.sanitize())
                 .filter(|link| !link.url.is_empty())
                 .collect()
@@ -227,17 +210,23 @@ impl Validatable for PubkyAppUser {
             }
         }
 
-        // Validate image length
+        // Validate image URL format and length
         if let Some(image) = &self.image {
+            if image.is_empty() {
+                return Err("Validation Error: Image URI cannot be empty".into());
+            }
             if image.chars().count() > MAX_IMAGE_LENGTH {
                 return Err("Validation Error: Image URI exceeds maximum length".into());
             }
+            // Validate URL format
+            Url::parse(image)
+                .map_err(|_| "Validation Error: Invalid image URI format".to_string())?;
         }
 
         // Validate links
         if let Some(links) = &self.links {
             if links.len() > MAX_LINKS {
-                return Err("Too many links".to_string());
+                return Err("Validation Error: Too many links".into());
             }
 
             for link in links {
@@ -267,40 +256,39 @@ impl PubkyAppUserLink {
 
 impl Validatable for PubkyAppUserLink {
     fn sanitize(self) -> Self {
-        let title = self
-            .title
-            .trim()
-            .chars()
-            .take(MAX_LINK_TITLE_LENGTH)
-            .collect::<String>();
+        // Sanitize title: trim whitespace only
+        let title = self.title.trim().to_string();
 
+        // Sanitize URL: trim and normalize URL format
         let url = match Url::parse(self.url.trim()) {
-            Ok(parsed_url) => {
-                let sanitized_url = parsed_url.to_string();
-                sanitized_url
-                    .chars()
-                    .take(MAX_LINK_URL_LENGTH)
-                    .collect::<String>()
-            }
-            Err(_) => "".to_string(), // Default to empty string for invalid URLs
+            Ok(parsed_url) => parsed_url.to_string(), // Valid URL, normalized
+            Err(_) => "".to_string(),                 // Default to empty string for invalid URLs
         };
 
         PubkyAppUserLink { title, url }
     }
 
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+        // Validate title
+        if self.title.trim().is_empty() {
+            return Err("Validation Error: Link title cannot be empty".into());
+        }
         if self.title.chars().count() > MAX_LINK_TITLE_LENGTH {
-            return Err("Validation Error: Link title exceeds maximum length".to_string());
+            return Err("Validation Error: Link title exceeds maximum length".into());
         }
 
+        // Validate URL
+        if self.url.trim().is_empty() {
+            return Err("Validation Error: Link URL cannot be empty".into());
+        }
         if self.url.chars().count() > MAX_LINK_URL_LENGTH {
-            return Err("Validation Error: Link URL exceeds maximum length".to_string());
+            return Err("Validation Error: Link URL exceeds maximum length".into());
         }
 
-        match Url::parse(&self.url) {
-            Ok(_) => Ok(()),
-            Err(_) => Err("Validation Error: Invalid URL format".to_string()),
-        }
+        // Validate URL format
+        Url::parse(&self.url).map_err(|_| "Validation Error: Invalid URL format".to_string())?;
+
+        Ok(())
     }
 }
 
@@ -395,6 +383,7 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_name() {
+        // Test name too short
         let user = PubkyAppUser::new(
             "Al".to_string(), // Too short
             None,
@@ -409,6 +398,18 @@ mod tests {
             result.unwrap_err().to_string(),
             "Validation Error: Invalid name length"
         );
+
+        // Test name too long - sanitization should NOT truncate
+        let long_name = "a".repeat(MAX_USERNAME_LENGTH + 1);
+        let user = PubkyAppUser::new(long_name.clone(), None, None, None, None);
+
+        // Sanitization should preserve full length
+        assert_eq!(user.name.len(), MAX_USERNAME_LENGTH + 1);
+
+        // Validation should catch the violation
+        let result = user.validate(None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid name length"));
     }
 
     #[test]
@@ -465,5 +466,153 @@ mod tests {
 
         // Since the link URL is invalid, it should be filtered out
         assert!(user.links.is_none() || user.links.as_ref().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_sanitize_preserves_length() {
+        // Test that sanitization does NOT truncate, even if over limits
+        let long_bio = "a".repeat(MAX_BIO_LENGTH + 10);
+        let long_status = "b".repeat(MAX_STATUS_LENGTH + 10);
+        let long_image = format!(
+            "https://example.com/{}.png",
+            "a".repeat(MAX_IMAGE_LENGTH - 30)
+        );
+
+        let user = PubkyAppUser::new(
+            "Alice".to_string(),
+            Some(long_bio.clone()),
+            Some(long_image.clone()),
+            None,
+            Some(long_status.clone()),
+        );
+
+        // Sanitization should preserve full length (only trim whitespace)
+        assert_eq!(user.bio.as_deref(), Some(long_bio.as_str()));
+        assert_eq!(user.status.as_deref(), Some(long_status.as_str()));
+        assert_eq!(user.image.as_deref(), Some(long_image.as_str()));
+    }
+
+    #[test]
+    fn test_validate_field_length_errors() {
+        // Test multiple field length validation errors
+        let test_cases = vec![
+            (
+                PubkyAppUser::new(
+                    "Alice".to_string(),
+                    Some("a".repeat(MAX_BIO_LENGTH + 1)),
+                    None,
+                    None,
+                    None,
+                ),
+                "bio",
+            ),
+            (
+                PubkyAppUser::new(
+                    "Alice".to_string(),
+                    None,
+                    None,
+                    None,
+                    Some("a".repeat(MAX_STATUS_LENGTH + 1)),
+                ),
+                "status",
+            ),
+            (
+                PubkyAppUser::new(
+                    "Alice".to_string(),
+                    None,
+                    Some(format!(
+                        "https://example.com/{}.png",
+                        "a".repeat(MAX_IMAGE_LENGTH - 20)
+                    )),
+                    None,
+                    None,
+                ),
+                "image",
+            ),
+        ];
+
+        for (user, field_name) in test_cases {
+            let result = user.validate(None);
+            assert!(
+                result.is_err(),
+                "Should reject {} that exceeds maximum length",
+                field_name
+            );
+            assert!(result.unwrap_err().contains("exceeds maximum length"));
+        }
+    }
+
+    #[test]
+    fn test_validate_too_many_links() {
+        let mut links = Vec::new();
+        for i in 0..MAX_LINKS + 1 {
+            links.push(PubkyAppUserLink {
+                title: format!("Link {}", i),
+                url: format!("https://example.com/{}", i),
+            });
+        }
+
+        let user = PubkyAppUser::new("Alice".to_string(), None, None, Some(links), None);
+
+        // Sanitization should preserve all links (not truncate)
+        assert_eq!(user.links.as_ref().unwrap().len(), MAX_LINKS + 1);
+
+        // Validation should catch the violation
+        let result = user.validate(None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Too many links"));
+    }
+
+    #[test]
+    fn test_validate_link_length_errors() {
+        // Test link title too long
+        let long_title = "a".repeat(MAX_LINK_TITLE_LENGTH + 1);
+        let link = PubkyAppUserLink {
+            title: long_title.clone(),
+            url: "https://example.com".to_string(),
+        };
+        let sanitized = link.sanitize();
+        assert_eq!(sanitized.title.len(), MAX_LINK_TITLE_LENGTH + 1);
+        let result = sanitized.validate(None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum length"));
+
+        // Test link URL too long - create URL that exceeds limit after normalization
+        let very_long_path = "a".repeat(MAX_LINK_URL_LENGTH);
+        let very_long_url = format!("https://example.com/{}", very_long_path);
+        let link2 = PubkyAppUserLink {
+            title: "Test".to_string(),
+            url: very_long_url,
+        };
+        let sanitized2 = link2.sanitize();
+
+        // Verify URL exceeds limit (accounting for potential normalization)
+        if sanitized2.url.chars().count() > MAX_LINK_URL_LENGTH {
+            let result = sanitized2.validate(None);
+            assert!(
+                result.is_err(),
+                "Expected validation error for URL length {}, max is {}",
+                sanitized2.url.chars().count(),
+                MAX_LINK_URL_LENGTH
+            );
+            assert!(result.unwrap_err().contains("exceeds maximum length"));
+        } else {
+            // If normalization shortened it, create an even longer one
+            let extremely_long_path = "a".repeat(MAX_LINK_URL_LENGTH + 50);
+            let extremely_long_url = format!("https://example.com/{}", extremely_long_path);
+            let link3 = PubkyAppUserLink {
+                title: "Test".to_string(),
+                url: extremely_long_url,
+            };
+            let sanitized3 = link3.sanitize();
+            let result = sanitized3.validate(None);
+            assert!(
+                result.is_err(),
+                "Expected validation error for URL length {}, max is {}",
+                sanitized3.url.chars().count(),
+                MAX_LINK_URL_LENGTH
+            );
+            assert!(result.unwrap_err().contains("exceeds maximum length"));
+        }
     }
 }

@@ -81,8 +81,8 @@ impl ParsedUri {
             Resource::User => PubkyAppUser::create_path(),
             Resource::LastRead => PubkyAppLastRead::create_path(),
             Resource::Post(id) => PubkyAppPost::create_path(id),
-            Resource::Follow(id) => PubkyAppFollow::create_path(&id.to_string()),
-            Resource::Mute(id) => PubkyAppMute::create_path(&id.to_string()),
+            Resource::Follow(id) => PubkyAppFollow::create_path(id.as_ref()),
+            Resource::Mute(id) => PubkyAppMute::create_path(id.as_ref()),
             Resource::Bookmark(id) => PubkyAppBookmark::create_path(id),
             Resource::Tag(id) => PubkyAppTag::create_path(id),
             Resource::File(id) => PubkyAppFile::create_path(id),
@@ -91,7 +91,7 @@ impl ParsedUri {
             Resource::Unknown => return Err("Cannot convert Unknown resource to URI".to_string()),
         };
 
-        Ok([PROTOCOL, &self.user_id.to_string(), &path].concat())
+        Ok([PROTOCOL, self.user_id.as_ref(), &path].concat())
     }
 }
 

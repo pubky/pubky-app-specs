@@ -1,5 +1,5 @@
 use crate::{
-    common::MAX_SIZE,
+    constants::MAX_SIZE,
     traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -106,12 +106,76 @@ impl Validatable for PubkyAppBlob {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::HashId;
+    use crate::traits::{HashId, Validatable};
 
     #[test]
-    fn test_create_id_from_small_blob() {
+    fn test_create_id() {
         let blob = PubkyAppBlob(vec![1, 2]);
         let id = blob.create_id();
         assert_eq!(id, "PZBQ010FF079VVZPQG1RNFN6DR");
+
+        // Test that same data produces same ID
+        let blob2 = PubkyAppBlob(vec![1, 2]);
+        assert_eq!(blob2.create_id(), id);
+
+        // Test that different data produces different ID
+        let blob3 = PubkyAppBlob(vec![1, 2, 3]);
+        assert_ne!(blob3.create_id(), id);
+    }
+
+    #[test]
+    fn test_validate_valid() {
+        let blob = PubkyAppBlob(vec![1, 2, 3]);
+        let id = blob.create_id();
+        let result = blob.validate(Some(&id));
+        assert!(result.is_ok());
+
+        // Test without ID
+        let result = blob.validate(None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_size_errors() {
+        // Test blob at max size (should pass)
+        let max_size_blob = PubkyAppBlob(vec![0; MAX_SIZE]);
+        let id = max_size_blob.create_id();
+        let result = max_size_blob.validate(Some(&id));
+        assert!(result.is_ok(), "Blob at max size should be valid");
+
+        // Test blob exceeding max size (should fail)
+        let oversized_blob = PubkyAppBlob(vec![0; MAX_SIZE + 1]);
+        let id = oversized_blob.create_id();
+        let result = oversized_blob.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum limit"));
+    }
+
+    #[test]
+    fn test_validate_invalid_id() {
+        let blob = PubkyAppBlob(vec![1, 2, 3]);
+        let invalid_id = "INVALIDID";
+        let result = blob.validate(Some(invalid_id));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_try_from_valid() {
+        let blob_data = vec![1, 2, 3, 4, 5];
+        let blob = PubkyAppBlob(blob_data.clone());
+        let id = blob.create_id();
+
+        let result = <PubkyAppBlob as Validatable>::try_from(&blob_data, &id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().0, blob_data);
+    }
+
+    #[test]
+    fn test_try_from_invalid_id() {
+        let blob_data = vec![1, 2, 3];
+        let invalid_id = "INVALIDID";
+
+        let result = <PubkyAppBlob as Validatable>::try_from(&blob_data, invalid_id);
+        assert!(result.is_err());
     }
 }
