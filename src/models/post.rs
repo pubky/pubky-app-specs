@@ -274,6 +274,13 @@ impl Validatable for PubkyAppPost {
             self.validate_id(id)?;
         }
 
+        // Validate that post has meaningful content (at least one of: content, embed, or attachments)
+        if self.content.trim().is_empty() && self.embed.is_none() && self.attachments.is_none() {
+            return Err(
+                "Validation Error: Post must have content, an embed, or attachments".into(),
+            );
+        }
+
         // We use content keyword `[DELETED]` for deleted posts from a homeserver that still have relationships
         // placed by other users (replies, tags, etc). This content is exactly matched by the client to apply effects to deleted content.
         // Placing posts with content `[DELETED]` is not allowed.
@@ -733,5 +740,57 @@ mod tests {
 
         let sanitized = post.sanitize();
         assert!(sanitized.attachments.is_none()); // All invalid, should become None
+    }
+
+    #[test]
+    fn test_validate_empty_post_rejected() {
+        // Post with empty content, no embed, and no attachments should be rejected
+        let post = PubkyAppPost::new(
+            "".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must have content, an embed, or attachments"));
+    }
+
+    #[test]
+    fn test_validate_empty_content_with_embed_accepted() {
+        // Post with empty content but with embed should be valid
+        let post = PubkyAppPost::new(
+            "".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Short,
+                uri: "pubky://user123/pub/pubky.app/posts/0033SSE3B1FQ0".to_string(),
+            }),
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_ok(), "Post with embed but no content should be valid");
+    }
+
+    #[test]
+    fn test_validate_empty_content_with_attachments_accepted() {
+        // Post with empty content but with attachments should be valid
+        let post = PubkyAppPost::new(
+            "".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec!["pubky://user123/pub/pubky.app/files/0034A0X7NJ52G".to_string()]),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_ok(), "Post with attachments but no content should be valid");
     }
 }

@@ -117,7 +117,7 @@ impl HasIdPath for PubkyAppFile {
 
 impl Validatable for PubkyAppFile {
     fn sanitize(self) -> Self {
-        let name = self.name.trim().chars().take(MAX_NAME_LENGTH).collect();
+        let name = self.name.trim().to_string();
 
         let sanitized_src = self
             .src
