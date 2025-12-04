@@ -218,7 +218,7 @@ impl Validatable for PubkyAppPost {
 
         // Sanitize parent URI if present
         let parent = if let Some(uri_str) = &self.parent {
-            match Url::parse(uri_str) {
+            match Url::parse(uri_str.trim()) {
                 Ok(url) => Some(url.to_string()), // Valid URI, use normalized version
                 Err(_) => None,                   // Invalid URI, discard or handle appropriately
             }
@@ -228,7 +228,7 @@ impl Validatable for PubkyAppPost {
 
         // Sanitize embed if present
         let embed = if let Some(embed) = &self.embed {
-            match Url::parse(&embed.uri) {
+            match Url::parse(embed.uri.trim()) {
                 Ok(url) => Some(PubkyAppPostEmbed {
                     kind: embed.kind.clone(),
                     uri: url.to_string(), // Use normalized version
@@ -442,6 +442,39 @@ mod tests {
         // Check that whitespace was trimmed
         assert!(!attachments[1].starts_with("  pubky://"));
         assert!(!attachments[1].ends_with("  "));
+    }
+
+    #[test]
+    fn test_sanitize_trims_parent_and_embed() {
+        let valid_parent_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string();
+        let valid_embed_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string();
+
+        let post = PubkyAppPost::new(
+            "Test content".to_string(),
+            PubkyAppPostKind::Short,
+            Some(valid_parent_uri.clone()),
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: valid_embed_uri.clone(),
+            }),
+            None,
+        );
+
+        let sanitized_post = post.sanitize();
+
+        // Check that parent URI was trimmed and normalized
+        assert!(sanitized_post.parent.is_some());
+        let parent = sanitized_post.parent.unwrap();
+        assert!(!parent.starts_with("  "));
+        assert!(!parent.ends_with("  "));
+        assert!(parent.starts_with("pubky://"));
+
+        // Check that embed URI was trimmed and normalized
+        assert!(sanitized_post.embed.is_some());
+        let embed = sanitized_post.embed.unwrap();
+        assert!(!embed.uri.starts_with("  "));
+        assert!(!embed.uri.ends_with("  "));
+        assert!(embed.uri.starts_with("pubky://"));
     }
 
     #[test]

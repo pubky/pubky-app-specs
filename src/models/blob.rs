@@ -89,7 +89,10 @@ impl Validatable for PubkyAppBlob {
     }
 
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
-        // Check if the blob data exceeds 10MB.
+        // Check if the blob data is empty or exceeds maximum size
+        if self.0.is_empty() {
+            return Err("Validation Error: Blob size cannot be zero".to_string());
+        }
         if self.0.len() > MAX_SIZE {
             return Err("Validation Error: Blob size exceeds maximum limit of 100MB".to_string());
         }
@@ -142,6 +145,13 @@ mod tests {
         let id = max_size_blob.create_id();
         let result = max_size_blob.validate(Some(&id));
         assert!(result.is_ok(), "Blob at max size should be valid");
+
+        // Test zero-size blob (should fail)
+        let zero_size_blob = PubkyAppBlob(vec![]);
+        let id = zero_size_blob.create_id();
+        let result = zero_size_blob.validate(Some(&id));
+        assert!(result.is_err(), "Zero-size blob should be invalid");
+        assert!(result.unwrap_err().contains("cannot be zero"));
 
         // Test blob exceeding max size (should fail)
         let oversized_blob = PubkyAppBlob(vec![0; MAX_SIZE + 1]);

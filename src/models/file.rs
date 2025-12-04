@@ -148,6 +148,14 @@ impl Validatable for PubkyAppFile {
             self.validate_id(id)?;
         }
 
+        // Validate size
+        if self.size == 0 {
+            return Err("Validation Error: File size cannot be zero".to_string());
+        }
+        if self.size > MAX_SIZE {
+            return Err("Validation Error: File size exceeds maximum limit of 100MB".to_string());
+        }
+
         // Validate name
         let name_length = self.name.chars().count();
 
@@ -176,11 +184,6 @@ impl Validatable for PubkyAppFile {
             Err(_) => {
                 return Err("Validation Error: Invalid content type".into());
             }
-        }
-
-        // Validate size
-        if self.size == 0 || self.size > MAX_SIZE {
-            return Err("Validation Error: Invalid size".into());
         }
         Ok(())
     }
@@ -275,7 +278,7 @@ mod tests {
                     "image/png".to_string(),
                     MAX_SIZE + 1,
                 ),
-                "Invalid size",
+                "exceeds maximum limit",
             ),
             // Invalid size (zero)
             (
@@ -285,7 +288,7 @@ mod tests {
                     "image/png".to_string(),
                     0,
                 ),
-                "Invalid size",
+                "cannot be zero",
             ),
         ];
 
