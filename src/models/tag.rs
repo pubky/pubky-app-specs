@@ -135,8 +135,8 @@ impl Validatable for PubkyAppTag {
         };
 
         // Validate label chars: dissallow whitespace (space char, tab, newline, etc)
-        if let Some(_) = self.label.chars().find(|c| c.is_whitespace()) {
-            return Err(format!("Validation Error: Tag label has whitespace char"));
+        if self.label.chars().any(|c| c.is_whitespace()) {
+            return Err("Validation Error: Tag label has whitespace char".to_string());
         }
 
         // Validate label chars: dissallow INVALID_CHARS
