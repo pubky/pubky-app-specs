@@ -433,10 +433,10 @@ mod tests {
 
         // Unicode tags should work (emoji, non-latin scripts)
         let unicode_cases = vec![
-            ("比特币", "比特币"),     // Chinese characters
+            ("比特币", "比特币"),             // Chinese characters
             ("ビットコイン", "ビットコイン"), // Japanese katakana
-            ("🚀", "🚀"),           // Single emoji
-            ("café", "café"),       // Accented characters
+            ("🚀", "🚀"),                     // Single emoji
+            ("café", "café"),                 // Accented characters
         ];
 
         for (input, expected) in unicode_cases {

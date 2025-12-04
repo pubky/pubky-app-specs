@@ -550,7 +550,10 @@ mod tests {
             "https://example.com/file.png".to_string(),
             "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
         ];
-        assert!(protocols.len() <= MAX_ATTACHMENTS, "Test uses more than MAX_ATTACHMENTS");
+        assert!(
+            protocols.len() <= MAX_ATTACHMENTS,
+            "Test uses more than MAX_ATTACHMENTS"
+        );
 
         let post = PubkyAppPost::new(
             "Valid content".to_string(),
@@ -745,18 +748,14 @@ mod tests {
     #[test]
     fn test_validate_empty_post_rejected() {
         // Post with empty content, no embed, and no attachments should be rejected
-        let post = PubkyAppPost::new(
-            "".to_string(),
-            PubkyAppPostKind::Short,
-            None,
-            None,
-            None,
-        );
+        let post = PubkyAppPost::new("".to_string(), PubkyAppPostKind::Short, None, None, None);
 
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("must have content, an embed, or attachments"));
+        assert!(result
+            .unwrap_err()
+            .contains("must have content, an embed, or attachments"));
     }
 
     #[test]
@@ -775,7 +774,10 @@ mod tests {
 
         let id = post.create_id();
         let result = post.validate(Some(&id));
-        assert!(result.is_ok(), "Post with embed but no content should be valid");
+        assert!(
+            result.is_ok(),
+            "Post with embed but no content should be valid"
+        );
     }
 
     #[test]
@@ -786,11 +788,16 @@ mod tests {
             PubkyAppPostKind::Image,
             None,
             None,
-            Some(vec!["pubky://user123/pub/pubky.app/files/0034A0X7NJ52G".to_string()]),
+            Some(vec![
+                "pubky://user123/pub/pubky.app/files/0034A0X7NJ52G".to_string()
+            ]),
         );
 
         let id = post.create_id();
         let result = post.validate(Some(&id));
-        assert!(result.is_ok(), "Post with attachments but no content should be valid");
+        assert!(
+            result.is_ok(),
+            "Post with attachments but no content should be valid"
+        );
     }
 }
