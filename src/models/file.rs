@@ -1,5 +1,6 @@
 use crate::{
-    common::{timestamp, MAX_SIZE},
+    common::timestamp,
+    constants::MAX_SIZE,
     traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -116,7 +117,7 @@ impl HasIdPath for PubkyAppFile {
 
 impl Validatable for PubkyAppFile {
     fn sanitize(self) -> Self {
-        let name = self.name.trim().chars().take(MAX_NAME_LENGTH).collect();
+        let name = self.name.trim().to_string();
 
         let sanitized_src = self
             .src
@@ -147,6 +148,14 @@ impl Validatable for PubkyAppFile {
             self.validate_id(id)?;
         }
 
+        // Validate size
+        if self.size == 0 {
+            return Err("Validation Error: File size cannot be zero".to_string());
+        }
+        if self.size > MAX_SIZE {
+            return Err("Validation Error: File size exceeds maximum limit of 100MB".to_string());
+        }
+
         // Validate name
         let name_length = self.name.chars().count();
 
@@ -161,6 +170,9 @@ impl Validatable for PubkyAppFile {
         if self.src.chars().count() > MAX_SRC_LENGTH {
             return Err("Validation Error: src exceeds maximum length".into());
         }
+        // Validate URL format
+        Url::parse(&self.src)
+            .map_err(|_| "Validation Error: Invalid src URI format".to_string())?;
 
         // validate content type
         match Mime::from_str(&self.content_type) {
@@ -172,11 +184,6 @@ impl Validatable for PubkyAppFile {
             Err(_) => {
                 return Err("Validation Error: Invalid content type".into());
             }
-        }
-
-        // Validate size
-        if self.size == 0 || self.size > MAX_SIZE {
-            return Err("Validation Error: Invalid size".into());
         }
         Ok(())
     }
@@ -224,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let file = PubkyAppFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
@@ -250,42 +257,67 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_invalid_content_type() {
-        let file = PubkyAppFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "notavalid/content_type".to_string(),
-            1024,
-        );
-        let id = file.create_id();
-        let result = file.validate(Some(&id));
-        assert!(result.is_err());
-    }
+    fn test_validate_field_errors() {
+        // Test multiple validation errors
+        let test_cases = vec![
+            // Invalid content type
+            (
+                PubkyAppFile::new(
+                    "example.png".to_string(),
+                    blob_uri_builder("user_id".into(), "id".into()),
+                    "notavalid/content_type".to_string(),
+                    1024,
+                ),
+                "Invalid content type",
+            ),
+            // Invalid size (too large)
+            (
+                PubkyAppFile::new(
+                    "example.png".to_string(),
+                    blob_uri_builder("user_id".into(), "id".into()),
+                    "image/png".to_string(),
+                    MAX_SIZE + 1,
+                ),
+                "exceeds maximum limit",
+            ),
+            // Invalid size (zero)
+            (
+                PubkyAppFile::new(
+                    "example.png".to_string(),
+                    blob_uri_builder("user_id".into(), "id".into()),
+                    "image/png".to_string(),
+                    0,
+                ),
+                "cannot be zero",
+            ),
+        ];
 
-    #[test]
-    fn test_validate_invalid_size() {
-        let file = PubkyAppFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "notavalid/content_type".to_string(),
-            MAX_SIZE + 1,
-        );
-        let id = file.create_id();
-        let result = file.validate(Some(&id));
-        assert!(result.is_err());
+        for (file, expected_error) in test_cases {
+            let id = file.create_id();
+            let result = file.validate(Some(&id));
+            assert!(
+                result.is_err(),
+                "Should reject file with {}",
+                expected_error
+            );
+            assert!(result.unwrap_err().contains(expected_error));
+        }
     }
 
     #[test]
     fn test_validate_invalid_src() {
-        let file = PubkyAppFile::new(
-            "example.png".to_string(),
-            "not_a_url".to_string(),
-            "notavalid/content_type".to_string(),
-            MAX_SIZE,
-        );
+        // Create file directly without sanitization to test validation logic
+        let file = PubkyAppFile {
+            name: "example.png".to_string(),
+            created_at: timestamp(),
+            src: "not_a_url".to_string(), // Invalid URL - sanitization would filter this
+            content_type: "image/png".to_string(),
+            size: 1024,
+        };
         let id = file.create_id();
         let result = file.validate(Some(&id));
         assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid src"));
     }
 
     #[test]

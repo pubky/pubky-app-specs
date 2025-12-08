@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkyAppBookmark::new(post_uri);
         let id = bookmark.create_id();

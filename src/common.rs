@@ -1,11 +1,3 @@
-pub static VERSION: &str = "0.4.0";
-pub static PUBLIC_PATH: &str = "/pub/";
-pub static APP_PATH: &str = "pubky.app/";
-pub static PROTOCOL: &str = "pubky://";
-
-// Define the maximum blob/file size (100 MB) in bytes.
-pub static MAX_SIZE: usize = 100 * (1 << 20); // 100MB
-
 #[cfg(target_arch = "wasm32")]
 use js_sys::Date;
 

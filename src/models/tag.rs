@@ -1,16 +1,11 @@
 use crate::{
     common::timestamp,
+    constants::{INVALID_TAG_CHARS, MAX_TAG_LABEL_LENGTH, MIN_TAG_LABEL_LENGTH},
     traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
-
-// Validation
-const MAX_TAG_LABEL_LENGTH: usize = 20;
-const MIN_TAG_LABEL_LENGTH: usize = 1;
-/// Disallowed characters, in addition to whitespace chars
-const INVALID_CHARS: &[char] = &[',', ':'];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -97,10 +92,55 @@ impl HashId for PubkyAppTag {
     }
 }
 
+/// Sanitizes a single tag label by trimming whitespace and converting to lowercase.
+/// This function is public so it can be reused by other models that use tags (e.g., Feed).
+pub fn sanitize_tag_label(tag: &str) -> String {
+    tag.trim().to_lowercase()
+}
+
+/// Validates a single tag label according to PubkyAppTag rules.
+/// Returns an error message if validation fails, or Ok(()) if valid.
+/// This function is public so it can be reused by other models that use tags (e.g., Feed).
+pub fn validate_tag_label(tag: &str) -> Result<(), String> {
+    let tag_len = tag.chars().count();
+
+    // Validate tag length
+    if tag_len > MAX_TAG_LABEL_LENGTH {
+        return Err(format!(
+            "Validation Error: Tag '{}' exceeds maximum length of {} characters",
+            tag, MAX_TAG_LABEL_LENGTH
+        ));
+    }
+    if tag_len < MIN_TAG_LABEL_LENGTH {
+        return Err(format!(
+            "Validation Error: Tag '{}' is shorter than minimum length of {} character",
+            tag, MIN_TAG_LABEL_LENGTH
+        ));
+    }
+
+    // Validate tag chars: disallow whitespace
+    if tag.chars().any(|c| c.is_whitespace()) {
+        return Err(format!(
+            "Validation Error: Tag '{}' contains whitespace characters",
+            tag
+        ));
+    }
+
+    // Validate tag chars: disallow INVALID_TAG_CHARS
+    if let Some(c) = tag.chars().find(|c| INVALID_TAG_CHARS.contains(c)) {
+        return Err(format!(
+            "Validation Error: Tag '{}' contains invalid character: {}",
+            tag, c
+        ));
+    }
+
+    Ok(())
+}
+
 impl Validatable for PubkyAppTag {
     fn sanitize(self) -> Self {
-        // Sanitize label
-        let label = self.label.to_lowercase();
+        // Sanitize label: trim whitespace and lowercase
+        let label = sanitize_tag_label(&self.label);
 
         // Sanitize URI
         let uri = match Url::parse(&self.uri) {
@@ -123,26 +163,8 @@ impl Validatable for PubkyAppTag {
             self.validate_id(id)?;
         }
 
-        // Validate label length
-        match self.label.chars().count() {
-            len if len > MAX_TAG_LABEL_LENGTH => {
-                return Err("Validation Error: Tag label exceeds maximum length".to_string())
-            }
-            len if len < MIN_TAG_LABEL_LENGTH => {
-                return Err("Validation Error: Tag label is shorter than minimum length".to_string())
-            }
-            _ => (),
-        };
-
-        // Validate label chars: dissallow whitespace (space char, tab, newline, etc)
-        if self.label.chars().any(|c| c.is_whitespace()) {
-            return Err("Validation Error: Tag label has whitespace char".to_string());
-        }
-
-        // Validate label chars: dissallow INVALID_CHARS
-        if let Some(c) = self.label.chars().find(|c| INVALID_CHARS.contains(c)) {
-            return Err(format!("Validation Error: Tag label has invalid char: {c}"));
-        }
+        // Validate label
+        validate_tag_label(&self.label)?;
 
         // Validate URI format
         Url::parse(&self.uri)
@@ -235,19 +257,27 @@ mod tests {
 
     #[test]
     fn test_sanitize() {
+        // Test sanitization: lowercase conversion and whitespace trimming
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkyAppTag {
-            uri: post_uri,
-            label: "CoOl".to_string(),
-            created_at: 1627849723000,
-        };
+        let test_cases = vec![
+            ("CoOl", "cool"),
+            ("  CoOl  ", "cool"),
+            ("UPPERCASE", "uppercase"),
+        ];
 
-        let sanitized_tag = tag.sanitize();
-        assert_eq!(sanitized_tag.label, "cool");
+        for (input, expected) in test_cases {
+            let tag = PubkyAppTag {
+                uri: post_uri.clone(),
+                label: input.to_string(),
+                created_at: 1627849723000,
+            };
+            let sanitized_tag = tag.sanitize();
+            assert_eq!(sanitized_tag.label, expected, "Failed for input: {}", input);
+        }
     }
 
     #[test]
-    fn test_validate_valid() {
+    fn test_validate() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
@@ -272,9 +302,11 @@ mod tests {
         let id = tag.create_id();
         let result = tag.validate(Some(&id));
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Validation Error: Tag label exceeds maximum length"
+        let error_msg = result.unwrap_err();
+        assert!(
+            error_msg.contains("exceeds maximum length"),
+            "Expected error about maximum length, got: {}",
+            error_msg
         );
     }
 
@@ -297,7 +329,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
-            label: format!("invalidchar{}", INVALID_CHARS[0]),
+            label: format!("invalidchar{}", INVALID_TAG_CHARS[0]),
             created_at: 1627849723000,
         };
 
@@ -364,72 +396,68 @@ mod tests {
     }
 
     #[test]
-    fn test_incorrect_label() {
+    fn test_whitespace_handling() {
+        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
+
+        // Leading/trailing whitespace should be trimmed and pass validation
+        let trim_cases = vec![" cool", "cool ", "cool\n", "  cool  "];
+        for label in trim_cases {
+            let tag = PubkyAppTag {
+                uri: post_uri.clone(),
+                created_at: 1627849723,
+                label: label.to_string(),
+            };
+            let sanitized = tag.sanitize();
+            assert_eq!(sanitized.label, "cool", "Failed for: {}", label);
+            assert!(
+                sanitized.validate(None).is_ok(),
+                "Should pass after trimming: {}",
+                label
+            );
+        }
+
+        // Internal whitespace cannot be trimmed and should fail validation
         let tag = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
-            created_at: 1627849723,
-            label: "cool".to_string(),
-        };
-        let tag_id = tag.create_id();
-
-        if let Err(e) = tag.validate(Some(&tag_id)) {
-            assert_eq!(
-                e.to_string(),
-                format!("Validation Error: Invalid URI format: {}", tag.uri),
-                "The error message is not related URI or the message description is wrong"
-            )
-        };
-
-        let tag = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
-            created_at: 1627849723,
-            label: "coolc00lcolaca0g00llooll".to_string(),
-        };
-
-        // Precomputed earlier
-        let label_id = tag.create_id();
-
-        if let Err(e) = tag.validate(Some(&label_id)) {
-            assert_eq!(
-                e.to_string(),
-                "Validation Error: Tag label exceeds maximum length".to_string(),
-                "The error message is not related tag length or the message description is wrong"
-            )
-        };
-    }
-
-    #[test]
-    fn test_white_space_tag() {
-        let leading_whitespace = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
-            created_at: 1627849723,
-            label: " cool".to_string(),
-        };
-        let leading_whitespace_validate_res = leading_whitespace.validate(None);
-        assert!(leading_whitespace_validate_res.is_err());
-
-        let trailing_whitespace = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
-            created_at: 1627849723,
-            label: "cool ".to_string(),
-        };
-        let trailing_whitespace_validate_res = trailing_whitespace.validate(None);
-        assert!(trailing_whitespace_validate_res.is_err());
-
-        let trailing_newline = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
-            created_at: 1627849723,
-            label: "cool\n".to_string(),
-        };
-        let trailing_newline_validate_res = trailing_newline.validate(None);
-        assert!(trailing_newline_validate_res.is_err());
-
-        let space_between = PubkyAppTag {
-            uri: post_uri_builder("user_id".into(), "post_id".into()),
+            uri: post_uri,
             created_at: 1627849723,
             label: "   co ol ".to_string(),
         };
-        let space_between_validate_res = space_between.validate(None);
-        assert!(space_between_validate_res.is_err());
+        let sanitized = tag.sanitize();
+        assert_eq!(sanitized.label, "co ol"); // Only leading/trailing whitespace trimmed
+        assert!(sanitized.validate(None).is_err()); // Internal space should fail validation
+    }
+
+    #[test]
+    fn test_unicode_tag_labels() {
+        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
+
+        // Unicode tags should work (emoji, non-latin scripts)
+        let unicode_cases = vec![
+            ("比特币", "比特币"),             // Chinese characters
+            ("ビットコイン", "ビットコイン"), // Japanese katakana
+            ("🚀", "🚀"),                     // Single emoji
+            ("café", "café"),                 // Accented characters
+        ];
+
+        for (input, expected) in unicode_cases {
+            let tag = PubkyAppTag::new(post_uri.clone(), input.to_string());
+            assert_eq!(tag.label, expected, "Failed for input: {}", input);
+            assert!(
+                tag.validate(None).is_ok(),
+                "Should accept Unicode tag: {}",
+                input
+            );
+        }
+
+        // Test max length with multi-byte characters
+        // MAX_TAG_LABEL_LENGTH is 20, so 20 emoji should pass
+        let max_emoji_tag: String = "🔥".repeat(MAX_TAG_LABEL_LENGTH);
+        assert_eq!(max_emoji_tag.chars().count(), MAX_TAG_LABEL_LENGTH);
+        let tag = PubkyAppTag::new(post_uri.clone(), max_emoji_tag);
+        assert!(
+            tag.validate(None).is_ok(),
+            "Should accept {} emoji characters as tag",
+            MAX_TAG_LABEL_LENGTH
+        );
     }
 }
