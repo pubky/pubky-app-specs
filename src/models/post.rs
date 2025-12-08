@@ -13,8 +13,8 @@ const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 const MAX_ATTACHMENTS: usize = 3;
 const MAX_ATTACHMENT_URL_LENGTH: usize = 200;
-// Allowed protocols for attachment URLs: pubky://, http://, https://, ipfs://, ipns://
-const ALLOWED_ATTACHMENT_PROTOCOLS: &[&str] = &["pubky", "http", "https", "ipfs", "ipns"];
+// Allowed protocols for attachment URLs: pubky://, http://, https://
+const ALLOWED_ATTACHMENT_PROTOCOLS: &[&str] = &["pubky", "http", "https"];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -581,7 +581,7 @@ mod tests {
         let protocols = vec![
             "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
             "https://example.com/file.png".to_string(),
-            "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
+            "http://example.com/file.jpg".to_string(),
         ];
         assert!(
             protocols.len() <= MAX_ATTACHMENTS,
@@ -608,8 +608,6 @@ mod tests {
             "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G",
             "http://example.com/file.jpg",
             "https://example.com/file.png",
-            "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
-            "ipns://example.com",
         ];
 
         for protocol_url in allowed_protocols {
