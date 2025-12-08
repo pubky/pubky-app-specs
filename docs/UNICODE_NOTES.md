@@ -36,20 +36,7 @@ Characters **outside the BMP** (U+10000 and above) require a **surrogate pair** 
 | Mathematical Alphanumeric | 𝔸 𝕏 | 2 |
 | Historic Scripts | Various | 2 |
 
-### Characters in BMP (No Difference)
-
-| Category | Examples | UTF-16 Units per Char |
-|----------|----------|----------------------|
-| ASCII/Latin | A-Z, a-z, 0-9 | 1 |
-| Latin Extended | á, ñ, ü, ø | 1 |
-| Chinese | 中文字 | 1 |
-| Japanese (Hiragana/Katakana/Kanji) | 日本語 | 1 |
-| Korean (Hangul) | 한글 | 1 |
-| Arabic | العربية | 1 |
-| Hebrew | עברית | 1 |
-| Cyrillic | русский | 1 |
-| Greek | ελληνικά | 1 |
-| Thai | ไทย | 1 |
+**Note**: Characters in the BMP (ASCII, Chinese, Japanese, Korean, Arabic, Hebrew, Cyrillic, Greek, Thai, etc.) all use 1 UTF-16 unit and are **unaffected** by this difference.
 
 ## Our Solution: WASM-Based Validation
 
@@ -81,9 +68,9 @@ All validation in `pubky-app-specs` happens **inside the WASM module** (Rust), n
 
 ### Why This Works
 
-1. **Single Source of Truth**: All validation uses Rust's `.chars().count()`, which counts Unicode code points.
-2. **No JS Validation**: JavaScript never validates string lengths directly—it delegates to WASM.
-3. **Consistent Behavior**: Whether the user types emoji, Chinese, or cuneiform, the validation is consistent.
+1. **Single Source of Truth**: All validation uses Rust's `.chars().count()` (Unicode code points)
+2. **No JS Validation Needed**: JavaScript delegates entirely to WASM
+3. **Consistent Results**: Same behavior for emoji, Chinese, cuneiform, etc.
 
 ### Example: Username Validation
 
@@ -107,49 +94,89 @@ fn validate(&self, _id: Option<&str>) -> Result<(), String> {
 | `"🔥".repeat(51)` | 51 | ❌ |
 | `"𓀀".repeat(50)` | 50 | ✅ |
 
-## Important: Don't Validate in JavaScript
+## Client-Side Validation
 
-If you need client-side validation (for UX feedback), you **must** match Rust's behavior or trust in pubk-app-specs WASM module.
+For client-side validation (for UX feedback), we recommend relying on the existing pubky-app-specs validation in the WASM module.
+
+### How to Validate in Your Application
+
+The WASM module automatically validates all objects when you create them or parse them from JSON. Use these methods for validation:
 
 ```javascript
-// ❌ WRONG - will reject valid input
-if (username.length > 50) {
-    showError("Username too long");
+import { PubkySpecsBuilder, PubkyAppUser } from "pubky-app-specs";
+
+// Method 1: Using builder
+try {
+    const builder = new PubkySpecsBuilder(userId);
+    const { user } = builder.createUser(
+        "Alice🔥",       // Emoji counts as 1 character
+        "Bio with 𓀀",   // Hieroglyph counts as 1 character
+        null, null, null
+    );
+    console.log("User is valid!");
+} catch (error) {
+    showError(error.message);  // Validation failed
 }
 
-// ✅ CORRECT - matches Rust's .chars().count()
-if ([...username].length > 50) {
-    showError("Username too long");
+// Method 2: From JSON
+try {
+    const user = PubkyAppUser.fromJson({
+        name: "Alice🔥",
+        bio: "Bio with 𓀀",
+        image: null,
+        links: null,
+        status: null
+    });
+    console.log("User is valid!");
+} catch (error) {
+    showError(error.message);  // Validation failed
 }
 
-// ✅ ALSO CORRECT - using Array.from
-if (Array.from(username).length > 50) {
-    showError("Username too long");
-}
+// Both methods throw on validation failure - no manual checks needed!
 ```
 
 ### JavaScript Length Methods Comparison
 
+If you need client-side length validation for real-time input feedback (e.g., character counters) or custom validation, you should use methods that count Unicode code points to match Rust's `.chars().count()` behavior:
+
 ```javascript
 const str = "Hi🔥";
 
-str.length                    // 4 (UTF-16 code units) ❌
-[...str].length              // 3 (Unicode code points) ✅
-Array.from(str).length       // 3 (Unicode code points) ✅
+// ❌ WRONG - counts UTF-16 code units, not Unicode code points
+str.length                    // 4 (will reject valid input)
+if (username.length > MAX_USERNAME_LENGTH) {
+    showError("Username too long");
+}
+// This would incorrectly reject "🔥".repeat(25) 
+// because JS sees 50 code units, but Rust sees 25 code points (valid!)
+
+// ✅ CORRECT - counts Unicode code points (matches Rust)
+// These methods correctly handle characters outside BMP (emoji, etc.)
+[...str].length              // 3 (Unicode code points) - counts 🔥 as 1
+Array.from(str).length       // 3 (also works)
 ```
 
-## Edge Cases: Grapheme Clusters
+### When to Validate
 
-Note: Even `.chars().count()` in Rust doesn't handle **grapheme clusters** perfectly:
+- **On form submit**: Always - catch errors before network calls
+- **Real-time feedback**: Optional - use `[...str].length` for input counters
+- **On input change**: Usually not needed - can impact UX with emoji autocomplete
 
-| String | Visual | Code Points | Graphemes |
-|--------|--------|-------------|-----------|
-| `"👨‍👩‍👧‍👦"` | 1 family emoji | 7 | 1 |
-| `"🇺🇸"` | 1 flag | 2 | 1 |
-| `"é"` (composed) | 1 character | 1 | 1 |
-| `"é"` (decomposed: e + ◌́) | 1 character | 2 | 1 |
+### Edge Cases: Grapheme Clusters (Advanced)
 
-For most use cases (usernames, tags, bios), counting code points is sufficient. True grapheme cluster counting would require additional dependencies.
+⚠️ **This is informational** - current validation doesn't handle grapheme clusters, and that's acceptable for most use cases.
+
+Even `.chars().count()` doesn't handle complex **grapheme clusters** (what users perceive as single characters):
+
+| String | Visual | Code Points | User Perception |
+|--------|--------|-------------|----------------|
+| `"👨‍👩‍👧‍👦"` | family emoji | 7 | 1 |
+| `"🇺🇸"` | flag | 2 | 1 |
+| `"é"` (e + ◌́) | accented e | 2 | 1 |
+
+**Impact**: A username with 50 flag emojis would actually be 100 code points and fail validation.
+
+**Decision**: For usernames, tags, and bios, code point counting is sufficient. True grapheme counting would add complexity and dependencies without significant benefit for this use case.
 
 ## Summary
 
@@ -160,6 +187,7 @@ For most use cases (usernames, tags, bios), counting code points is sufficient. 
 | **JS Client** | Use `[...str].length` if local validation needed |
 | **Affected Characters** | Emoji, ancient scripts, musical symbols |
 | **Unaffected Characters** | ASCII, Chinese, Japanese, Arabic, etc. |
+| **Performance** | <1ms for typical inputs |
 
 ## References
 
@@ -167,4 +195,3 @@ For most use cases (usernames, tags, bios), counting code points is sufficient. 
 - [UTF-16 on Wikipedia](https://en.wikipedia.org/wiki/UTF-16)
 - [JavaScript String length](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/length)
 - [Rust chars() documentation](https://doc.rust-lang.org/std/primitive.str.html#method.chars)
-
