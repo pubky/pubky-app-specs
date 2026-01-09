@@ -1,4 +1,4 @@
-import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder } from "./index.js";
+import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import assert from "assert";
 
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
@@ -379,6 +379,67 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(feedJson.name, "nature", "Feed name should match");
       assert.ok(feedJson.created_at, "Feed should have created_at timestamp");
       assert.ok(typeof feedJson.created_at === "number", "created_at should be a number");
+    });
+  });
+
+  describe("Valid MIME Types", () => {
+    it("should return an array of valid MIME types", () => {
+      const mimeTypes = getValidMimeTypes();
+      
+      assert.ok(Array.isArray(mimeTypes), "Should return an array");
+      assert.ok(mimeTypes.length > 0, "Should have at least one MIME type");
+    });
+
+    it("should include common image MIME types", () => {
+      const mimeTypes = getValidMimeTypes();
+      
+      assert.ok(mimeTypes.includes("image/png"), "Should include image/png");
+      assert.ok(mimeTypes.includes("image/jpeg"), "Should include image/jpeg");
+      assert.ok(mimeTypes.includes("image/gif"), "Should include image/gif");
+      assert.ok(mimeTypes.includes("image/webp"), "Should include image/webp");
+    });
+
+    it("should include common video MIME types", () => {
+      const mimeTypes = getValidMimeTypes();
+      
+      assert.ok(mimeTypes.includes("video/mp4"), "Should include video/mp4");
+      assert.ok(mimeTypes.includes("video/mpeg"), "Should include video/mpeg");
+    });
+
+    it("should include common document MIME types", () => {
+      const mimeTypes = getValidMimeTypes();
+      
+      assert.ok(mimeTypes.includes("application/pdf"), "Should include application/pdf");
+      assert.ok(mimeTypes.includes("application/json"), "Should include application/json");
+      assert.ok(mimeTypes.includes("text/plain"), "Should include text/plain");
+    });
+
+    it("should be usable for file validation before upload", () => {
+      const mimeTypes = getValidMimeTypes();
+      
+      // Valid file types
+      assert.ok(mimeTypes.includes("image/png"), "image/png should be valid");
+      assert.ok(mimeTypes.includes("application/pdf"), "application/pdf should be valid");
+      
+      // Invalid file types (not in the list)
+      assert.ok(!mimeTypes.includes("application/x-executable"), "application/x-executable should not be valid");
+      assert.ok(!mimeTypes.includes("application/x-msdownload"), "application/x-msdownload should not be valid");
+    });
+
+    it("should create file with valid MIME type from the list", () => {
+      const mimeTypes = getValidMimeTypes();
+      const validMimeType = mimeTypes[0]; // Pick the first valid MIME type
+      
+      const { blob, meta: blobMeta } = specsBuilder.createBlob([1, 2, 3, 4]);
+      const { file } = specsBuilder.createFile(
+        "test-file",
+        blobMeta.url,
+        validMimeType,
+        100
+      );
+      
+      const fileJson = file.toJson();
+      assert.strictEqual(fileJson.content_type, validMimeType, "File should have valid MIME type");
     });
   });
 });

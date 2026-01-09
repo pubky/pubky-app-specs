@@ -195,8 +195,72 @@ This library supports many more domain objects beyond `User` and `Post`. Here ar
 - **Mutes**: `createMute(...)`
 - **Follows**: `createFollow(...)`
 - **LastRead**: `createLastRead(...)`
+- **Blobs**: `createBlob(...)`
+- **Files**: `createFile(...)`
 
 Each has a `meta` field for storing relevant IDs/paths and a typed data object.
+
+### Creating a File with Blob
+
+```js
+import { Client } from "@synonymdev/pubky";
+import { PubkySpecsBuilder, getValidMimeTypes } from "pubky-app-specs";
+
+async function uploadFile(pubkyId, fileData, fileName, contentType, fileSize) {
+  const client = new Client();
+  const specs = new PubkySpecsBuilder(pubkyId);
+
+  // First, create and store the blob (raw binary data)
+  const { blob, meta: blobMeta } = specs.createBlob(fileData);
+  
+  await client.fetch(blobMeta.url, {
+    method: "PUT",
+    body: JSON.stringify(blob.toJson()),
+  });
+
+  // Then create the file metadata pointing to the blob
+  const { file, meta: fileMeta } = specs.createFile(
+    fileName,       // e.g. "vacation-photo.jpg"
+    blobMeta.url,   // Reference to the blob
+    contentType,    // e.g. "image/jpeg"
+    fileSize        // Size in bytes
+  );
+
+  await client.fetch(fileMeta.url, {
+    method: "PUT",
+    body: JSON.stringify(file.toJson()),
+  });
+
+  console.log("File stored at:", fileMeta.url);
+  return { file, meta: fileMeta };
+}
+```
+
+---
+
+## ✅ Validating File MIME Types
+
+Use `getValidMimeTypes()` to get the list of allowed MIME types for file attachments. This helps validate files before upload without duplicating the validation list.
+
+```js
+import { getValidMimeTypes } from "pubky-app-specs";
+
+// Get the list of valid MIME types
+const validMimeTypes = getValidMimeTypes();
+// Returns: ["application/javascript", "application/json", "application/pdf", "image/png", ...]
+
+// Validate a file before upload
+function isValidFileType(mimeType) {
+  return validMimeTypes.includes(mimeType);
+}
+
+// Example usage
+if (isValidFileType(file.type)) {
+  // Proceed with upload
+} else {
+  console.error(`Invalid file type: ${file.type}`);
+}
+```
 
 ## 🔗 URI Builder Utilities
 
@@ -213,6 +277,7 @@ import {
   lastReadUriBuilder,
   blobUriBuilder,
   fileUriBuilder,
+  feedUriBuilder,
 } from "pubky-app-specs";
 
 const userId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
@@ -228,6 +293,7 @@ muteUriBuilder(userId, targetUserId);      // pubky://{userId}/pub/pubky.app/mut
 lastReadUriBuilder(userId);                // pubky://{userId}/pub/pubky.app/last_read
 blobUriBuilder(userId, "BLOB123");         // pubky://{userId}/pub/pubky.app/blobs/{blobId}
 fileUriBuilder(userId, "FILE456");         // pubky://{userId}/pub/pubky.app/files/{fileId}
+feedUriBuilder(userId, "FEED789");         // pubky://{userId}/pub/pubky.app/feeds/{feedId}
 ```
 
 ---

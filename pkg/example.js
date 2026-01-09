@@ -12,14 +12,55 @@ import {
   blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
+  getValidMimeTypes,
 } from "./index.js";
 
+// =============================================================================
+// ANSI color helpers for pretty output
+// =============================================================================
+const c = {
+  reset: "\x1b[0m",
+  bright: "\x1b[1m",
+  dim: "\x1b[2m",
+  cyan: "\x1b[36m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  gray: "\x1b[90m",
+  white: "\x1b[37m",
+  bgBlue: "\x1b[44m",
+};
+
+const divider = () => console.log(c.gray + "─".repeat(70) + c.reset);
+const header = (title) => {
+  console.log();
+  console.log(`${c.bright}${c.blue}${title}${c.reset}`);
+  divider();
+};
+const field = (label, value) => {
+  console.log(`  ${c.dim}${label.padEnd(12)}${c.reset} ${c.white}${value}${c.reset}`);
+};
+
+// =============================================================================
+// Setup
+// =============================================================================
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
 
-// 👤 Create a user profile
-console.log("👤 Creating User Profile...");
+console.log();
+console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
+console.log(`${c.bgBlue}${c.white}${c.bright}                    PUBKY APP SPECS - EXAMPLES                        ${c.reset}`);
+console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
+console.log();
+
 const specsBuilder = new PubkySpecsBuilder(OTTO);
+console.log(`${c.dim}Using PubkyId: ${c.reset}${c.cyan}${OTTO}${c.reset}`);
+
+// =============================================================================
+// 1. User Profile
+// =============================================================================
+header("USER PROFILE");
 const { user, meta: userMeta } = specsBuilder.createUser(
   "Alice Smith",
   "Software Developer",
@@ -27,12 +68,18 @@ const { user, meta: userMeta } = specsBuilder.createUser(
   null,
   "active"
 );
-console.log("User Profile URL:", userMeta.url);
-console.log("User Data:", JSON.stringify(user.toJson(), null, 2));
-console.log("-".repeat(60));
+field("URL", userMeta.url);
+field("Name", user.toJson().name);
+field("Bio", user.toJson().bio);
+field("Status", user.toJson().status);
 
-// 📝 Create different posts
-console.log("📝 Creating First Post...");
+// =============================================================================
+// 2. Posts
+// =============================================================================
+header("POSTS");
+
+// Simple post
+console.log(`  ${c.yellow}▸ Simple Post${c.reset}`);
 const { post, meta } = specsBuilder.createPost(
   "Hello, Pubky world! This is my first post.",
   PubkyAppPostKind.Short,
@@ -40,12 +87,13 @@ const { post, meta } = specsBuilder.createPost(
   null,
   null
 );
-console.log("Post ID:", meta.id);
-console.log("Post URL:", meta.url);
-console.log("Post Data:", JSON.stringify(post.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", meta.id);
+field("URL", meta.url);
+field("Content", post.toJson().content);
+console.log();
 
-console.log("💬 Creating Reply Post...");
+// Reply post
+console.log(`  ${c.yellow}▸ Reply Post${c.reset}`);
 const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   "This is a reply to the first post!",
   PubkyAppPostKind.Short,
@@ -53,29 +101,30 @@ const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   null,
   null
 );
-console.log("Reply Post ID:", replyMeta.id);
-console.log("Reply Post URL:", replyMeta.url);
-console.log("Reply Data:", JSON.stringify(replyPost.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", replyMeta.id);
+field("Parent", replyPost.toJson().parent);
+console.log();
 
-console.log("🔄 Creating Repost with Embed...");
-let embeed = new PubkyAppPostEmbed(
+// Repost with embed
+console.log(`  ${c.yellow}▸ Repost with Embed${c.reset}`);
+const embed = new PubkyAppPostEmbed(
   `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`,
   PubkyAppPostKind.Video
 );
 const { post: repost, meta: repostMeta } = specsBuilder.createPost(
-  "This is a repost to random post!",
+  "Check out this awesome video!",
   PubkyAppPostKind.Short,
   null,
-  embeed,
+  embed,
   null
 );
-console.log("Repost Post ID:", repostMeta.id);
-console.log("Repost Post URL:", repostMeta.url);
-console.log("Repost Data:", JSON.stringify(repost.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", repostMeta.id);
+field("Embed URI", repost.toJson().embed.uri);
+field("Embed Kind", repost.toJson().embed.kind);
+console.log();
 
-console.log("📎 Creating Post with Attachments...");
+// Post with attachments
+console.log(`  ${c.yellow}▸ Post with Attachments${c.reset}`);
 const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilder.createPost(
   "Check out these photos from my trip!",
   PubkyAppPostKind.Image,
@@ -86,97 +135,161 @@ const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilde
     `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
   ]
 );
-console.log("Post ID:", postWithAttachmentsMeta.id);
-console.log("Post URL:", postWithAttachmentsMeta.url);
-console.log("Attachments:", postWithAttachments.toJson().attachments);
-console.log("Post Data:", JSON.stringify(postWithAttachments.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", postWithAttachmentsMeta.id);
+field("Attachments", `${postWithAttachments.toJson().attachments.length} files`);
 
-console.log("🔖 Creating Bookmark...");
-let { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
+// =============================================================================
+// 3. Social Actions
+// =============================================================================
+header("SOCIAL ACTIONS");
+
+// Bookmark
+console.log(`  ${c.yellow}▸ Bookmark${c.reset}`);
+const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
   `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
 );
-console.log("Bookmark ID:", bookmarkMeta.id);
-console.log("Bookmark URL:", bookmarkMeta.url);
-console.log("Bookmark Data:", JSON.stringify(bookmark.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", bookmarkMeta.id);
+field("URI", bookmark.toJson().uri);
+console.log();
 
-console.log("👥 Creating Follow...");
-let { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
-console.log("Follow ID:", followMeta.id);
-console.log("Follow URL:", followMeta.url);
-console.log("Follow Data:", JSON.stringify(follow.toJson(), null, 2));
-console.log("-".repeat(60));
+// Follow
+console.log(`  ${c.yellow}▸ Follow${c.reset}`);
+const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
+field("ID", followMeta.id);
+field("URL", followMeta.url);
+console.log();
 
-console.log("🏷️ Creating Tag...");
-let { tag, meta: tagMeta } = specsBuilder.createTag(
+// Tag
+console.log(`  ${c.yellow}▸ Tag${c.reset}`);
+const { tag, meta: tagMeta } = specsBuilder.createTag(
   `pubky://${OTTO}/pub/pubky.app/profile.json`,
-  "otto"
+  "developer"
 );
-console.log("Tag ID:", tagMeta.id);
-console.log("Tag URL:", tagMeta.url);
-console.log("Tag Data:", JSON.stringify(tag.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", tagMeta.id);
+field("Label", tag.toJson().label);
+field("URI", tag.toJson().uri);
+console.log();
 
-console.log("🔇 Creating Mute...");
-let { mute, meta: muteMeta } = specsBuilder.createMute(RIO);
-console.log("Mute ID:", muteMeta.id);
-console.log("Mute URL:", muteMeta.url);
-console.log("Mute Data:", JSON.stringify(mute.toJson(), null, 2));
-console.log("-".repeat(60));
+// Mute
+console.log(`  ${c.yellow}▸ Mute${c.reset}`);
+const { mute, meta: muteMeta } = specsBuilder.createMute(RIO);
+field("ID", muteMeta.id);
+field("URL", muteMeta.url);
 
-console.log("📖 Creating Last Read...");
-let { last_read, meta: lastReadMeta } = specsBuilder.createLastRead(RIO);
-console.log("LastRead Timestamp:", lastReadMeta.url);
-console.log("LastRead Data:", JSON.stringify(last_read.toJson(), null, 2));
-console.log("-".repeat(60));
+// =============================================================================
+// 4. Files & Blobs
+// =============================================================================
+header("FILES & BLOBS");
 
-console.log("💾 Creating Blob...");
-let { blob, meta: blobMeta } = specsBuilder.createBlob(
-  Array.from({ length: 8 }, () => Math.floor(Math.random() * 256))
-);
-console.log("Blob ID:", blobMeta.id);
-console.log("Blob URL:", blobMeta.url);
-console.log("Blob Data:", JSON.stringify(blob.toJson(), null, 2));
-console.log("-".repeat(60));
+// Blob
+console.log(`  ${c.yellow}▸ Blob (raw data)${c.reset}`);
+const blobData = Array.from({ length: 8 }, () => Math.floor(Math.random() * 256));
+const { blob, meta: blobMeta } = specsBuilder.createBlob(blobData);
+field("ID", blobMeta.id);
+field("URL", blobMeta.url);
+field("Size", `${blobData.length} bytes`);
+console.log();
 
-console.log("📄 Creating File...");
-let { file, meta: fileMeta } = specsBuilder.createFile(
-  "My adventures",
+// File
+console.log(`  ${c.yellow}▸ File (metadata)${c.reset}`);
+const { file, meta: fileMeta } = specsBuilder.createFile(
+  "vacation-photos.pdf",
   blobMeta.url,
   "application/pdf",
-  88
+  1024
 );
-console.log("File ID:", fileMeta.id);
-console.log("File URL:", fileMeta.url);
-console.log("File Data:", JSON.stringify(file.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", fileMeta.id);
+field("Name", file.toJson().name);
+field("Type", file.toJson().content_type);
+field("Size", `${file.toJson().size} bytes`);
+field("Source", file.toJson().src);
 
-console.log("📰 Creating Feed...");
-let { feed, meta: feedMeta } = specsBuilder.createFeed(
-  ["mountain", "hike"],
+// =============================================================================
+// 5. Feeds & LastRead
+// =============================================================================
+header("FEEDS & LAST READ");
+
+// Feed
+console.log(`  ${c.yellow}▸ Custom Feed${c.reset}`);
+const { feed, meta: feedMeta } = specsBuilder.createFeed(
+  ["mountain", "hiking", "nature"],
   "all",
   "columns",
   "recent",
   "image",
-  "nature"
+  "Outdoor Adventures"
 );
-console.log("Feed ID:", feedMeta.id);
-console.log("Feed URL:", feedMeta.url);
-console.log("Feed Data:", JSON.stringify(feed.toJson(), null, 2));
-console.log("-".repeat(60));
+field("ID", feedMeta.id);
+field("Name", feed.toJson().name);
+field("Tags", feed.toJson().feed.tags.join(", "));
+field("Layout", feed.toJson().feed.layout);
+field("Sort", feed.toJson().feed.sort);
+console.log();
 
-console.log("🔗 Utility Functions...");
-console.log("User URI:", userUriBuilder(OTTO));
-console.log("Post URI:", postUriBuilder(OTTO, meta.id));
-console.log("Bookmark URI:", bookmarkUriBuilder(OTTO, bookmarkMeta.id));
-console.log("Follow URI:", followUriBuilder(OTTO, RIO));
-console.log("Tag URI:", tagUriBuilder(OTTO, tagMeta.id));
-console.log("Mute URI:", muteUriBuilder(OTTO, RIO));
-console.log("LastRead URI:", lastReadUriBuilder(OTTO));
-console.log("Blob URI:", blobUriBuilder(OTTO, blobMeta.id));
-console.log("File URI:", fileUriBuilder(OTTO, fileMeta.id));
+// LastRead
+console.log(`  ${c.yellow}▸ Last Read Marker${c.reset}`);
+const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead();
+field("URL", lastReadMeta.url);
+field("Timestamp", new Date(last_read.toJson().timestamp / 1000).toISOString());
 
-console.log("=".repeat(60));
-console.log("🎉 All Pubky App Specs examples completed successfully!");
-console.log("=".repeat(60));
+// =============================================================================
+// 6. URI Builders
+// =============================================================================
+header("URI BUILDERS");
+const uris = [
+  ["User", userUriBuilder(OTTO)],
+  ["Post", postUriBuilder(OTTO, meta.id)],
+  ["Bookmark", bookmarkUriBuilder(OTTO, bookmarkMeta.id)],
+  ["Follow", followUriBuilder(OTTO, RIO)],
+  ["Tag", tagUriBuilder(OTTO, tagMeta.id)],
+  ["Mute", muteUriBuilder(OTTO, RIO)],
+  ["LastRead", lastReadUriBuilder(OTTO)],
+  ["Blob", blobUriBuilder(OTTO, blobMeta.id)],
+  ["File", fileUriBuilder(OTTO, fileMeta.id)],
+  ["Feed", feedUriBuilder(OTTO, feedMeta.id)],
+];
+uris.forEach(([name, uri]) => {
+  console.log(`  ${c.dim}${name.padEnd(10)}${c.reset} ${c.cyan}${uri}${c.reset}`);
+});
+
+// =============================================================================
+// 7. Valid MIME Types
+// =============================================================================
+header("VALID MIME TYPES");
+const validMimeTypes = getValidMimeTypes();
+console.log(`  ${c.dim}Total types:${c.reset} ${c.bright}${validMimeTypes.length}${c.reset}`);
+console.log();
+
+// Group by category
+const categories = {
+  "Images": validMimeTypes.filter(t => t.startsWith("image/")),
+  "Videos": validMimeTypes.filter(t => t.startsWith("video/")),
+  "Audio": validMimeTypes.filter(t => t.startsWith("audio/")),
+  "Documents": validMimeTypes.filter(t => t.startsWith("application/") || t.startsWith("text/")),
+};
+
+Object.entries(categories).forEach(([category, types]) => {
+  if (types.length > 0) {
+    console.log(`  ${c.yellow}${category}:${c.reset}`);
+    types.forEach(type => console.log(`    ${c.dim}-${c.reset} ${type}`));
+    console.log();
+  }
+});
+
+// Validation example
+console.log(`  ${c.yellow}Validation Example:${c.reset}`);
+const testTypes = ["image/png", "video/mp4", "application/x-executable"];
+testTypes.forEach(type => {
+  const isValid = validMimeTypes.includes(type);
+  const icon = isValid ? `${c.green}[ok]${c.reset}` : `${c.magenta}[x]${c.reset}`;
+  console.log(`    ${icon} ${type}`);
+});
+
+// =============================================================================
+// Done!
+// =============================================================================
+console.log();
+console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
+console.log(`${c.bgBlue}${c.white}${c.bright}                 ALL EXAMPLES COMPLETED SUCCESSFULLY!                 ${c.reset}`);
+console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
+console.log();

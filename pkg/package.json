@@ -4,7 +4,9 @@
   "version": "0.4.2",
   "license": "MIT",
   "collaborators": [
-    "SHAcollision"
+    "SHAcollision",
+    "tipogi",
+    "ok300"
   ],
   "repository": {
     "type": "git",

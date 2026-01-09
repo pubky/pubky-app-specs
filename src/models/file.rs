@@ -21,7 +21,8 @@ const MIN_NAME_LENGTH: usize = 1;
 const MAX_NAME_LENGTH: usize = 255;
 const MAX_SRC_LENGTH: usize = 1024;
 
-const VALID_MIME_TYPES: &[&str] = &[
+/// Valid MIME types for file attachments.
+pub const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
     "application/json",
     "application/octet-stream",

@@ -1,4 +1,5 @@
 use crate::{
+    common::sanitize_url,
     traits::{HasPath, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -162,30 +163,16 @@ impl Validatable for PubkyAppUser {
         // Sanitize bio: trim whitespace only
         let bio = self.bio.map(|b| b.trim().to_string());
 
-        // Sanitize image URL with URL parsing
-        let image = match &self.image {
-            Some(image_url) => {
-                let sanitized_image_url = image_url.trim();
-
-                match Url::parse(sanitized_image_url) {
-                    Ok(_) => Some(sanitized_image_url.to_string()), // Valid image URL, normalized
-                    Err(_) => None, // Invalid image URL, set to None
-                }
-            }
-            None => None,
-        };
+        // Sanitize image URL
+        let image = self.image.map(|i| sanitize_url(&i));
 
         // Sanitize status: trim whitespace only
         let status = self.status.map(|s| s.trim().to_string());
 
-        // Sanitize links: sanitize each link and filter out empty URLs
-        let links = self.links.map(|links_vec| {
-            links_vec
-                .into_iter()
-                .map(|link| link.sanitize())
-                .filter(|link| !link.url.is_empty())
-                .collect()
-        });
+        // Sanitize links: sanitize each link, validation handles format
+        let links = self
+            .links
+            .map(|links_vec| links_vec.into_iter().map(|link| link.sanitize()).collect());
 
         PubkyAppUser {
             name,
@@ -259,11 +246,8 @@ impl Validatable for PubkyAppUserLink {
         // Sanitize title: trim whitespace only
         let title = self.title.trim().to_string();
 
-        // Sanitize URL: trim and normalize URL format
-        let url = match Url::parse(self.url.trim()) {
-            Ok(parsed_url) => parsed_url.to_string(), // Valid URL, normalized
-            Err(_) => "".to_string(),                 // Default to empty string for invalid URLs
-        };
+        // Sanitize URL
+        let url = sanitize_url(&self.url);
 
         PubkyAppUserLink { title, url }
     }
@@ -339,7 +323,7 @@ mod tests {
         let user = PubkyAppUser::new(
             "   Alice   ".to_string(),
             Some("  Maximalist and developer.  ".to_string()),
-            Some("https://example.com/image.png".to_string()),
+            Some("  https://example.com/image.png  ".to_string()),
             Some(vec![
                 PubkyAppUserLink {
                     title: " GitHub ".to_string(),
@@ -347,7 +331,7 @@ mod tests {
                 },
                 PubkyAppUserLink {
                     title: "Website".to_string(),
-                    url: "invalid_url".to_string(), // Invalid URL
+                    url: "  https://example.com  ".to_string(),
                 },
             ]),
             Some("  Exploring the decentralized web.  ".to_string()),
@@ -355,6 +339,7 @@ mod tests {
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist and developer."));
+        // Image URL should be trimmed
         assert_eq!(user.image.as_deref(), Some("https://example.com/image.png"));
         assert_eq!(
             user.status.as_deref(),
@@ -362,9 +347,11 @@ mod tests {
         );
         assert!(user.links.is_some());
         let links = user.links.unwrap();
-        assert_eq!(links.len(), 1); // Invalid URL link should be filtered out
+        assert_eq!(links.len(), 2); // All links preserved, just trimmed
         assert_eq!(links[0].title, "GitHub");
-        assert_eq!(links[0].url, "https://github.com/alice");
+        assert_eq!(links[0].url, "https://github.com/alice"); // Trimmed and normalized
+        assert_eq!(links[1].title, "Website");
+        assert_eq!(links[1].url, "https://example.com/"); // Trimmed and normalized
     }
 
     #[test]
@@ -462,10 +449,57 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
+        let result = <PubkyAppUser as Validatable>::try_from(blob, "");
 
-        // Since the link URL is invalid, it should be filtered out
-        assert!(user.links.is_none() || user.links.as_ref().unwrap().is_empty());
+        // Invalid link URL should cause validation to fail
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid URL format"));
+    }
+
+    #[test]
+    fn test_validate_invalid_image_url() {
+        let user_json = r#"
+        {
+            "name": "Alice",
+            "image": "invalid_image_url"
+        }
+        "#;
+
+        let blob = user_json.as_bytes();
+        let result = <PubkyAppUser as Validatable>::try_from(blob, "");
+
+        // Invalid image URL should cause validation to fail
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid image URI format"));
+    }
+
+    #[test]
+    fn test_sanitize_preserves_invalid_urls() {
+        // Sanitize should preserve invalid URLs (just trim), validation rejects them
+        let user = PubkyAppUser {
+            name: "Alice".to_string(),
+            bio: None,
+            image: Some("  invalid_image_url  ".to_string()),
+            links: Some(vec![PubkyAppUserLink {
+                title: "Test".to_string(),
+                url: "  invalid_link_url  ".to_string(),
+            }]),
+            status: None,
+        };
+
+        let sanitized = user.sanitize();
+
+        // Image should be trimmed but preserved
+        assert_eq!(sanitized.image.as_deref(), Some("invalid_image_url"));
+
+        // Link should be trimmed but preserved
+        let links = sanitized.links.as_ref().unwrap();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].url, "invalid_link_url");
+
+        // Validation should reject
+        let result = sanitized.validate(None);
+        assert!(result.is_err());
     }
 
     #[test]

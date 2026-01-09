@@ -1,4 +1,5 @@
 use crate::{
+    common::sanitize_url,
     traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -217,47 +218,21 @@ impl Validatable for PubkyAppPost {
         let content = self.content.trim().to_string();
 
         // Sanitize parent URI if present
-        let parent = if let Some(uri_str) = &self.parent {
-            match Url::parse(uri_str.trim()) {
-                Ok(url) => Some(url.to_string()), // Valid URI, use normalized version
-                Err(_) => None,                   // Invalid URI, discard or handle appropriately
-            }
-        } else {
-            None
-        };
+        let parent = self.parent.map(|uri_str| sanitize_url(&uri_str));
 
         // Sanitize embed if present
-        let embed = if let Some(embed) = &self.embed {
-            match Url::parse(embed.uri.trim()) {
-                Ok(url) => Some(PubkyAppPostEmbed {
-                    kind: embed.kind.clone(),
-                    uri: url.to_string(), // Use normalized version
-                }),
-                Err(_) => None, // Invalid URI, discard or handle appropriately
-            }
-        } else {
-            None
-        };
+        let embed = self.embed.map(|e| PubkyAppPostEmbed {
+            kind: e.kind,
+            uri: sanitize_url(&e.uri),
+        });
 
-        // Sanitize attachments: normalize URLs and filter out invalid ones
-        let attachments = if let Some(attachments_vec) = &self.attachments {
-            let sanitized: Vec<String> = attachments_vec
-                .iter()
-                .filter_map(|url_str| {
-                    match Url::parse(url_str.trim()) {
-                        Ok(parsed_url) => Some(parsed_url.to_string()), // Valid URL, normalized
-                        Err(_) => None,                                 // Invalid URL, filter out
-                    }
-                })
-                .collect();
-            if sanitized.is_empty() {
-                None
-            } else {
-                Some(sanitized)
-            }
-        } else {
-            None
-        };
+        // Sanitize attachments
+        let attachments = self.attachments.map(|attachments_vec| {
+            attachments_vec
+                .into_iter()
+                .map(|url_str| sanitize_url(&url_str))
+                .collect()
+        });
 
         PubkyAppPost {
             content,
@@ -305,6 +280,23 @@ impl Validatable for PubkyAppPost {
                 "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
                 kind_name, max_length
             ));
+        }
+
+        // Validate parent URI format if present
+        if let Some(ref parent_uri) = self.parent {
+            Url::parse(parent_uri).map_err(|_| {
+                format!(
+                    "Validation Error: Invalid parent URI format: {}",
+                    parent_uri
+                )
+            })?;
+        }
+
+        // Validate embed URI format if present
+        if let Some(ref embed) = self.embed {
+            Url::parse(&embed.uri).map_err(|_| {
+                format!("Validation Error: Invalid embed URI format: {}", embed.uri)
+            })?;
         }
 
         // Validate attachments
@@ -418,25 +410,38 @@ mod tests {
         let post = PubkyAppPost::new(
             content.clone(),
             PubkyAppPostKind::Short,
-            Some("invalid uri".to_string()),
+            Some("  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string()),
             Some(PubkyAppPostEmbed {
                 kind: PubkyAppPostKind::Link,
-                uri: "invalid uri".to_string(),
+                uri: "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(),
             }),
             Some(vec![
                 "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "invalid uri".to_string(), // Should be filtered out
-                "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(), // Should be trimmed and normalized
+                "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(), // Should be trimmed
             ]),
         );
 
         let sanitized_post = post.sanitize();
         assert_eq!(sanitized_post.content, content.trim());
-        assert!(sanitized_post.parent.is_none());
-        assert!(sanitized_post.embed.is_none());
+
+        // Parent URI should be trimmed
+        assert!(sanitized_post.parent.is_some());
+        let parent = sanitized_post.parent.unwrap();
+        assert!(!parent.starts_with("  "));
+        assert!(!parent.ends_with("  "));
+        assert!(parent.starts_with("pubky://"));
+
+        // Embed URI should be trimmed
+        assert!(sanitized_post.embed.is_some());
+        let embed = sanitized_post.embed.unwrap();
+        assert!(!embed.uri.starts_with("  "));
+        assert!(!embed.uri.ends_with("  "));
+        assert!(embed.uri.starts_with("pubky://"));
+
+        // Attachments should be trimmed
         assert!(sanitized_post.attachments.is_some());
         let attachments = sanitized_post.attachments.unwrap();
-        assert_eq!(attachments.len(), 2); // Invalid URL should be filtered out
+        assert_eq!(attachments.len(), 2);
         assert!(attachments[0].starts_with("pubky://"));
         assert!(attachments[1].starts_with("pubky://"));
         // Check that whitespace was trimmed
@@ -505,6 +510,65 @@ mod tests {
         let invalid_id = "INVALIDID12345";
         let result = post.validate(Some(invalid_id));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_parent_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            Some("invalid uri".to_string()),
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid parent URI format"));
+    }
+
+    #[test]
+    fn test_validate_invalid_embed_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: "invalid uri".to_string(),
+            }),
+            None,
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid embed URI format"));
+    }
+
+    #[test]
+    fn test_validate_invalid_attachment_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "invalid uri".to_string(),
+            ]),
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
     }
 
     #[test]
@@ -740,7 +804,8 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize_attachments_filters_invalid() {
+    fn test_sanitize_attachments_preserves_all() {
+        // Sanitize should preserve all attachments (just trim), validation rejects invalid
         let post = PubkyAppPost::new(
             "Valid content".to_string(),
             PubkyAppPostKind::Image,
@@ -748,22 +813,31 @@ mod tests {
             None,
             Some(vec![
                 "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "https://example.com/file.jpg".to_string(), // Valid
-                "invalid url".to_string(), // Should be filtered out
-                "not a url".to_string(),   // Should be filtered out
+                "https://example.com/file.jpg".to_string(),
+                "  invalid url  ".to_string(), // Should be trimmed but preserved
             ]),
         );
 
+        let id = post.create_id();
         let sanitized = post.sanitize();
         assert!(sanitized.attachments.is_some());
-        let attachments = sanitized.attachments.unwrap();
-        assert_eq!(attachments.len(), 2); // Only valid URLs should remain
+        let attachments = sanitized.attachments.as_ref().unwrap();
+        assert_eq!(attachments.len(), 3); // All URLs should be preserved
         assert!(attachments[0].starts_with("pubky://"));
         assert!(attachments[1].starts_with("https://"));
+        assert_eq!(attachments[2], "invalid url"); // Trimmed but preserved
+
+        // Validation should reject the invalid URL
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
     }
 
     #[test]
-    fn test_sanitize_attachments_all_invalid_becomes_none() {
+    fn test_sanitize_attachments_with_all_invalid_preserved() {
+        // Sanitize should preserve all attachments, validation rejects invalid
         let post = PubkyAppPost::new(
             "Valid content".to_string(),
             PubkyAppPostKind::Image,
@@ -772,8 +846,18 @@ mod tests {
             Some(vec!["invalid url".to_string(), "not a url".to_string()]),
         );
 
+        let id = post.create_id();
         let sanitized = post.sanitize();
-        assert!(sanitized.attachments.is_none()); // All invalid, should become None
+        assert!(sanitized.attachments.is_some()); // Attachments preserved
+        let attachments = sanitized.attachments.as_ref().unwrap();
+        assert_eq!(attachments.len(), 2);
+
+        // Validation should reject the invalid URLs
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
     }
 
     #[test]

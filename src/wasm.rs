@@ -417,6 +417,30 @@ impl ParsedUriResult {
     }
 }
 
+/// Returns the list of valid MIME types for file attachments.
+///
+/// This allows JavaScript consumers to validate file types before submission
+/// without having to duplicate the list.
+///
+/// # Example (TypeScript)
+///
+/// ```typescript
+/// import { get_valid_mime_types } from "pubky-app-specs";
+///
+/// const validTypes = get_valid_mime_types();
+/// const fileType = "image/png";
+/// if (validTypes.includes(fileType)) {
+///   console.log("Valid file type!");
+/// }
+/// ```
+#[wasm_bindgen(js_name = getValidMimeTypes)]
+pub fn get_valid_mime_types() -> Vec<JsValue> {
+    VALID_MIME_TYPES
+        .iter()
+        .map(|s| JsValue::from_str(s))
+        .collect()
+}
+
 /// Parses a Pubky URI and returns a strongly typed `ParsedUriResult`.
 ///
 /// This function wraps the internal ParsedUri ust parsing logic. It converts the result into a
