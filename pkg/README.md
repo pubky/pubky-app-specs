@@ -1,5 +1,8 @@
 # Pubky App Specs · `pubky-app-specs`
 
+[![npm version](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A WASM library for building and validating structured JSON models compatible with Pubky.App social powered by [`@synonymdev/pubky`](https://www.npmjs.com/package/@synonymdev/pubky). It handles domain objects like **Users**, **Posts**, **Feeds**, **Bookmarks**, **Tags**, and more. Each object is:
 
 - **Sanitized** and **Validated** via Rust logic.
@@ -42,7 +45,7 @@ yarn add pubky-app-specs
 import { PubkySpecsBuilder } from "pubky-app-specs";
 
 // OR CommonJS
-const { PubkySpecsBuilder } = require("pubky-app-specs/index.cjs");
+const { PubkySpecsBuilder } = require("pubky-app-specs");
 
 function loadSpecs(pubkyId) {
   // Create a specs builder instance - WASM is already initialized
@@ -83,7 +86,7 @@ async function createUser(pubkyId) {
   const userJson = user.toJson();
 
   // Store in homeserver via pubky
-  const response = await client.fetch(userResult.meta.url, {
+  const response = await client.fetch(meta.url, {
     method: "PUT",
     body: JSON.stringify(userJson),
     credentials: "include",
@@ -93,8 +96,8 @@ async function createUser(pubkyId) {
     throw new Error(`Failed to store user: ${response.statusText}`);
   }
 
-  console.log("User stored at:", userResult.meta.url);
-  return userResult;
+  console.log("User stored at:", meta.url);
+  return { user, meta };
 }
 ```
 
@@ -324,3 +327,9 @@ A `ParsedUriResult` object with:
 - **user_id:** The parsed user identifier.
 - **resource:** A string indicating the resource type.
 - **resource_id:** An optional resource identifier.
+
+---
+
+## 📄 License
+
+MIT
