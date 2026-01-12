@@ -686,4 +686,46 @@ mod tests {
             MAX_USERNAME_LENGTH
         );
     }
+
+    #[test]
+    fn test_create_user_with_empty_image() {
+        // Test what happens when image is an empty string
+        let user = PubkyAppUser::new(
+            "Alice".to_string(),
+            None,
+            Some("".to_string()), // Empty string for image
+            None,
+            None,
+        );
+
+        // After sanitization, image is still Some("")
+        assert_eq!(user.image, Some("".to_string()));
+
+        // Validation should fail because empty string is not allowed
+        let result = user.validate(None);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: Image URI cannot be empty"
+        );
+    }
+
+    #[test]
+    fn test_create_user_without_image() {
+        // Test what happens when image is None
+        let user = PubkyAppUser::new(
+            "Alice".to_string(),
+            None,
+            None, // No image provided
+            None,
+            None,
+        );
+
+        // Image should be None
+        assert_eq!(user.image, None);
+
+        // Validation should pass - image is optional
+        let result = user.validate(None);
+        assert!(result.is_ok());
+    }
 }
