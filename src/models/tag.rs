@@ -119,9 +119,16 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
     }
 
     // Validate tag chars: disallow whitespace or invalid characters.
+    if tag.chars().any(|c| c.is_whitespace()) {
+        return Err(format!(
+            "Validation Error: Tag '{}' contains whitespace characters",
+            tag
+        ));
+    }
+
     if let Some(c) = tag
         .chars()
-        .find(|c| c.is_whitespace() || VALIDATION_LIMITS.tag_invalid_chars.contains(c))
+        .find(|c| VALIDATION_LIMITS.tag_invalid_chars.contains(c))
     {
         return Err(format!(
             "Validation Error: Tag '{}' contains invalid character: {}",
