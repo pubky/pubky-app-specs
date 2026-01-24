@@ -71,12 +71,12 @@ async function createUser(pubkyId) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create user object with minimal fields
-  const {user, meta} = specs.createUser(
+  const { user, meta } = specs.createUser(
     "Alice", // Name
     "Hello from WASM", // Bio
     null, // Image URL or File
     null, // Links
-    "active" // Status
+    "active", // Status
   );
 
   // meta contains { id, path, url }.
@@ -112,12 +112,12 @@ async function createPost(pubkyId, content) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create the Post object
-  const {post, meta} = specs.createPost(
+  const { post, meta } = specs.createPost(
     content,
     PubkyAppPostKind.Short,
     null, // parent post URI (for replies)
     null, // embed object (for reposts)
-    null  // attachments (array of file URLs, max 3)
+    null, // attachments (array of file URLs, max 3)
   );
 
   // Store the post
@@ -128,7 +128,7 @@ async function createPost(pubkyId, content) {
   });
 
   console.log("Post stored at:", meta.url);
-  return {post, meta};
+  return { post, meta };
 }
 ```
 
@@ -143,12 +143,12 @@ async function createPostWithAttachments(pubkyId, content, fileUrls) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create post with attachments (max 3 allowed)
-  const {post, meta} = specs.createPost(
+  const { post, meta } = specs.createPost(
     content,
     PubkyAppPostKind.Image,
     null, // parent
     null, // embed
-    fileUrls // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
+    fileUrls, // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
   );
 
   const postJson = post.toJson();
@@ -160,7 +160,7 @@ async function createPostWithAttachments(pubkyId, content, fileUrls) {
   });
 
   console.log("Post with attachments stored at:", meta.url);
-  return {post, meta};
+  return { post, meta };
 }
 ```
 
@@ -174,7 +174,7 @@ async function followUser(myPubkyId, userToFollow) {
   const client = new Client();
   const specs = new PubkySpecsBuilder(myPubkyId);
 
-  const {follow, meta} = specs.createFollow(userToFollow);
+  const { follow, meta } = specs.createFollow(userToFollow);
 
   // We only need to store the JSON in the homeserver
   await client.fetch(meta.url, {
@@ -215,7 +215,7 @@ async function uploadFile(pubkyId, fileData, fileName, contentType, fileSize) {
 
   // First, create and store the blob (raw binary data)
   const { blob, meta: blobMeta } = specs.createBlob(fileData);
-  
+
   await client.fetch(blobMeta.url, {
     method: "PUT",
     body: JSON.stringify(blob.toJson()),
@@ -223,10 +223,10 @@ async function uploadFile(pubkyId, fileData, fileName, contentType, fileSize) {
 
   // Then create the file metadata pointing to the blob
   const { file, meta: fileMeta } = specs.createFile(
-    fileName,       // e.g. "vacation-photo.jpg"
-    blobMeta.url,   // Reference to the blob
-    contentType,    // e.g. "image/jpeg"
-    fileSize        // Size in bytes
+    fileName, // e.g. "vacation-photo.jpg"
+    blobMeta.url, // Reference to the blob
+    contentType, // e.g. "image/jpeg"
+    fileSize, // Size in bytes
   );
 
   await client.fetch(fileMeta.url, {
@@ -287,16 +287,16 @@ const userId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const targetUserId = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
 
 // Build URIs for different resources
-userUriBuilder(userId);                    // pubky://{userId}/pub/pubky.app/profile.json
-postUriBuilder(userId, "0033SSE3B1FQ0");   // pubky://{userId}/pub/pubky.app/posts/{postId}
-bookmarkUriBuilder(userId, "ABC123");      // pubky://{userId}/pub/pubky.app/bookmarks/{bookmarkId}
-followUriBuilder(userId, targetUserId);    // pubky://{userId}/pub/pubky.app/follows/{targetUserId}
-tagUriBuilder(userId, "XYZ789");           // pubky://{userId}/pub/pubky.app/tags/{tagId}
-muteUriBuilder(userId, targetUserId);      // pubky://{userId}/pub/pubky.app/mutes/{targetUserId}
-lastReadUriBuilder(userId);                // pubky://{userId}/pub/pubky.app/last_read
-blobUriBuilder(userId, "BLOB123");         // pubky://{userId}/pub/pubky.app/blobs/{blobId}
-fileUriBuilder(userId, "FILE456");         // pubky://{userId}/pub/pubky.app/files/{fileId}
-feedUriBuilder(userId, "FEED789");         // pubky://{userId}/pub/pubky.app/feeds/{feedId}
+userUriBuilder(userId); // pubky://{userId}/pub/pubky.app/profile.json
+postUriBuilder(userId, "0033SSE3B1FQ0"); // pubky://{userId}/pub/pubky.app/posts/{postId}
+bookmarkUriBuilder(userId, "ABC123"); // pubky://{userId}/pub/pubky.app/bookmarks/{bookmarkId}
+followUriBuilder(userId, targetUserId); // pubky://{userId}/pub/pubky.app/follows/{targetUserId}
+tagUriBuilder(userId, "XYZ789"); // pubky://{userId}/pub/pubky.app/tags/{tagId}
+muteUriBuilder(userId, targetUserId); // pubky://{userId}/pub/pubky.app/mutes/{targetUserId}
+lastReadUriBuilder(userId); // pubky://{userId}/pub/pubky.app/last_read
+blobUriBuilder(userId, "BLOB123"); // pubky://{userId}/pub/pubky.app/blobs/{blobId}
+fileUriBuilder(userId, "FILE456"); // pubky://{userId}/pub/pubky.app/files/{fileId}
+feedUriBuilder(userId, "FEED789"); // pubky://{userId}/pub/pubky.app/feeds/{feedId}
 ```
 
 ---
@@ -327,6 +327,52 @@ A `ParsedUriResult` object with:
 - **user_id:** The parsed user identifier.
 - **resource:** A string indicating the resource type.
 - **resource_id:** An optional resource identifier.
+
+---
+
+## Validation limits
+
+The WASM builder exposes validation limits as a JSON object so UIs can reuse
+the canonical rules without duplicating magic numbers.
+
+```js
+import init, { PubkySpecsBuilder } from "pubky-app-specs";
+
+await init();
+const builder = new PubkySpecsBuilder("pubky_id_here");
+const limits = builder.validationLimits;
+
+console.log(limits);
+```
+
+Example output shape:
+
+```json
+{
+  "max_blob_size_bytes": 104857600,
+  "max_file_size_bytes": 104857600,
+  "tag_label_min_length": 1,
+  "tag_label_max_length": 20,
+  "tag_invalid_chars": [",", ":", " ", "\t", "\n", "\r"],
+  "user_name_min_length": 3,
+  "user_name_max_length": 50,
+  "user_bio_max_length": 160,
+  "user_image_url_max_length": 300,
+  "user_links_max_count": 5,
+  "user_link_title_max_length": 100,
+  "user_link_url_max_length": 300,
+  "user_status_max_length": 50,
+  "post_short_content_max_length": 2000,
+  "post_long_content_max_length": 50000,
+  "post_attachments_max_count": 3,
+  "post_attachment_url_max_length": 200,
+  "post_allowed_attachment_protocols": ["pubky", "http", "https"],
+  "file_name_min_length": 1,
+  "file_name_max_length": 255,
+  "file_src_max_length": 1024,
+  "feed_tags_max_count": 5
+}
+```
 
 ---
 

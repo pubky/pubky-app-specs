@@ -1,6 +1,6 @@
 use crate::{
     common::timestamp,
-    constants::MAX_SIZE,
+    limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -16,10 +16,6 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-
-const MIN_NAME_LENGTH: usize = 1;
-const MAX_NAME_LENGTH: usize = 255;
-const MAX_SRC_LENGTH: usize = 1024;
 
 /// Valid MIME types for file attachments.
 pub const VALID_MIME_TYPES: &[&str] = &[
@@ -124,7 +120,7 @@ impl Validatable for PubkyAppFile {
             .src
             .trim()
             .chars()
-            .take(MAX_SRC_LENGTH)
+            .take(VALIDATION_LIMITS.file_src_max_length)
             .collect::<String>();
 
         let src = match Url::parse(&sanitized_src) {
@@ -153,14 +149,16 @@ impl Validatable for PubkyAppFile {
         if self.size == 0 {
             return Err("Validation Error: File size cannot be zero".to_string());
         }
-        if self.size > MAX_SIZE {
+        if self.size > VALIDATION_LIMITS.max_file_size_bytes {
             return Err("Validation Error: File size exceeds maximum limit of 100MB".to_string());
         }
 
         // Validate name
         let name_length = self.name.chars().count();
 
-        if !(MIN_NAME_LENGTH..=MAX_NAME_LENGTH).contains(&name_length) {
+        if !(VALIDATION_LIMITS.file_name_min_length..=VALIDATION_LIMITS.file_name_max_length)
+            .contains(&name_length)
+        {
             return Err("Validation Error: Invalid name length".into());
         }
 
@@ -168,7 +166,7 @@ impl Validatable for PubkyAppFile {
         if self.src.chars().count() == 0 {
             return Err("Validation Error: Invalid src".into());
         }
-        if self.src.chars().count() > MAX_SRC_LENGTH {
+        if self.src.chars().count() > VALIDATION_LIMITS.file_src_max_length {
             return Err("Validation Error: src exceeds maximum length".into());
         }
         // Validate URL format
@@ -277,7 +275,7 @@ mod tests {
                     "example.png".to_string(),
                     blob_uri_builder("user_id".into(), "id".into()),
                     "image/png".to_string(),
-                    MAX_SIZE + 1,
+                    VALIDATION_LIMITS.max_file_size_bytes + 1,
                 ),
                 "exceeds maximum limit",
             ),

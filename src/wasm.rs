@@ -1,6 +1,7 @@
+use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, HasPath, HashId, TimestampId, Validatable};
 use crate::*;
-use serde_wasm_bindgen::from_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -138,6 +139,12 @@ impl PubkySpecsBuilder {
     pub fn new(pubky_id: String) -> Result<Self, String> {
         let pubky_id = PubkyId::try_from(&pubky_id)?;
         Ok(Self { pubky_id })
+    }
+
+    /// Returns validation limits as a JSON value for client-side use.
+    #[wasm_bindgen(getter, js_name = validationLimits)]
+    pub fn validation_limits(&self) -> Result<JsValue, String> {
+        to_value(&VALIDATION_LIMITS).map_err(|e| e.to_string())
     }
 
     // // -----------------------------------------------------------------------------
