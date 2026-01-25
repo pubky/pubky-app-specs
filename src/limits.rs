@@ -15,6 +15,7 @@ use serde::Serialize;
 
 /// Bundled validation limits for quick consumption.
 #[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ValidationLimits {
     /// Maximum blob/file size in bytes.
     ///
