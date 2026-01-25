@@ -1,5 +1,6 @@
 mod common;
 mod constants;
+pub mod limits;
 mod models;
 pub mod traits;
 mod types;
@@ -7,10 +8,9 @@ mod uri_parser;
 mod utils;
 
 // Re-export constants
-pub use constants::{
-    APP_PATH, INVALID_TAG_CHARS, MAX_SIZE, MAX_TAG_LABEL_LENGTH, MIN_TAG_LABEL_LENGTH, PROTOCOL,
-    PUBLIC_PATH, VERSION,
-};
+pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
+#[doc(inline)]
+pub use limits::*;
 // Re-export domain types
 pub use models::blob::PubkyAppBlob;
 pub use models::bookmark::PubkyAppBookmark;

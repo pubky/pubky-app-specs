@@ -1,5 +1,6 @@
 use crate::{
     common::timestamp,
+    limits::VALIDATION_LIMITS,
     models::tag::{sanitize_tag_label, validate_tag_label},
     traits::{HasIdPath, HashId, Validatable},
     PubkyAppPostKind, APP_PATH, PUBLIC_PATH,
@@ -14,9 +15,6 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-
-// Maximum number of tags allowed in a feed
-const MAX_TAGS: usize = 5;
 
 /// Enum representing the reach of the feed.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -129,10 +127,10 @@ impl Validatable for PubkyAppFeedConfig {
         // Validate tags
         if let Some(tags) = &self.tags {
             // Validate maximum number of tags
-            if tags.len() > MAX_TAGS {
+            if tags.len() > VALIDATION_LIMITS.feed_tags_max_count {
                 return Err(format!(
                     "Validation Error: Feed config cannot have more than {} tags",
-                    MAX_TAGS
+                    VALIDATION_LIMITS.feed_tags_max_count
                 ));
             }
 
@@ -306,7 +304,7 @@ impl FromStr for PubkyAppFeedSort {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{constants::MAX_TAG_LABEL_LENGTH, traits::Validatable};
+    use crate::{limits::VALIDATION_LIMITS, traits::Validatable};
 
     #[test]
     fn test_new() {
@@ -436,7 +434,7 @@ mod tests {
                 "tag3".to_string(),
                 "tag4".to_string(),
                 "tag5".to_string(),
-                "tag6".to_string(), // This exceeds MAX_TAGS
+                "tag6".to_string(), // This exceeds feed_tags_max_count
             ]),
             PubkyAppFeedReach::Following,
             PubkyAppFeedLayout::Columns,
@@ -448,13 +446,16 @@ mod tests {
 
         let result = feed.validate(Some(&feed_id));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("more than 5 tags"));
+        assert!(result.unwrap_err().contains(&format!(
+            "more than {} tags",
+            VALIDATION_LIMITS.feed_tags_max_count
+        )));
     }
 
     #[test]
     fn test_validate_tag_too_long() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["a".repeat(MAX_TAG_LABEL_LENGTH + 1)]),
+            Some(vec!["a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1)]),
             PubkyAppFeedReach::Following,
             PubkyAppFeedLayout::Columns,
             PubkyAppFeedSort::Recent,
@@ -550,7 +551,7 @@ mod tests {
         // Test multiple tag validation errors in one test
         let invalid_cases = vec![
             (
-                "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
+                "a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1),
                 "exceeds maximum length",
             ),
             ("bit coin".to_string(), "whitespace"),

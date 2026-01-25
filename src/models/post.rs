@@ -1,5 +1,6 @@
 use crate::{
     common::sanitize_url,
+    limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -7,15 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use url::Url;
 
-// Validation
-const MAX_SHORT_CONTENT_LENGTH: usize = 2000;
-const MAX_LONG_CONTENT_LENGTH: usize = 50000;
 // Reserved keyword used by the system to mark deleted posts with relationships
 const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
-const MAX_ATTACHMENTS: usize = 3;
-const MAX_ATTACHMENT_URL_LENGTH: usize = 200;
-// Allowed protocols for attachment URLs: pubky://, http://, https://
-const ALLOWED_ATTACHMENT_PROTOCOLS: &[&str] = &["pubky", "http", "https"];
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -267,12 +261,15 @@ impl Validatable for PubkyAppPost {
 
         // Validate content length based on post kind
         let (max_length, kind_name) = match self.kind {
-            PubkyAppPostKind::Short => (MAX_SHORT_CONTENT_LENGTH, "Short"),
-            PubkyAppPostKind::Long => (MAX_LONG_CONTENT_LENGTH, "Long"),
+            PubkyAppPostKind::Short => (VALIDATION_LIMITS.post_short_content_max_length, "Short"),
+            PubkyAppPostKind::Long => (VALIDATION_LIMITS.post_long_content_max_length, "Long"),
             PubkyAppPostKind::Image
             | PubkyAppPostKind::Video
             | PubkyAppPostKind::Link
-            | PubkyAppPostKind::File => (MAX_SHORT_CONTENT_LENGTH, "Image/Video/Link/File"),
+            | PubkyAppPostKind::File => (
+                VALIDATION_LIMITS.post_short_content_max_length,
+                "Image/Video/Link/File",
+            ),
         };
 
         if self.content.chars().count() > max_length {
@@ -301,10 +298,10 @@ impl Validatable for PubkyAppPost {
 
         // Validate attachments
         if let Some(attachments) = &self.attachments {
-            if attachments.len() > MAX_ATTACHMENTS {
+            if attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
                 return Err(format!(
                     "Validation Error: Too many attachments (max: {})",
-                    MAX_ATTACHMENTS
+                    VALIDATION_LIMITS.post_attachments_max_count
                 ));
             }
 
@@ -315,10 +312,10 @@ impl Validatable for PubkyAppPost {
                         index
                     ));
                 }
-                if url.chars().count() > MAX_ATTACHMENT_URL_LENGTH {
+                if url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
                     return Err(format!(
                         "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
-                        index, MAX_ATTACHMENT_URL_LENGTH
+                        index, VALIDATION_LIMITS.post_attachment_url_max_length
                     ));
                 }
                 // Validate URL format and ensure it uses an allowed protocol
@@ -330,8 +327,12 @@ impl Validatable for PubkyAppPost {
                 })?;
 
                 // Ensure the URL uses an allowed protocol
-                if !ALLOWED_ATTACHMENT_PROTOCOLS.contains(&parsed_url.scheme()) {
-                    let allowed_protocols = ALLOWED_ATTACHMENT_PROTOCOLS
+                if !VALIDATION_LIMITS
+                    .post_allowed_attachment_protocols
+                    .contains(&parsed_url.scheme())
+                {
+                    let allowed_protocols = VALIDATION_LIMITS
+                        .post_allowed_attachment_protocols
                         .iter()
                         .map(|p| format!("{}://", p))
                         .collect::<Vec<_>>()
@@ -641,15 +642,15 @@ mod tests {
 
     #[test]
     fn test_validate_attachments_valid_protocols() {
-        // Test allowed protocols (limited to MAX_ATTACHMENTS)
+        // Test allowed protocols (limited to post_attachments_max_count)
         let protocols = vec![
             "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
             "https://example.com/file.png".to_string(),
             "http://example.com/file.jpg".to_string(),
         ];
         assert!(
-            protocols.len() <= MAX_ATTACHMENTS,
-            "Test uses more than MAX_ATTACHMENTS"
+            protocols.len() <= VALIDATION_LIMITS.post_attachments_max_count,
+            "Test uses more than post_attachments_max_count"
         );
 
         let post = PubkyAppPost::new(
@@ -692,7 +693,7 @@ mod tests {
     #[test]
     fn test_validate_attachments_too_many() {
         let mut attachments = Vec::new();
-        for i in 0..MAX_ATTACHMENTS + 1 {
+        for i in 0..VALIDATION_LIMITS.post_attachments_max_count + 1 {
             attachments.push(format!(
                 "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
                 i
@@ -755,7 +756,7 @@ mod tests {
 
     #[test]
     fn test_validate_attachments_url_too_long() {
-        // Create a URL that exceeds MAX_ATTACHMENT_URL_LENGTH (200)
+        // Create a URL that exceeds post_attachment_url_max_length (200)
         // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
         // So we need a file ID that makes the total exceed 200
         let long_file_id = "a".repeat(150); // This will make total > 200
@@ -766,10 +767,10 @@ mod tests {
 
         // Verify the URL is actually too long
         assert!(
-            long_url.chars().count() > MAX_ATTACHMENT_URL_LENGTH,
+            long_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length,
             "URL length {} should exceed {}",
             long_url.chars().count(),
-            MAX_ATTACHMENT_URL_LENGTH
+            VALIDATION_LIMITS.post_attachment_url_max_length
         );
 
         let post = PubkyAppPost::new(

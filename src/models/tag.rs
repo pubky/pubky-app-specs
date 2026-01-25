@@ -1,6 +1,6 @@
 use crate::{
     common::timestamp,
-    constants::{INVALID_TAG_CHARS, MAX_TAG_LABEL_LENGTH, MIN_TAG_LABEL_LENGTH},
+    limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -105,20 +105,20 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
     let tag_len = tag.chars().count();
 
     // Validate tag length
-    if tag_len > MAX_TAG_LABEL_LENGTH {
+    if tag_len > VALIDATION_LIMITS.tag_label_max_length {
         return Err(format!(
             "Validation Error: Tag '{}' exceeds maximum length of {} characters",
-            tag, MAX_TAG_LABEL_LENGTH
+            tag, VALIDATION_LIMITS.tag_label_max_length
         ));
     }
-    if tag_len < MIN_TAG_LABEL_LENGTH {
+    if tag_len < VALIDATION_LIMITS.tag_label_min_length {
         return Err(format!(
             "Validation Error: Tag '{}' is shorter than minimum length of {} character",
-            tag, MIN_TAG_LABEL_LENGTH
+            tag, VALIDATION_LIMITS.tag_label_min_length
         ));
     }
 
-    // Validate tag chars: disallow whitespace
+    // Validate tag chars: disallow whitespace or invalid characters.
     if tag.chars().any(|c| c.is_whitespace()) {
         return Err(format!(
             "Validation Error: Tag '{}' contains whitespace characters",
@@ -126,8 +126,10 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
         ));
     }
 
-    // Validate tag chars: disallow INVALID_TAG_CHARS
-    if let Some(c) = tag.chars().find(|c| INVALID_TAG_CHARS.contains(c)) {
+    if let Some(c) = tag
+        .chars()
+        .find(|c| VALIDATION_LIMITS.tag_invalid_chars.contains(c))
+    {
         return Err(format!(
             "Validation Error: Tag '{}' contains invalid character: {}",
             tag, c
@@ -295,7 +297,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
-            label: "a".repeat(MAX_TAG_LABEL_LENGTH + 1),
+            label: "a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1),
             created_at: 1627849723000,
         };
 
@@ -329,7 +331,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
         let tag = PubkyAppTag {
             uri: post_uri,
-            label: format!("invalidchar{}", INVALID_TAG_CHARS[0]),
+            label: format!("invalidchar{}", VALIDATION_LIMITS.tag_invalid_chars[0]),
             created_at: 1627849723000,
         };
 
@@ -450,14 +452,17 @@ mod tests {
         }
 
         // Test max length with multi-byte characters
-        // MAX_TAG_LABEL_LENGTH is 20, so 20 emoji should pass
-        let max_emoji_tag: String = "🔥".repeat(MAX_TAG_LABEL_LENGTH);
-        assert_eq!(max_emoji_tag.chars().count(), MAX_TAG_LABEL_LENGTH);
+        // tag_label_max_length is 20, so 20 emoji should pass
+        let max_emoji_tag: String = "🔥".repeat(VALIDATION_LIMITS.tag_label_max_length);
+        assert_eq!(
+            max_emoji_tag.chars().count(),
+            VALIDATION_LIMITS.tag_label_max_length
+        );
         let tag = PubkyAppTag::new(post_uri.clone(), max_emoji_tag);
         assert!(
             tag.validate(None).is_ok(),
             "Should accept {} emoji characters as tag",
-            MAX_TAG_LABEL_LENGTH
+            VALIDATION_LIMITS.tag_label_max_length
         );
     }
 }

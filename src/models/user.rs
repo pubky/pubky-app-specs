@@ -1,5 +1,6 @@
 use crate::{
     common::sanitize_url,
+    limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -13,16 +14,6 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-
-// Validation constants
-const MIN_USERNAME_LENGTH: usize = 3;
-const MAX_USERNAME_LENGTH: usize = 50;
-const MAX_BIO_LENGTH: usize = 160;
-const MAX_IMAGE_LENGTH: usize = 300;
-const MAX_LINKS: usize = 5;
-const MAX_LINK_TITLE_LENGTH: usize = 100;
-const MAX_LINK_URL_LENGTH: usize = 300;
-const MAX_STATUS_LENGTH: usize = 50;
 
 /// URI: /pub/pubky.app/profile.json
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -186,13 +177,15 @@ impl Validatable for PubkyAppUser {
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         // Validate name length
         let name_length = self.name.chars().count();
-        if !(MIN_USERNAME_LENGTH..=MAX_USERNAME_LENGTH).contains(&name_length) {
+        if !(VALIDATION_LIMITS.user_name_min_length..=VALIDATION_LIMITS.user_name_max_length)
+            .contains(&name_length)
+        {
             return Err("Validation Error: Invalid name length".into());
         }
 
         // Validate bio length
         if let Some(bio) = &self.bio {
-            if bio.chars().count() > MAX_BIO_LENGTH {
+            if bio.chars().count() > VALIDATION_LIMITS.user_bio_max_length {
                 return Err("Validation Error: Bio exceeds maximum length".into());
             }
         }
@@ -202,7 +195,7 @@ impl Validatable for PubkyAppUser {
             if image.is_empty() {
                 return Err("Validation Error: Image URI cannot be empty".into());
             }
-            if image.chars().count() > MAX_IMAGE_LENGTH {
+            if image.chars().count() > VALIDATION_LIMITS.user_image_url_max_length {
                 return Err("Validation Error: Image URI exceeds maximum length".into());
             }
             // Validate URL format
@@ -212,7 +205,7 @@ impl Validatable for PubkyAppUser {
 
         // Validate links
         if let Some(links) = &self.links {
-            if links.len() > MAX_LINKS {
+            if links.len() > VALIDATION_LIMITS.user_links_max_count {
                 return Err("Validation Error: Too many links".into());
             }
 
@@ -223,7 +216,7 @@ impl Validatable for PubkyAppUser {
 
         // Validate status length
         if let Some(status) = &self.status {
-            if status.chars().count() > MAX_STATUS_LENGTH {
+            if status.chars().count() > VALIDATION_LIMITS.user_status_max_length {
                 return Err("Validation Error: Status exceeds maximum length".into());
             }
         }
@@ -257,7 +250,7 @@ impl Validatable for PubkyAppUserLink {
         if self.title.trim().is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());
         }
-        if self.title.chars().count() > MAX_LINK_TITLE_LENGTH {
+        if self.title.chars().count() > VALIDATION_LIMITS.user_link_title_max_length {
             return Err("Validation Error: Link title exceeds maximum length".into());
         }
 
@@ -265,7 +258,7 @@ impl Validatable for PubkyAppUserLink {
         if self.url.trim().is_empty() {
             return Err("Validation Error: Link URL cannot be empty".into());
         }
-        if self.url.chars().count() > MAX_LINK_URL_LENGTH {
+        if self.url.chars().count() > VALIDATION_LIMITS.user_link_url_max_length {
             return Err("Validation Error: Link URL exceeds maximum length".into());
         }
 
@@ -387,11 +380,11 @@ mod tests {
         );
 
         // Test name too long - sanitization should NOT truncate
-        let long_name = "a".repeat(MAX_USERNAME_LENGTH + 1);
+        let long_name = "a".repeat(VALIDATION_LIMITS.user_name_max_length + 1);
         let user = PubkyAppUser::new(long_name.clone(), None, None, None, None);
 
         // Sanitization should preserve full length
-        assert_eq!(user.name.len(), MAX_USERNAME_LENGTH + 1);
+        assert_eq!(user.name.len(), VALIDATION_LIMITS.user_name_max_length + 1);
 
         // Validation should catch the violation
         let result = user.validate(None);
@@ -505,11 +498,11 @@ mod tests {
     #[test]
     fn test_sanitize_preserves_length() {
         // Test that sanitization does NOT truncate, even if over limits
-        let long_bio = "a".repeat(MAX_BIO_LENGTH + 10);
-        let long_status = "b".repeat(MAX_STATUS_LENGTH + 10);
+        let long_bio = "a".repeat(VALIDATION_LIMITS.user_bio_max_length + 10);
+        let long_status = "b".repeat(VALIDATION_LIMITS.user_status_max_length + 10);
         let long_image = format!(
             "https://example.com/{}.png",
-            "a".repeat(MAX_IMAGE_LENGTH - 30)
+            "a".repeat(VALIDATION_LIMITS.user_image_url_max_length - 30)
         );
 
         let user = PubkyAppUser::new(
@@ -533,7 +526,7 @@ mod tests {
             (
                 PubkyAppUser::new(
                     "Alice".to_string(),
-                    Some("a".repeat(MAX_BIO_LENGTH + 1)),
+                    Some("a".repeat(VALIDATION_LIMITS.user_bio_max_length + 1)),
                     None,
                     None,
                     None,
@@ -546,7 +539,7 @@ mod tests {
                     None,
                     None,
                     None,
-                    Some("a".repeat(MAX_STATUS_LENGTH + 1)),
+                    Some("a".repeat(VALIDATION_LIMITS.user_status_max_length + 1)),
                 ),
                 "status",
             ),
@@ -556,7 +549,7 @@ mod tests {
                     None,
                     Some(format!(
                         "https://example.com/{}.png",
-                        "a".repeat(MAX_IMAGE_LENGTH - 20)
+                        "a".repeat(VALIDATION_LIMITS.user_image_url_max_length - 20)
                     )),
                     None,
                     None,
@@ -579,7 +572,7 @@ mod tests {
     #[test]
     fn test_validate_too_many_links() {
         let mut links = Vec::new();
-        for i in 0..MAX_LINKS + 1 {
+        for i in 0..VALIDATION_LIMITS.user_links_max_count + 1 {
             links.push(PubkyAppUserLink {
                 title: format!("Link {}", i),
                 url: format!("https://example.com/{}", i),
@@ -589,7 +582,10 @@ mod tests {
         let user = PubkyAppUser::new("Alice".to_string(), None, None, Some(links), None);
 
         // Sanitization should preserve all links (not truncate)
-        assert_eq!(user.links.as_ref().unwrap().len(), MAX_LINKS + 1);
+        assert_eq!(
+            user.links.as_ref().unwrap().len(),
+            VALIDATION_LIMITS.user_links_max_count + 1
+        );
 
         // Validation should catch the violation
         let result = user.validate(None);
@@ -600,19 +596,22 @@ mod tests {
     #[test]
     fn test_validate_link_length_errors() {
         // Test link title too long
-        let long_title = "a".repeat(MAX_LINK_TITLE_LENGTH + 1);
+        let long_title = "a".repeat(VALIDATION_LIMITS.user_link_title_max_length + 1);
         let link = PubkyAppUserLink {
             title: long_title.clone(),
             url: "https://example.com".to_string(),
         };
         let sanitized = link.sanitize();
-        assert_eq!(sanitized.title.len(), MAX_LINK_TITLE_LENGTH + 1);
+        assert_eq!(
+            sanitized.title.len(),
+            VALIDATION_LIMITS.user_link_title_max_length + 1
+        );
         let result = sanitized.validate(None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum length"));
 
         // Test link URL too long - create URL that exceeds limit after normalization
-        let very_long_path = "a".repeat(MAX_LINK_URL_LENGTH);
+        let very_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length);
         let very_long_url = format!("https://example.com/{}", very_long_path);
         let link2 = PubkyAppUserLink {
             title: "Test".to_string(),
@@ -621,18 +620,18 @@ mod tests {
         let sanitized2 = link2.sanitize();
 
         // Verify URL exceeds limit (accounting for potential normalization)
-        if sanitized2.url.chars().count() > MAX_LINK_URL_LENGTH {
+        if sanitized2.url.chars().count() > VALIDATION_LIMITS.user_link_url_max_length {
             let result = sanitized2.validate(None);
             assert!(
                 result.is_err(),
                 "Expected validation error for URL length {}, max is {}",
                 sanitized2.url.chars().count(),
-                MAX_LINK_URL_LENGTH
+                VALIDATION_LIMITS.user_link_url_max_length
             );
             assert!(result.unwrap_err().contains("exceeds maximum length"));
         } else {
             // If normalization shortened it, create an even longer one
-            let extremely_long_path = "a".repeat(MAX_LINK_URL_LENGTH + 50);
+            let extremely_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length + 50);
             let extremely_long_url = format!("https://example.com/{}", extremely_long_path);
             let link3 = PubkyAppUserLink {
                 title: "Test".to_string(),
@@ -644,7 +643,7 @@ mod tests {
                 result.is_err(),
                 "Expected validation error for URL length {}, max is {}",
                 sanitized3.url.chars().count(),
-                MAX_LINK_URL_LENGTH
+                VALIDATION_LIMITS.user_link_url_max_length
             );
             assert!(result.unwrap_err().contains("exceeds maximum length"));
         }
@@ -676,14 +675,17 @@ mod tests {
         );
 
         // Test that emoji-heavy string at max length passes
-        // MAX_USERNAME_LENGTH is 50, so 50 emoji should pass
-        let max_emoji_name: String = "🔥".repeat(MAX_USERNAME_LENGTH);
-        assert_eq!(max_emoji_name.chars().count(), MAX_USERNAME_LENGTH);
+        // VALIDATION_LIMITS.user_name_max_length is 50, so 50 emoji should pass
+        let max_emoji_name: String = "🔥".repeat(VALIDATION_LIMITS.user_name_max_length);
+        assert_eq!(
+            max_emoji_name.chars().count(),
+            VALIDATION_LIMITS.user_name_max_length
+        );
         let user_max_emoji = PubkyAppUser::new(max_emoji_name, None, None, None, None);
         assert!(
             user_max_emoji.validate(None).is_ok(),
             "Should accept {} emoji characters as name",
-            MAX_USERNAME_LENGTH
+            VALIDATION_LIMITS.user_name_max_length
         );
     }
 }

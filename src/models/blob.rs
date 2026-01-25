@@ -1,5 +1,5 @@
 use crate::{
-    constants::MAX_SIZE,
+    limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
     APP_PATH, PUBLIC_PATH,
 };
@@ -93,7 +93,7 @@ impl Validatable for PubkyAppBlob {
         if self.0.is_empty() {
             return Err("Validation Error: Blob size cannot be zero".to_string());
         }
-        if self.0.len() > MAX_SIZE {
+        if self.0.len() > VALIDATION_LIMITS.max_blob_size_bytes {
             return Err("Validation Error: Blob size exceeds maximum limit of 100MB".to_string());
         }
 
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_validate_size_errors() {
         // Test blob at max size (should pass)
-        let max_size_blob = PubkyAppBlob(vec![0; MAX_SIZE]);
+        let max_size_blob = PubkyAppBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes]);
         let id = max_size_blob.create_id();
         let result = max_size_blob.validate(Some(&id));
         assert!(result.is_ok(), "Blob at max size should be valid");
@@ -154,7 +154,7 @@ mod tests {
         assert!(result.unwrap_err().contains("cannot be zero"));
 
         // Test blob exceeding max size (should fail)
-        let oversized_blob = PubkyAppBlob(vec![0; MAX_SIZE + 1]);
+        let oversized_blob = PubkyAppBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes + 1]);
         let id = oversized_blob.create_id();
         let result = oversized_blob.validate(Some(&id));
         assert!(result.is_err());
