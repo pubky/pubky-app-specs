@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.4.0_
+_Version 0.4.3_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -36,7 +36,7 @@ npm run example
 ## Table of Contents
 
 - [Pubky.app Data Model Specification](#pubkyapp-data-model-specification)
-    - [JS package](#js-package)
+  - [JS package](#js-package)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Quick Start](#quick-start)
