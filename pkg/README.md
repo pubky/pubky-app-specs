@@ -332,17 +332,45 @@ A `ParsedUriResult` object with:
 
 ## Validation limits
 
-The WASM builder exposes validation limits as a JSON object so UIs can reuse
-the canonical rules without duplicating magic numbers.
+Validation limits are published as JSON so UIs and tests can reuse the
+canonical rules without WASM, plus optional WASM accessors when needed.
+
+### ✅ Recommended (no WASM)
+
+**Named export from the package root:**
 
 ```js
-import init, { PubkySpecsBuilder } from "pubky-app-specs";
+import { validationLimits, getValidationLimits } from "pubky-app-specs";
 
-await init();
+console.log(validationLimits);
+const copy = getValidationLimits();
+```
+
+**Direct subpath import (ESM):**
+
+```js
+import limits from "pubky-app-specs/validationLimits";
+// or
+import limitsJson from "pubky-app-specs/validationLimits.json";
+```
+
+**Direct subpath import (CJS):**
+
+```js
+const { validationLimits, getValidationLimits } = require("pubky-app-specs");
+// or
+const limits = require("pubky-app-specs/validationLimits");
+```
+
+### WASM accessors
+
+```js
+import { PubkySpecsBuilder, getValidationLimits } from "pubky-app-specs";
+
+const limitsFromWasm = getValidationLimits();
+
 const builder = new PubkySpecsBuilder("pubky_id_here");
-const limits = builder.validationLimits;
-
-console.log(limits);
+const limitsFromBuilder = builder.validationLimits;
 ```
 
 Example output shape:
@@ -364,7 +392,7 @@ Example output shape:
   "userStatusMaxLength": 50,
   "postShortContentMaxLength": 2000,
   "postLongContentMaxLength": 50000,
-  "postAttachmentsMaxCount": 3,
+  "postAttachmentsMaxCount": 4,
   "postAttachmentUrlMaxLength": 200,
   "postAllowedAttachmentProtocols": ["pubky", "http", "https"],
   "fileNameMinLength": 1,
