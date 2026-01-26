@@ -69,4 +69,3 @@ await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
     path.join(__dirname, `../../pkg/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
   ))
 )
-

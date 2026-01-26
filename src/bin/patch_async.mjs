@@ -109,5 +109,3 @@ const indexcjsPath = path.join(__dirname, `../../pkg/index.cjs`);
 const indexcjsContent = await readFile(indexcjsPath, 'utf8');
 
 await writeFile(indexcjsPath, indexcjsContent, 'utf8')
-
-

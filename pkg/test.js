@@ -1,5 +1,10 @@
 import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { createRequire } from "node:module";
 import assert from "assert";
+
+const require = createRequire(import.meta.url);
+const { validationLimits, getValidationLimits } = require("./validationLimits.cjs");
+const validationLimitsJson = require("./validationLimits.json");
 
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
@@ -441,6 +446,51 @@ describe("PubkySpecs Example Objects Tests", () => {
       
       const fileJson = file.toJson();
       assert.strictEqual(fileJson.content_type, validMimeType, "File should have valid MIME type");
+    });
+  });
+
+  describe("Validation limits exports", () => {
+    it("should expose validationLimits from JS exports", () => {
+      assert.ok(validationLimits, "validationLimits should be defined");
+      assert.deepStrictEqual(
+        validationLimits,
+        validationLimitsJson,
+        "validationLimits should match validationLimits.json"
+      );
+      assert.strictEqual(
+        validationLimits.userNameMinLength,
+        3,
+        "userNameMinLength should match the Rust limits"
+      );
+      assert.ok(
+        Array.isArray(validationLimits.tagInvalidChars),
+        "tagInvalidChars should be an array"
+      );
+    });
+
+    it("getValidationLimits should return a copy that matches validationLimits", () => {
+      const limitsCopy = getValidationLimits();
+
+      assert.deepStrictEqual(
+        limitsCopy,
+        validationLimits,
+        "getValidationLimits should match validationLimits"
+      );
+      assert.notStrictEqual(
+        limitsCopy,
+        validationLimits,
+        "getValidationLimits should return a new object"
+      );
+    });
+
+    it("builder.validationLimits should match the JS exports", () => {
+      const builderLimits = JSON.parse(JSON.stringify(specsBuilder.validationLimits));
+
+      assert.deepStrictEqual(
+        builderLimits,
+        validationLimits,
+        "builder.validationLimits should match exported validationLimits"
+      );
     });
   });
 });
