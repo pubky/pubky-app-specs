@@ -12,6 +12,12 @@ use wasm_bindgen::prelude::*;
 /// - Generates the path (if applicable).
 /// - Returns { json, id, path, url } or a descriptive error.
 
+/// Returns validation limits as a JSON value for client-side use without a builder.
+#[wasm_bindgen(js_name = getValidationLimits)]
+pub fn get_validation_limits() -> Result<JsValue, String> {
+    to_value(&VALIDATION_LIMITS).map_err(|e| e.to_string())
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Meta {
