@@ -1413,18 +1413,16 @@ checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
 name = "pubky"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12f7fe978ba733fdb614320e9b1f3910cfecf0509530511c8ba12cc8d32f8bc8"
+checksum = "7ee35ad75b5bfff099616d9649b47c27edcf8ceaa99e8adfa59b91bb2650de40"
 dependencies = [
- "anyhow",
  "base64",
- "bytes",
  "cookie",
- "cookie_store",
  "flume",
  "futures-lite",
  "futures-util",
+ "httpdate",
  "log",
  "pkarr",
  "pubky-common",
@@ -1434,6 +1432,7 @@ dependencies = [
  "tracing",
  "url",
  "wasm-bindgen-futures",
+ "web-time",
 ]
 
 [[package]]
@@ -1459,9 +1458,9 @@ dependencies = [
 
 [[package]]
 name = "pubky-common"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f078584beadafe3bc8669bfd6b245f10f42b8bea24e7ccbff0e09886e310ba9b"
+checksum = "b60f3de02efcbb15d5e492fccade85c75d11ce76e8c4c6109377b3019bb916be"
 dependencies = [
  "argon2",
  "base32",
@@ -1476,6 +1475,7 @@ dependencies = [
  "rand 0.9.2",
  "serde",
  "thiserror",
+ "url",
 ]
 
 [[package]]
