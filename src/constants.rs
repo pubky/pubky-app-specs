@@ -1,5 +1,5 @@
 // Application version
-pub static VERSION: &str = "0.4.3";
+pub static VERSION: &str = "0.4.4";
 
 // Path constants
 pub static PUBLIC_PATH: &str = "/pub/";
