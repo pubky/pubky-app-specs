@@ -22,15 +22,27 @@ const patched = content
   .replace("= module.exports", "= imports")
   // Export classes
   .replace(/\nclass (.*?) \{/g, "\n export class $1 {")
-  // Export functions
+  // Export enums (Object.freeze declarations)
+  .replace(/\nconst (\w+) = Object\.freeze/g, "\nexport const $1 = Object.freeze")
+  // Export standalone functions that are assigned to exports
+  .replace(/\nfunction (\w+)\(/g, (match, name, offset, str) => {
+    // Check if there's a corresponding exports.name = name; line
+    if (str.includes(`exports.${name} = ${name};`)) {
+      return `\nexport function ${name}(`;
+    }
+    return match;
+  })
+  // Export functions defined inline on module.exports (for older wasm-bindgen)
   .replace(/\nmodule.exports.(.*?) = function/g, "\nimports.$1 = $1;\nexport function $1")
-  // Add exports to 'imports'
+  // Replace module.exports.X with imports.X (for older wasm-bindgen)
   .replace(/\nmodule\.exports\.(.*?)\s+/g, "\nimports.$1")
+  // Replace exports.X = X; with imports.X = X; (for newer wasm-bindgen)
+  .replace(/\nexports\.(\w+) = (\w+);/g, "\nimports.$1 = $2;")
   // Remove default export of imports (will be replaced with init function)
   .replace(/export default imports$/, '')
   // Remove inline wasm bytes - will use separate file
   .replace(
-    /\nconst path.*\nconst bytes.*\n/,
+    /\nconst (?:wasm)?[Pp]ath.*\nconst (?:wasm)?[Bb]ytes.*\n/,
     '\n// WASM bytes removed - use separate .wasm file\n'
   );
 
@@ -87,13 +99,8 @@ const patchedWithAsync = patched
 
 // Write the patched JavaScript file with additional exports
 // This creates the final index.js that will be used by Node.js/browser consumers
-await writeFile(path.join(__dirname, `../../pkg/index.js`), patchedWithAsync 
-  + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
-  + "// Re-export enums so Next.js can statically import them\n"
-  + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
-  + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n" // Export enum for named imports  
-  + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"  // Export enum for named imports
-  + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n"); // Export enum for named imports
+await writeFile(path.join(__dirname, `../../pkg/index.js`), "const imports = {};\n" + patchedWithAsync 
+  + "\nglobalThis['pubky'] = imports\n");  // Make imports available globally as 'pubky'
 
 // Move outside of nodejs
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
