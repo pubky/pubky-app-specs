@@ -57,6 +57,11 @@ const exportedClasses = new Set(
   [...patched.matchAll(/\nexport class (\w+)/g)].map(m => m[1])
 );
 
+// Collect names already declared as consts (wasm-bindgen may emit these for enums)
+const declaredConsts = new Set(
+  [...patched.matchAll(/\nconst (\w+)/g)].map(m => m[1])
+);
+
 // Re-export enums so Next.js can statically import them, but only if not already exported as a class
 const enumReExports = [
   "PubkyAppPostKind",
@@ -65,7 +70,9 @@ const enumReExports = [
   "PubkyAppFeedSort",
 ]
   .filter(name => !exportedClasses.has(name))
-  .map(name => `export const ${name} = imports.${name};\n`)
+  .map(name => declaredConsts.has(name)
+    ? `export { ${name} };\n`
+    : `export const ${name} = imports.${name};\n`)
   .join("");
 
 // Write the patched JavaScript file with additional exports
