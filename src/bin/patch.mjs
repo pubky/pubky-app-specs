@@ -21,15 +21,20 @@ const patched = content
   .replace("= module.exports", "= imports")
   // Export classes
   .replace(/\nclass (.*?) \{/g, "\nexport class $1 {")
-  // Export functions
+  // Export functions (old wasm-bindgen format: module.exports.func = function)
   .replace(/\nmodule.exports.(.*?) = function/g, "\nimports.$1 = $1;\nexport function $1")
-  // Add exports to 'imports'
+  // Add exports to 'imports' (old wasm-bindgen format)
   .replace(/\nmodule\.exports\.(.*?)\s+/g, "\nimports.$1")
   // Remove default export of imports
   .replace(/export default imports$/, '')
+  // Handle new wasm-bindgen format: exports.X = X;
+  // Uppercase names are classes (already exported via 'export class') or enums (handled below) - remove CJS line
+  // Lowercase names are free functions - replace with ESM export
+  .replace(/\nexports\.(\w+) = \1;/g, (_, n) => /^[A-Z]/.test(n) ? '' : `\nexport { ${n} };`)
   // Replace inline wasm bytes with __toBinary function and embedded base64 bytes
+  // Handles both old wasm-bindgen format (const path/bytes) and new format (const wasmPath/wasmBytes)
   .replace(
-    /\nconst path.*\nconst bytes.*\n/,
+    /\nconst (?:wasmPath|path).*\nconst (?:wasmBytes|bytes).*\n/,
     `
 var __toBinary = /* @__PURE__ */ (() => {
   var table = new Uint8Array(128);
@@ -48,9 +53,11 @@ var __toBinary = /* @__PURE__ */ (() => {
   };
 })();
 
-const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../pkg/nodejs/${name}_bg.wasm`), "base64"))});
+const wasmBytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../pkg/nodejs/${name}_bg.wasm`), "base64"))});
 `
-  );
+  )
+  // Ensure old-format reference 'bytes' is updated to 'wasmBytes' for new WebAssembly.Module instantiation
+  .replace(/new WebAssembly\.Module\(bytes\)/, 'new WebAssembly.Module(wasmBytes)');
 
 // Collect names already exported as classes to avoid duplicate declarations
 const exportedClasses = new Set(
@@ -78,7 +85,6 @@ const enumReExports = [
 // Write the patched JavaScript file with additional exports
 // This creates the final index.js that will be used by Node.js/browser consumers
 await writeFile(path.join(__dirname, `../../pkg/index.js`), patched 
-  + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
   + "// Re-export enums so Next.js can statically import them\n"
   + enumReExports);
 
