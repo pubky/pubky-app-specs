@@ -20,7 +20,7 @@ const patched = content
   // attach to `imports` instead of module.exports
   .replace("= module.exports", "= imports")
   // Export classes
-  .replace(/\nclass (.*?) \{/g, "\n export class $1 {")
+  .replace(/\nclass (.*?) \{/g, "\nexport class $1 {")
   // Export functions
   .replace(/\nmodule.exports.(.*?) = function/g, "\nimports.$1 = $1;\nexport function $1")
   // Add exports to 'imports'
