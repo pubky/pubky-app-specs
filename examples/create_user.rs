@@ -8,8 +8,7 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     anyhow::Result,
-    pubky::Client,
-    pubky::{Keypair, PublicKey},
+    pubky::{Keypair, Pubky, PublicKey},
     pubky_app_specs::{traits::Validatable, user_uri_builder, PubkyAppUser},
     serde_json::to_vec,
 };
@@ -24,13 +23,13 @@ async fn main() -> Result<()> {
     // Print an introduction for the developer
     println!("Welcome to the Pubky User Creator Example!");
 
-    // Step 1: Initialize the Pubky client
-    println!("\nStep 1: Initializing the Pubky client...");
+    // Step 1: Initialize the Pubky SDK
+    println!("\nStep 1: Initializing the Pubky SDK...");
 
-    let client = Client::builder().build()?;
+    let pubky = Pubky::new().expect("Failed to initialize Pubky SDK.");
     let homeserver = PublicKey::try_from(HOMESERVER).expect("Invalid homeserver public key.");
 
-    println!("Pubky client initialized successfully.");
+    println!("Pubky SDK initialized successfully.");
 
     // Step 2: Generate a keypair for the new user
     println!("\nStep 2: Generating a random keypair for the new user...");
@@ -43,10 +42,11 @@ async fn main() -> Result<()> {
     // Step 3: Sign up a new identity on the homeserver
     println!("\nStep 3: Signing up the new identity on the homeserver...");
 
-    // This step will likely fail "as is" as homeservers are no requiring sign up tokens.
+    // This step will likely fail "as is" as homeservers are now requiring sign up tokens.
     // Here we provide `None` signup token.
-    client
-        .signup(&keypair, &homeserver, None)
+    let signer = pubky.signer(keypair);
+    let session = signer
+        .signup(&homeserver, None)
         .await
         .expect("Failed to sign up the user on the homeserver.");
 
@@ -71,10 +71,12 @@ async fn main() -> Result<()> {
     let url = user_uri_builder(user_id);
     let content = to_vec(&user_profile)?;
 
-    client
-        .put(url.as_str())
-        .body(content.clone())
-        .send()
+    let path = url
+        .strip_prefix(&format!("pubky://{}", signer.public_key().to_z32()))
+        .expect("URL should start with pubky://<user_id>");
+    session
+        .storage()
+        .put(path, content.clone())
         .await
         .expect("Failed to write the user profile to the homeserver.");
 
@@ -87,9 +89,9 @@ async fn main() -> Result<()> {
     // Step 6: Retrieve the user profile from the homeserver
     println!("\nStep 6: Retrieving the user profile from the homeserver...");
 
-    let response = client
+    let public = pubky.public_storage();
+    let response = public
         .get(url.as_str())
-        .send()
         .await
         .expect("Failed to retrieve the user profile from the homeserver.");
 

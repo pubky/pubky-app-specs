@@ -52,15 +52,28 @@ const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `.
 `
   );
 
+// Collect names already exported as classes to avoid duplicate declarations
+const exportedClasses = new Set(
+  [...patched.matchAll(/\nexport class (\w+)/g)].map(m => m[1])
+);
+
+// Re-export enums so Next.js can statically import them, but only if not already exported as a class
+const enumReExports = [
+  "PubkyAppPostKind",
+  "PubkyAppFeedLayout",
+  "PubkyAppFeedReach",
+  "PubkyAppFeedSort",
+]
+  .filter(name => !exportedClasses.has(name))
+  .map(name => `export const ${name} = imports.${name};\n`)
+  .join("");
+
 // Write the patched JavaScript file with additional exports
 // This creates the final index.js that will be used by Node.js/browser consumers
 await writeFile(path.join(__dirname, `../../pkg/index.js`), patched 
   + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
   + "// Re-export enums so Next.js can statically import them\n"
-  + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
-  + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n" // Export enum for named imports  
-  + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"  // Export enum for named imports
-  + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n"); // Export enum for named imports
+  + enumReExports);
 
 // Move outside of nodejs
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
