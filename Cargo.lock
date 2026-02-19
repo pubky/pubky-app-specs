@@ -1687,7 +1687,7 @@ checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 [[package]]
 name = "pubky"
 version = "0.7.0-rc.1"
-source = "git+https://github.com/pubky/pubky-core.git?branch=sdk_version_0.7.0#259d1c50efb81ae8759c267f18484e5c2f0f4403"
+source = "git+https://github.com/pubky/pubky-core.git?branch=sdk_evemts_for_homeserver#b3d91193a46a90b67d2f0efb20322b515536bc2d"
 dependencies = [
  "base64",
  "cookie",
@@ -1732,7 +1732,7 @@ dependencies = [
 [[package]]
 name = "pubky-common"
 version = "0.7.0-rc.1"
-source = "git+https://github.com/pubky/pubky-core.git?branch=sdk_version_0.7.0#259d1c50efb81ae8759c267f18484e5c2f0f4403"
+source = "git+https://github.com/pubky/pubky-core.git?branch=sdk_evemts_for_homeserver#b3d91193a46a90b67d2f0efb20322b515536bc2d"
 dependencies = [
  "argon2",
  "base32",
