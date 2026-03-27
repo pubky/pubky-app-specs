@@ -1,51 +1,59 @@
 {
-  "name": "pubky-app-specs",
-  "description": "Pubky.app Data Model Specifications",
-  "version": "0.4.4",
-  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pubky/pubky-app-specs/issues"
+  },
   "contributors": [
     "SHAcollision",
     "tipogi",
     "ok300"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pubky/pubky-app-specs.git"
+  "description": "Pubky.app Data Model Specifications",
+  "devDependencies": {
+    "mocha": "^11.7.5"
   },
-  "bugs": {
-    "url": "https://github.com/pubky/pubky-app-specs/issues"
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs",
+      "types": "./pubky_app_specs.d.ts"
+    },
+    "./validationLimits": {
+      "import": "./validationLimits.js",
+      "require": "./validationLimits.cjs"
+    },
+    "./validationLimits.json": "./validationLimits.json"
   },
   "files": [
     "pubky_app_specs_bg.wasm",
     "pubky_app_specs.d.ts",
     "index.cjs",
     "index.js",
-    "example.js"
+    "example.js",
+    "validationLimits.json",
+    "validationLimits.js",
+    "validationLimits.cjs"
   ],
-  "type": "module",
+  "homepage": "https://pubky.app",
+  "keywords": [
+    "pubky-app",
+    "pubky-nexus",
+    "specs"
+  ],
+  "license": "MIT",
   "main": "index.cjs",
   "module": "index.js",
-  "types": "pubky_app_specs.d.ts",
-  "exports": {
-    ".": {
-      "types": "./pubky_app_specs.d.ts",
-      "import": "./index.js",
-      "require": "./index.cjs"
-    }
-  },
-  "homepage": "https://pubky.app",
-  "sideEffects": false,
-  "devDependencies": {
-    "mocha": "^11.7.5"
+  "name": "pubky-app-specs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pubky/pubky-app-specs.git"
   },
   "scripts": {
     "build": "cargo run --bin bundle_specs_npm",
     "example": "node example.js",
     "test": "mocha test.js"
   },
-  "keywords": [
-    "pubky-app",
-    "pubky-nexus",
-    "specs"
-  ]
+  "sideEffects": false,
+  "type": "module",
+  "types": "pubky_app_specs.d.ts",
+  "version": "0.4.4"
 }
