@@ -1,3 +1,4 @@
+// Might be valid for a future version of wasm-pack, but not now. look issue #62
 // This script is used to generate isomorphic code for web and nodejs
 //
 // Based on hacks from [this issue](https://github.com/rustwasm/wasm-pack/issues/1334)

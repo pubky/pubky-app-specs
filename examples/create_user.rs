@@ -8,9 +8,8 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     anyhow::Result,
-    pubky::Client,
-    pubky::{Keypair, PublicKey},
-    pubky_app_specs::{traits::Validatable, user_uri_builder, PubkyAppUser},
+    pubky::{Keypair, PublicKey, Pubky},
+    pubky_app_specs::{traits::HasPath, traits::Validatable, PubkyAppUser},
     serde_json::to_vec,
 };
 // Replace this with your actual homeserver public key
@@ -27,7 +26,7 @@ async fn main() -> Result<()> {
     // Step 1: Initialize the Pubky client
     println!("\nStep 1: Initializing the Pubky client...");
 
-    let client = Client::builder().build()?;
+    let pubky = Pubky::new()?;
     let homeserver = PublicKey::try_from(HOMESERVER).expect("Invalid homeserver public key.");
 
     println!("Pubky client initialized successfully.");
@@ -43,10 +42,11 @@ async fn main() -> Result<()> {
     // Step 3: Sign up a new identity on the homeserver
     println!("\nStep 3: Signing up the new identity on the homeserver...");
 
-    // This step will likely fail "as is" as homeservers are no requiring sign up tokens.
+    // This step will likely fail "as is" as homeservers are now requiring sign up tokens.
     // Here we provide `None` signup token.
-    client
-        .signup(&keypair, &homeserver, None)
+    let signer = pubky.signer(keypair);
+    let session = signer
+        .signup(&homeserver, None)
         .await
         .expect("Failed to sign up the user on the homeserver.");
 
@@ -68,28 +68,28 @@ async fn main() -> Result<()> {
     // Step 5: Write the user profile to the homeserver
     println!("\nStep 5: Writing the user profile to the homeserver...");
 
-    let url = user_uri_builder(user_id);
+    let path = PubkyAppUser::create_path();
     let content = to_vec(&user_profile)?;
 
-    client
-        .put(url.as_str())
-        .body(content.clone())
-        .send()
+    session
+        .storage()
+        .put(&path, content.clone())
         .await
         .expect("Failed to write the user profile to the homeserver.");
 
     println!(
-        "User profile written successfully to:\nURL: {}\nContent: {}",
-        url,
+        "User profile written successfully to:\nPath: {}\nContent: {}",
+        path,
         String::from_utf8_lossy(&content)
     );
 
     // Step 6: Retrieve the user profile from the homeserver
     println!("\nStep 6: Retrieving the user profile from the homeserver...");
 
-    let response = client
-        .get(url.as_str())
-        .send()
+    let addr = format!("{}{}", user_id, path);
+    let response = pubky
+        .public_storage()
+        .get(&addr)
         .await
         .expect("Failed to retrieve the user profile from the homeserver.");
 

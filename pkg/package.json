@@ -9,7 +9,7 @@
   ],
   "description": "Pubky.app Data Model Specifications",
   "devDependencies": {
-    "mocha": "^10.2.0"
+    "mocha": "^11.7.5"
   },
   "exports": {
     ".": {
