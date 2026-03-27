@@ -36,7 +36,7 @@
   "homepage": "https://pubky.app",
   "sideEffects": false,
   "devDependencies": {
-    "mocha": "^10.2.0"
+    "mocha": "^11.7.5"
   },
   "scripts": {
     "build": "cargo run --bin bundle_specs_npm",
