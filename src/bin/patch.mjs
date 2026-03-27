@@ -1,35 +1,60 @@
-// This script is used to generate isomorphic code for web and nodejs
-//
-// Based on hacks from [this issue](https://github.com/rustwasm/wasm-pack/issues/1334)
+// Convert wasm-bindgen CJS output into a self-contained ESM bundle with inline WASM.
+// Based on hacks from https://github.com/rustwasm/wasm-pack/issues/1334
+// Aligned with https://github.com/pubky/pubky-core/blob/main/pubky-sdk/bindings/js/scripts/patch.mjs
 
 import { readFile, writeFile, rename } from "node:fs/promises";
-import { fileURLToPath } from 'node:url';
-import path, { dirname } from 'node:path';
+import { fileURLToPath } from "node:url";
+import path, { dirname } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
 const cargoTomlContent = await readFile(path.join(__dirname, "../../Cargo.toml"), "utf8");
-const cargoPackageName = /\[package\]\nname = "(.*?)"/.exec(cargoTomlContent)[1]
-const name = cargoPackageName.replace(/-/g, '_')
+const name = /\[package\]\nname = "(.*?)"/.exec(cargoTomlContent)[1].replace(/-/g, "_");
 
 const content = await readFile(path.join(__dirname, `../../pkg/nodejs/${name}.js`), "utf8");
 
-const patched = content
-  // use global TextDecoder TextEncoder
+const needsNamedExport = new Set();
+const hasModuleExports = content.includes("= module.exports");
+
+let patched = content
   .replace("require(`util`)", "globalThis")
-  // attach to `imports` instead of module.exports
   .replace("= module.exports", "= imports")
-  // Export classes
   .replace(/\nclass (.*?) \{/g, "\n export class $1 {")
-  // Export functions
-  .replace(/\nmodule.exports.(.*?) = function/g, "\nimports.$1 = $1;\nexport function $1")
-  // Add exports to 'imports'
-  .replace(/\nmodule\.exports\.(.*?)\s+/g, "\nimports.$1")
-  // Remove default export of imports
-  .replace(/export default imports$/, '')
-  // Replace inline wasm bytes with __toBinary function and embedded base64 bytes
   .replace(
-    /\nconst path.*\nconst bytes.*\n/,
+    /\n(?:module\.exports|exports)\.(\w+)\s*=\s*function/g,
+    (_match, fn) => {
+      needsNamedExport.delete(fn);
+      return `\nimports.${fn} = ${fn};\nexport function ${fn}`;
+    },
+  )
+  .replace(
+    /\n(?:module\.exports|exports)\.(\w+)\s*=\s*([^;\n]+)(;?)/g,
+    (_match, name, value, suffix) => {
+      const trimmed = value.trim();
+      if (trimmed === name) {
+        needsNamedExport.add(name);
+      }
+      return `\nimports.${name} = ${trimmed}${suffix}`;
+    },
+  )
+  .replace(/= exports\./g, "= imports.");
+
+if (!hasModuleExports) {
+  patched = "const imports = {};\n" + patched;
+}
+
+for (const name of needsNamedExport) {
+  if (
+    name !== "default" &&
+    !new RegExp(`export (?:class|function|const|let|var) ${name}\\b`).test(patched)
+  ) {
+    patched += `\nexport { ${name} };`;
+  }
+}
+
+patched += "\nexport default imports";
+patched = patched
+  .replace(
+    /\nconst (?:path.*\nconst bytes.*|wasmPath.*\nconst wasmBytes.*)\nconst wasmModule.*\n/,
     `
 var __toBinary = /* @__PURE__ */ (() => {
   var table = new Uint8Array(128);
@@ -48,25 +73,24 @@ var __toBinary = /* @__PURE__ */ (() => {
   };
 })();
 
-const bytes = __toBinary(${JSON.stringify(await readFile(path.join(__dirname, `../../pkg/nodejs/${name}_bg.wasm`), "base64"))});
-`
+const bytes = __toBinary(${JSON.stringify(
+      await readFile(path.join(__dirname, `../../pkg/nodejs/${name}_bg.wasm`), "base64"),
+    )});
+const wasmModule = new WebAssembly.Module(bytes);
+`,
   );
 
-// Write the patched JavaScript file with additional exports
-// This creates the final index.js that will be used by Node.js/browser consumers
-await writeFile(path.join(__dirname, `../../pkg/index.js`), patched 
-  + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
-  + "// Re-export enums so Next.js can statically import them\n"
-  + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
-  + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n" // Export enum for named imports  
-  + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"  // Export enum for named imports
-  + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n"); // Export enum for named imports
+await writeFile(
+  path.join(__dirname, `../../pkg/index.js`),
+  patched + "\nglobalThis['pubky'] = imports\n",
+);
 
-// Move outside of nodejs
-await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>
-  rename(
-    path.join(__dirname, `../../pkg/nodejs/${name}${suffix}`),
-    path.join(__dirname, `../../pkg/${suffix === '.js' ? "index.cjs" : (name + suffix)}`),
-  ))
-)
-
+// Move CJS output outside of nodejs/
+await Promise.all(
+  [".js", ".d.ts", "_bg.wasm"].map((suffix) =>
+    rename(
+      path.join(__dirname, `../../pkg/nodejs/${name}${suffix}`),
+      path.join(__dirname, `../../pkg/${suffix === ".js" ? "index.cjs" : name + suffix}`),
+    ),
+  ),
+);

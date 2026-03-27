@@ -1,3 +1,4 @@
+// Might be valid for a future version of wasm-pack, but not now. look issue #62
 // This script is used to generate isomorphic code for web and nodejs
 //
 // Based on hacks from [this issue](https://github.com/rustwasm/wasm-pack/issues/1334)
@@ -109,5 +110,3 @@ const indexcjsPath = path.join(__dirname, `../../pkg/index.cjs`);
 const indexcjsContent = await readFile(indexcjsPath, 'utf8');
 
 await writeFile(indexcjsPath, indexcjsContent, 'utf8')
-
-
