@@ -13,6 +13,7 @@ use crate::{ParsedUri, Resource};
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(try_from = "String")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyId(String);
 
@@ -39,6 +40,13 @@ impl PubkyId {
             user_id: self.clone(),
             resource: Resource::User,
         }
+    }
+}
+
+impl TryFrom<String> for PubkyId {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        PubkyId::try_from(s.as_str())
     }
 }
 
@@ -193,5 +201,68 @@ mod tests {
         // Both should produce the same PubkyId
         assert_eq!(pubky_id_from_keypair, pubky_id_from_public_key);
         assert_eq!(pubky_id_from_keypair.as_ref(), expected_z32);
+    }
+
+    #[test]
+    fn test_serialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let pubky_id = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&pubky_id).unwrap();
+        // Serde serializes the inner String, so it should be a quoted JSON string
+        assert_eq!(json, format!("\"{}\"", valid_key));
+    }
+
+    #[test]
+    fn test_deserialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON string (quoted)
+        let json = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_from_slice() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON byte slice
+        let json_str = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_slice(json_str.as_bytes()).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length_from_slice() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_slice(json.as_bytes());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_encoding() {
+        // 52 chars but contains invalid z-base-32 character '0'
+        let json = "\"0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let original = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original, deserialized);
     }
 }
