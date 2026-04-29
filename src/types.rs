@@ -144,6 +144,12 @@ mod tests {
         let invalid_key = "short";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
+
+        #[cfg(target_arch = "wasm32")]
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: the string is not 52 utf chars"
+        );
     }
 
     #[test]
@@ -152,6 +158,12 @@ mod tests {
         let invalid_key = "0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
+
+        #[cfg(target_arch = "wasm32")]
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: invalid public key encoding"
+        );
     }
 
     #[test]
