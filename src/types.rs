@@ -7,19 +7,28 @@ use std::fmt;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 use crate::{ParsedUri, Resource};
 
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyId {
     z32: String,
     #[cfg(not(target_arch = "wasm32"))]
     public_key: pubky::PublicKey,
 }
+
+#[cfg(feature = "openapi")]
+impl PartialSchema for PubkyId {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        String::schema()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl ToSchema for PubkyId {}
 
 impl PubkyId {
     #[cfg(target_arch = "wasm32")]
