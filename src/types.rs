@@ -1,5 +1,6 @@
+#[cfg(target_arch = "wasm32")]
 use base32::{decode, Alphabet};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
@@ -12,26 +13,41 @@ use crate::{ParsedUri, Resource};
 
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyId(String);
+pub struct PubkyId {
+    z32: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    public_key: pubky::PublicKey,
+}
 
 impl PubkyId {
     pub fn try_from(s: &str) -> Result<Self, String> {
-        // Validate string is a valid Pkarr public key
-        // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
-        // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
-        // We avoid pkarr as a dependency by doing writing our own validation instead.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let public_key = pubky::PublicKey::try_from(s)
+                .map_err(|e| format!("Validation Error: {e}"))?;
+
+            return Ok(Self {
+                z32: public_key.to_z32(),
+                public_key,
+            });
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        // Validate string is a valid Pkarr public key.
         if s.len() != 52 {
             return Err("Validation Error: the string is not 52 utf chars".to_string());
         }
 
+        #[cfg(target_arch = "wasm32")]
         match decode(Alphabet::Z, s) {
             Some(_) => (),
             None => return Err("Validation Error: invalid public key encoding".to_string()),
         };
 
-        Ok(PubkyId(s.to_string()))
+        #[cfg(target_arch = "wasm32")]
+        return Ok(Self { z32: s.to_string() });
     }
 
     pub fn to_uri(&self) -> ParsedUri {
@@ -40,12 +56,20 @@ impl PubkyId {
             resource: Resource::User,
         }
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn to_public_key(&self) -> pubky::PublicKey {
+        self.public_key.clone()
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl From<pubky::PublicKey> for PubkyId {
     fn from(pk: pubky::PublicKey) -> Self {
-        Self(pk.to_z32())
+        Self {
+            z32: pk.to_z32(),
+            public_key: pk,
+        }
     }
 }
 
@@ -58,7 +82,7 @@ impl From<pubky::Keypair> for PubkyId {
 
 impl fmt::Display for PubkyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.z32)
     }
 }
 
@@ -66,13 +90,32 @@ impl std::ops::Deref for PubkyId {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.z32
     }
 }
 
 impl AsRef<str> for PubkyId {
     fn as_ref(&self) -> &str {
-        &self.0
+        &self.z32
+    }
+}
+
+impl Serialize for PubkyId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.z32)
+    }
+}
+
+impl<'de> Deserialize<'de> for PubkyId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PubkyId::try_from(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -96,10 +139,6 @@ mod tests {
         let invalid_key = "short";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            "Validation Error: the string is not 52 utf chars"
-        );
     }
 
     #[test]
@@ -108,10 +147,6 @@ mod tests {
         let invalid_key = "0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            "Validation Error: invalid public key encoding"
-        );
     }
 
     #[test]
@@ -193,5 +228,17 @@ mod tests {
         // Both should produce the same PubkyId
         assert_eq!(pubky_id_from_keypair, pubky_id_from_public_key);
         assert_eq!(pubky_id_from_keypair.as_ref(), expected_z32);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_to_public_key_is_infallible_for_valid_pubky_id() {
+        let keypair = Keypair::random();
+        let expected_public_key = keypair.public_key();
+        let pubky_id = PubkyId::from(expected_public_key.clone());
+
+        let converted_public_key = pubky_id.to_public_key();
+
+        assert_eq!(converted_public_key, expected_public_key);
     }
 }

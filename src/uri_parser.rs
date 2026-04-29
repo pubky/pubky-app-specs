@@ -65,7 +65,7 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedUri {
     pub user_id: PubkyId,
     pub resource: Resource,
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn test_empty_bookmark_uri() {
         let uri = bookmark_uri_builder(USER_ID.into(), "".into());
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).expect("empty bookmark id should parse to Unknown");
         assert_eq!(
             parsed_uri.resource,
             Resource::Unknown,
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn test_some_bookmark_uri() {
         let uri = bookmark_uri_builder(USER_ID.into(), "00".into());
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).expect("bookmark id should parse");
         assert_eq!(
             parsed_uri.resource,
             Resource::Bookmark("00".to_string()),
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn test_user() {
         let uri = user_uri_builder(USER_ID.into());
-        let parsed_uri = ParsedUri::try_from(uri).unwrap_or_default();
+        let parsed_uri = ParsedUri::try_from(uri).expect("user uri should parse");
         assert_eq!(
             parsed_uri.resource,
             Resource::User,
