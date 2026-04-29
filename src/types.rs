@@ -58,6 +58,10 @@ impl PubkyId {
         }
     }
 
+    /// Returns the cached public key.
+    ///
+    /// This is infallible on native targets because the key was validated
+    /// during `PubkyId` construction and cached.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn to_public_key(&self) -> pubky::PublicKey {
         self.public_key.clone()
