@@ -8,7 +8,7 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     anyhow::Result,
-    pubky::{Keypair, PublicKey, Pubky},
+    pubky::{Keypair, Pubky, PublicKey},
     pubky_app_specs::{traits::HasPath, traits::Validatable, PubkyAppUser},
     serde_json::to_vec,
 };

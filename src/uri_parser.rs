@@ -190,7 +190,8 @@ mod tests {
     #[test]
     fn test_empty_bookmark_uri() {
         let uri = bookmark_uri_builder(USER_ID.into(), "".into());
-        let parsed_uri = ParsedUri::try_from(uri).expect("empty bookmark id should parse to Unknown");
+        let parsed_uri =
+            ParsedUri::try_from(uri).expect("empty bookmark id should parse to Unknown");
         assert_eq!(
             parsed_uri.resource,
             Resource::Unknown,

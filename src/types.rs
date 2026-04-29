@@ -42,7 +42,8 @@ impl PubkyId {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn try_from(s: &str) -> Result<Self, String> {
-        let public_key = pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
+        let public_key =
+            pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
 
         Ok(Self {
             z32: public_key.to_z32(),
