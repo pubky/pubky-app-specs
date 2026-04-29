@@ -22,32 +22,32 @@ pub struct PubkyId {
 }
 
 impl PubkyId {
+    #[cfg(target_arch = "wasm32")]
     pub fn try_from(s: &str) -> Result<Self, String> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let public_key = pubky::PublicKey::try_from(s)
-                .map_err(|e| format!("Validation Error: {e}"))?;
-
-            return Ok(Self {
-                z32: public_key.to_z32(),
-                public_key,
-            });
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        // Validate string is a valid Pkarr public key.
+        // Validate string is a valid Pkarr public key
+        // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
+        // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
+        // We avoid pkarr as a dependency by doing writing our own validation instead.
         if s.len() != 52 {
             return Err("Validation Error: the string is not 52 utf chars".to_string());
         }
 
-        #[cfg(target_arch = "wasm32")]
         match decode(Alphabet::Z, s) {
             Some(_) => (),
             None => return Err("Validation Error: invalid public key encoding".to_string()),
         };
 
-        #[cfg(target_arch = "wasm32")]
-        return Ok(Self { z32: s.to_string() });
+        Ok(Self { z32: s.to_string() })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn try_from(s: &str) -> Result<Self, String> {
+        let public_key = pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
+
+        Ok(Self {
+            z32: public_key.to_z32(),
+            public_key,
+        })
     }
 
     pub fn to_uri(&self) -> ParsedUri {
