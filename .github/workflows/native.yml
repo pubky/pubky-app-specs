@@ -23,3 +23,13 @@ jobs:
 
       - name: Run native tests
         run: cargo nextest run --no-fail-fast
+
+  msrv:
+    name: MSRV (1.89)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89
+      - uses: Swatinem/rust-cache@v2
+      - name: Check MSRV compatibility
+        run: cargo check --all-features
