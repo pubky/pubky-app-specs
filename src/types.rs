@@ -1,4 +1,3 @@
-#[cfg(target_arch = "wasm32")]
 use base32::{decode, Alphabet};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -31,8 +30,7 @@ impl PartialSchema for PubkyId {
 impl ToSchema for PubkyId {}
 
 impl PubkyId {
-    #[cfg(target_arch = "wasm32")]
-    pub fn try_from(s: &str) -> Result<Self, String> {
+    fn validate(s: &str) -> Result<(), String> {
         // Validate string is a valid Pkarr public key
         // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
         // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
@@ -42,15 +40,22 @@ impl PubkyId {
         }
 
         match decode(Alphabet::Z, s) {
-            Some(_) => (),
-            None => return Err("Validation Error: invalid public key encoding".to_string()),
-        };
+            Some(_) => Ok(()),
+            None => Err("Validation Error: invalid public key encoding".to_string()),
+        }
+    }
 
+    #[cfg(target_arch = "wasm32")]
+    pub fn try_from(s: &str) -> Result<Self, String> {
+        Self::validate(s)?;
         Ok(Self { z32: s.to_string() })
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn try_from(s: &str) -> Result<Self, String> {
+        // Include the stricter wasm32-specific validation for consistency
+        Self::validate(s)?;
+
         let public_key =
             pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
 
@@ -153,8 +158,6 @@ mod tests {
         let invalid_key = "short";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
-
-        #[cfg(target_arch = "wasm32")]
         assert_eq!(
             result.unwrap_err(),
             "Validation Error: the string is not 52 utf chars"
@@ -167,8 +170,6 @@ mod tests {
         let invalid_key = "0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0";
         let result = PubkyId::try_from(invalid_key);
         assert!(result.is_err());
-
-        #[cfg(target_arch = "wasm32")]
         assert_eq!(
             result.unwrap_err(),
             "Validation Error: invalid public key encoding"
