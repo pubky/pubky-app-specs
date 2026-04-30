@@ -34,6 +34,6 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - name: Check MSRV compatibility (native)
-        run: cargo check --all-features
+        run: cargo check --locked --all-features
       - name: Check MSRV compatibility (wasm32)
-        run: cargo check --all-features --target wasm32-unknown-unknown
+        run: cargo check --locked --all-features --target wasm32-unknown-unknown
