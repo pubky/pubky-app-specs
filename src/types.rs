@@ -268,4 +268,67 @@ mod tests {
 
         assert_eq!(converted_public_key, expected_public_key);
     }
+
+    #[test]
+    fn test_serialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let pubky_id = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&pubky_id).unwrap();
+        // Serde serializes the inner String, so it should be a quoted JSON string
+        assert_eq!(json, format!("\"{}\"", valid_key));
+    }
+
+    #[test]
+    fn test_deserialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON string (quoted)
+        let json = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_from_slice() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON byte slice
+        let json_str = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_slice(json_str.as_bytes()).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length_from_slice() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_slice(json.as_bytes());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_encoding() {
+        // 52 chars but contains invalid z-base-32 character '0'
+        let json = "\"0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let original = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original, deserialized);
+    }
 }
