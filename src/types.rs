@@ -1,23 +1,36 @@
 use base32::{decode, Alphabet};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 use crate::{ParsedUri, Resource};
 
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyId(String);
+#[derive(Clone, Debug, PartialEq)]
+pub struct PubkyId {
+    z32: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    public_key: pubky::PublicKey,
+}
+
+#[cfg(feature = "openapi")]
+impl PartialSchema for PubkyId {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        String::schema()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl ToSchema for PubkyId {}
 
 impl PubkyId {
-    pub fn try_from(s: &str) -> Result<Self, String> {
+    fn validate(s: &str) -> Result<(), String> {
         // Validate string is a valid Pkarr public key
         // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
         // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
@@ -27,11 +40,29 @@ impl PubkyId {
         }
 
         match decode(Alphabet::Z, s) {
-            Some(_) => (),
-            None => return Err("Validation Error: invalid public key encoding".to_string()),
-        };
+            Some(_) => Ok(()),
+            None => Err("Validation Error: invalid public key encoding".to_string()),
+        }
+    }
 
-        Ok(PubkyId(s.to_string()))
+    #[cfg(target_arch = "wasm32")]
+    pub fn try_from(s: &str) -> Result<Self, String> {
+        Self::validate(s)?;
+        Ok(Self { z32: s.to_string() })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn try_from(s: &str) -> Result<Self, String> {
+        // Include the stricter wasm32-specific validation for consistency
+        Self::validate(s)?;
+
+        let public_key =
+            pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
+
+        Ok(Self {
+            z32: public_key.to_z32(),
+            public_key,
+        })
     }
 
     pub fn to_uri(&self) -> ParsedUri {
@@ -40,12 +71,24 @@ impl PubkyId {
             resource: Resource::User,
         }
     }
+
+    /// Returns the cached public key.
+    ///
+    /// This is infallible on native targets because the key was validated
+    /// during `PubkyId` construction and cached.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn to_public_key(&self) -> pubky::PublicKey {
+        self.public_key.clone()
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl From<pubky::PublicKey> for PubkyId {
     fn from(pk: pubky::PublicKey) -> Self {
-        Self(pk.to_z32())
+        Self {
+            z32: pk.to_z32(),
+            public_key: pk,
+        }
     }
 }
 
@@ -58,7 +101,7 @@ impl From<pubky::Keypair> for PubkyId {
 
 impl fmt::Display for PubkyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.z32)
     }
 }
 
@@ -66,13 +109,32 @@ impl std::ops::Deref for PubkyId {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.z32
     }
 }
 
 impl AsRef<str> for PubkyId {
     fn as_ref(&self) -> &str {
-        &self.0
+        &self.z32
+    }
+}
+
+impl Serialize for PubkyId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.z32)
+    }
+}
+
+impl<'de> Deserialize<'de> for PubkyId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PubkyId::try_from(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -193,5 +255,80 @@ mod tests {
         // Both should produce the same PubkyId
         assert_eq!(pubky_id_from_keypair, pubky_id_from_public_key);
         assert_eq!(pubky_id_from_keypair.as_ref(), expected_z32);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_to_public_key_is_infallible_for_valid_pubky_id() {
+        let keypair = Keypair::random();
+        let expected_public_key = keypair.public_key();
+        let pubky_id = PubkyId::from(expected_public_key.clone());
+
+        let converted_public_key = pubky_id.to_public_key();
+
+        assert_eq!(converted_public_key, expected_public_key);
+    }
+
+    #[test]
+    fn test_serialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let pubky_id = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&pubky_id).unwrap();
+        // Serde serializes the inner String, so it should be a quoted JSON string
+        assert_eq!(json, format!("\"{}\"", valid_key));
+    }
+
+    #[test]
+    fn test_deserialization() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON string (quoted)
+        let json = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_from_slice() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        // Deserialize from a JSON byte slice
+        let json_str = format!("\"{}\"", valid_key);
+        let pubky_id: PubkyId = serde_json::from_slice(json_str.as_bytes()).unwrap();
+
+        assert_eq!(pubky_id.as_ref(), valid_key);
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_length_from_slice() {
+        let json = "\"short\"";
+        let result: Result<PubkyId, _> = serde_json::from_slice(json.as_bytes());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialization_invalid_encoding() {
+        // 52 chars but contains invalid z-base-32 character '0'
+        let json = "\"0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd0\"";
+        let result: Result<PubkyId, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        let valid_key = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let original = PubkyId::try_from(valid_key).unwrap();
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: PubkyId = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original, deserialized);
     }
 }

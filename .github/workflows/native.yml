@@ -21,6 +21,9 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Check OpenAPI feature
+        run: cargo check --features openapi
+
       - name: Run native tests
         run: cargo nextest run --no-fail-fast
 
