@@ -266,9 +266,14 @@ impl Validatable for PubkyAppPost {
         // Reject posts whose kind couldn't be matched against any known variant.
         // `Unknown` is a serde catch-all for forwards-compat: older binaries can
         // deserialize events from newer clients without panicking, but such posts
-        // must never pass spec validation.
+        // must never pass spec validation. Same reasoning for `embed.kind`.
         if matches!(self.kind, PubkyAppPostKind::Unknown) {
             return Err("Validation Error: post kind is unknown".into());
+        }
+        if let Some(ref embed) = self.embed {
+            if matches!(embed.kind, PubkyAppPostKind::Unknown) {
+                return Err("Validation Error: embed kind is unknown".into());
+            }
         }
 
         // Validate content length based on post kind
@@ -1003,6 +1008,49 @@ mod tests {
         // Unknown is exclusively a serde catch-all.
         assert!(PubkyAppPostKind::from_str("foobar").is_err());
         assert!(PubkyAppPostKind::from_str("collection").is_err());
+    }
+
+    #[test]
+    fn test_post_deserializes_embed_with_unknown_kind_as_unknown() {
+        // Embed kinds get the same forwards-compat treatment as top-level kinds:
+        // an unrecognized embed.kind deserializes to Unknown rather than failing.
+        let post_json = r#"
+        {
+            "content": "x",
+            "kind": "short",
+            "parent": null,
+            "embed": {"kind": "totally-new-embed-kind", "uri": "pubky://x/pub/pubky.app/posts/01"},
+            "attachments": null
+        }
+        "#;
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.embed.unwrap().kind, PubkyAppPostKind::Unknown);
+    }
+
+    #[test]
+    fn test_postkind_unknown_embed_kind_rejected_by_validator() {
+        // Counterpart to `test_postkind_unknown_rejected_by_validator`:
+        // an Unknown embed.kind also fails validation, so the spec stays as
+        // strict as before for posts that reach validation.
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Short,
+            parent: None,
+            embed: Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Unknown,
+                uri: "pubky://x/pub/pubky.app/posts/01".to_string(),
+            }),
+            attachments: None,
+        };
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_lowercase();
+        assert!(
+            err.contains("embed") && err.contains("unknown"),
+            "validator should mention 'embed' and 'unknown' in the error, got: {}",
+            err
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
