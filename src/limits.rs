@@ -57,6 +57,12 @@ pub struct ValidationLimits {
     pub post_attachment_url_max_length: usize,
     /// Allowed protocols for attachment URLs.
     pub post_allowed_attachment_protocols: &'static [&'static str],
+    /// Maximum character count for the JSON envelope content of a Collection post.
+    pub collection_content_max_length: usize,
+    /// Maximum number of items (attachment URIs) per Collection.
+    pub collection_items_max_count: usize,
+    /// Maximum character count for a single Collection item URI.
+    pub collection_item_uri_max_length: usize,
     /// Minimum file name length in characters.
     pub file_name_min_length: usize,
     /// Maximum file name length in characters.
@@ -87,6 +93,9 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     post_attachments_max_count: 4,
     post_attachment_url_max_length: 200,
     post_allowed_attachment_protocols: &["pubky", "http", "https"],
+    collection_content_max_length: 2_000,
+    collection_items_max_count: 100,
+    collection_item_uri_max_length: 300,
     file_name_min_length: 1,
     file_name_max_length: 255,
     file_src_max_length: 1024,

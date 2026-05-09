@@ -33,6 +33,7 @@ pub enum PubkyAppPostKind {
     Video,
     Link,
     File,
+    Collection,
     #[serde(other)]
     Unknown,
 }
@@ -58,6 +59,7 @@ impl FromStr for PubkyAppPostKind {
             "video" => Ok(PubkyAppPostKind::Video),
             "link" => Ok(PubkyAppPostKind::Link),
             "file" => Ok(PubkyAppPostKind::File),
+            "collection" => Ok(PubkyAppPostKind::Collection),
             _ => Err(format!("Invalid content kind: {}", s)),
         }
     }
@@ -91,6 +93,7 @@ impl PubkyAppPostEmbed {
             PubkyAppPostKind::Video => "Video".to_string(),
             PubkyAppPostKind::Link => "Link".to_string(),
             PubkyAppPostKind::File => "File".to_string(),
+            PubkyAppPostKind::Collection => "Collection".to_string(),
             PubkyAppPostKind::Unknown => "Unknown".to_string(),
         }
         // pub fn kind(&self) -> PubkyAppPostKind {
@@ -101,6 +104,25 @@ impl PubkyAppPostEmbed {
     pub fn uri(&self) -> String {
         self.uri.clone()
     }
+}
+
+/// Typed JSON envelope stored in `PubkyAppPost::content` when `kind == Collection`.
+///
+/// A collection post curates an ordered list of other posts (URIs in `attachments`)
+/// under a `name` and optional `description`. The envelope is parsed and validated
+/// by the spec but never re-serialized as a top-level homeserver object.
+///
+/// Forward-compat: `#[serde(deny_unknown_fields)]` is intentionally NOT used so
+/// future minor versions can add fields (e.g. `cover_image`) without breaking
+/// older parsers. New fields must be additive and ignorable.
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub struct PubkyAppCollectionContent {
+    /// Display name of the collection (1..=100 unicode scalars after trim).
+    pub name: String,
+    /// Optional human-readable description (..=500 unicode scalars).
+    pub description: Option<String>,
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -143,6 +165,7 @@ impl PubkyAppPost {
             PubkyAppPostKind::Video => "Video".to_string(),
             PubkyAppPostKind::Link => "Link".to_string(),
             PubkyAppPostKind::File => "File".to_string(),
+            PubkyAppPostKind::Collection => "Collection".to_string(),
             PubkyAppPostKind::Unknown => "Unknown".to_string(),
         }
         // pub fn kind(&self) -> PubkyAppPostKind {
@@ -276,6 +299,72 @@ impl Validatable for PubkyAppPost {
             }
         }
 
+        // Collection posts use a typed JSON envelope in `content` and lift the
+        // attachment caps. They forbid `parent` and `embed`. Branch out before the
+        // legacy kind-switch so the existing per-kind tuple stays untouched.
+        if matches!(self.kind, PubkyAppPostKind::Collection) {
+            if self.parent.is_some() || self.embed.is_some() {
+                return Err(
+                    "Validation Error: Collection posts cannot have parent or embed".into(),
+                );
+            }
+            if self.content.chars().count() > VALIDATION_LIMITS.collection_content_max_length {
+                return Err(format!(
+                    "Validation Error: Collection content exceeds max length {}",
+                    VALIDATION_LIMITS.collection_content_max_length
+                ));
+            }
+            let envelope: PubkyAppCollectionContent = serde_json::from_str(&self.content)
+                .map_err(|e| {
+                    format!(
+                        "Validation Error: Collection content must be a valid JSON envelope: {}",
+                        e
+                    )
+                })?;
+            let name_chars = envelope.name.trim().chars().count();
+            if !(1..=100).contains(&name_chars) {
+                return Err(
+                    "Validation Error: Collection name must be 1..=100 characters".into(),
+                );
+            }
+            if let Some(desc) = &envelope.description {
+                if desc.chars().count() > 500 {
+                    return Err(
+                        "Validation Error: Collection description exceeds 500 characters".into(),
+                    );
+                }
+            }
+            if let Some(attachments) = &self.attachments {
+                if attachments.len() > VALIDATION_LIMITS.collection_items_max_count {
+                    return Err(format!(
+                        "Validation Error: Collection cannot have more than {} items",
+                        VALIDATION_LIMITS.collection_items_max_count
+                    ));
+                }
+                for uri in attachments {
+                    if uri.chars().count() > VALIDATION_LIMITS.collection_item_uri_max_length {
+                        return Err(format!(
+                            "Validation Error: Collection item URI exceeds {} characters",
+                            VALIDATION_LIMITS.collection_item_uri_max_length
+                        ));
+                    }
+                    let parsed = Url::parse(uri).map_err(|_| {
+                        format!("Validation Error: Invalid attachment URL: {}", uri)
+                    })?;
+                    if !VALIDATION_LIMITS
+                        .post_allowed_attachment_protocols
+                        .contains(&parsed.scheme())
+                    {
+                        return Err(format!(
+                            "Validation Error: Disallowed attachment protocol: {}",
+                            parsed.scheme()
+                        ));
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         // Validate content length based on post kind
         let (max_length, kind_name) = match self.kind {
             PubkyAppPostKind::Short => (VALIDATION_LIMITS.post_short_content_max_length, "Short"),
@@ -287,7 +376,9 @@ impl Validatable for PubkyAppPost {
                 VALIDATION_LIMITS.post_short_content_max_length,
                 "Image/Video/Link/File",
             ),
-            PubkyAppPostKind::Unknown => unreachable!("guarded by early-return above"),
+            PubkyAppPostKind::Collection | PubkyAppPostKind::Unknown => {
+                unreachable!("guarded by early-return above")
+            }
         };
 
         if self.content.chars().count() > max_length {
@@ -1007,7 +1098,7 @@ mod tests {
         // FromStr stays strict: it does NOT produce Unknown for arbitrary input.
         // Unknown is exclusively a serde catch-all.
         assert!(PubkyAppPostKind::from_str("foobar").is_err());
-        assert!(PubkyAppPostKind::from_str("collection").is_err());
+        assert!(PubkyAppPostKind::from_str("totally-new-kind").is_err());
     }
 
     #[test]
@@ -1064,5 +1155,281 @@ mod tests {
             attachments: None,
         };
         assert_eq!(post.kind(), "Unknown");
+    }
+
+    // ----- v0.5.0 Collection variant + PubkyAppCollectionContent envelope -----
+
+    fn collection_envelope_json(name: &str, description: Option<&str>) -> String {
+        match description {
+            Some(d) => serde_json::to_string(&PubkyAppCollectionContent {
+                name: name.to_string(),
+                description: Some(d.to_string()),
+            })
+            .unwrap(),
+            None => serde_json::to_string(&PubkyAppCollectionContent {
+                name: name.to_string(),
+                description: None,
+            })
+            .unwrap(),
+        }
+    }
+
+    fn make_collection_post(
+        name: &str,
+        description: Option<&str>,
+        attachments: Option<Vec<String>>,
+    ) -> PubkyAppPost {
+        PubkyAppPost::new(
+            collection_envelope_json(name, description),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            attachments,
+        )
+    }
+
+    #[test]
+    fn test_collection_post_roundtrip_valid() {
+        let post = make_collection_post(
+            "AI papers",
+            Some("Best stuff"),
+            Some(vec![
+                "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
+                "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B".to_string(),
+                "pubky://userC/pub/pubky.app/posts/0034A0X7NJ52C".to_string(),
+            ]),
+        );
+        let id = post.create_id();
+        let blob = serde_json::to_vec(&post).unwrap();
+        let parsed = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
+        assert_eq!(parsed.kind, PubkyAppPostKind::Collection);
+        assert_eq!(parsed.attachments.as_ref().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_collection_post_rejects_malformed_envelope() {
+        let post = PubkyAppPost::new(
+            "this is not JSON".to_string(),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("JSON envelope"),
+            "expected JSON envelope error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_collection_post_rejects_empty_name() {
+        let post = make_collection_post("", None, None);
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("name"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_oversized_name() {
+        // 101 grapheme-ish chars; mix in emoji to confirm we count by unicode scalars, not bytes.
+        let oversized = "a".repeat(99) + "🚀🚀";
+        assert_eq!(oversized.chars().count(), 101);
+        let post = make_collection_post(&oversized, None, None);
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("name"));
+    }
+
+    #[test]
+    fn test_collection_post_accepts_max_name() {
+        let exactly_100 = "a".repeat(100);
+        assert_eq!(exactly_100.chars().count(), 100);
+        let post = make_collection_post(&exactly_100, None, None);
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_oversized_description() {
+        let too_long = "a".repeat(501);
+        let post = make_collection_post("X", Some(&too_long), None);
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("description"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_parent() {
+        let post = PubkyAppPost::new(
+            collection_envelope_json("X", None),
+            PubkyAppPostKind::Collection,
+            Some("pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string()),
+            None,
+            None,
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("parent or embed"),
+            "expected parent-or-embed error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_collection_post_rejects_embed() {
+        let post = PubkyAppPost::new(
+            collection_envelope_json("X", None),
+            PubkyAppPostKind::Collection,
+            None,
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Short,
+                uri: "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
+            }),
+            None,
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("parent or embed"));
+    }
+
+    #[test]
+    fn test_collection_post_accepts_100_attachments() {
+        let attachments: Vec<String> = (0..100)
+            .map(|i| format!("pubky://userA/pub/pubky.app/posts/{:013}", i))
+            .collect();
+        let post = make_collection_post("Big list", None, Some(attachments));
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_101_attachments() {
+        let attachments: Vec<String> = (0..101)
+            .map(|i| format!("pubky://userA/pub/pubky.app/posts/{:013}", i))
+            .collect();
+        let post = make_collection_post("Too big", None, Some(attachments));
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("100 items"));
+    }
+
+    #[test]
+    fn test_collection_post_accepts_300_char_uri() {
+        // Build a pubky URI with the user host + a long path filling out to exactly 300 chars.
+        let prefix = "pubky://userA/pub/pubky.app/posts/";
+        let pad = "x".repeat(300 - prefix.chars().count());
+        let uri = format!("{}{}", prefix, pad);
+        assert_eq!(uri.chars().count(), 300);
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_301_char_uri() {
+        let prefix = "pubky://userA/pub/pubky.app/posts/";
+        let pad = "x".repeat(301 - prefix.chars().count());
+        let uri = format!("{}{}", prefix, pad);
+        assert_eq!(uri.chars().count(), 301);
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("URI exceeds"));
+    }
+
+    #[test]
+    fn test_postkind_collection_display_lowercase() {
+        assert_eq!(PubkyAppPostKind::Collection.to_string(), "collection");
+    }
+
+    #[test]
+    fn test_postkind_fromstr_collection() {
+        assert_eq!(
+            PubkyAppPostKind::from_str("collection").unwrap(),
+            PubkyAppPostKind::Collection
+        );
+    }
+
+    #[test]
+    fn test_collection_post_accepts_zero_items() {
+        // Curators may create a draft and add items later via edits.
+        let post = make_collection_post("Drafts", None, None);
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_envelope_tolerates_extra_fields() {
+        // Forward-compat: the envelope intentionally does NOT use deny_unknown_fields,
+        // so future minor versions can add fields like `cover_image` without breaking
+        // older parsers. This test locks in that behavior.
+        let envelope_json = r#"{"name":"X","description":"Y","cover_image":"https://example.com/x.png"}"#;
+        let post = PubkyAppPost::new(
+            envelope_json.to_string(),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        assert!(
+            post.validate(Some(&id)).is_ok(),
+            "extra envelope fields must be tolerated"
+        );
+    }
+
+    #[test]
+    fn test_collection_post_rejects_disallowed_attachment_protocol() {
+        let post = make_collection_post(
+            "X",
+            None,
+            Some(vec!["ftp://example.com/file".to_string()]),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Disallowed attachment protocol"));
+    }
+
+    #[test]
+    fn test_existing_post_kinds_unchanged_with_collection() {
+        // Regression: each of the six legacy lowercase kinds still round-trips after
+        // adding Collection. Catches accidental ordering / serde changes.
+        for s in ["short", "long", "image", "video", "link", "file"] {
+            let json = format!(
+                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
+                s
+            );
+            let post: PubkyAppPost = serde_json::from_str(&json).unwrap();
+            let re = serde_json::to_value(&post.kind).unwrap();
+            assert_eq!(re.as_str(), Some(s), "kind={} did not round-trip", s);
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_postkind_collection_wasm_getter() {
+        let post = PubkyAppPost {
+            content: collection_envelope_json("X", None),
+            kind: PubkyAppPostKind::Collection,
+            parent: None,
+            embed: None,
+            attachments: None,
+        };
+        assert_eq!(post.kind(), "Collection");
     }
 }
