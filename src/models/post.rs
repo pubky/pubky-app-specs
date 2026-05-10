@@ -119,9 +119,12 @@ impl PubkyAppPostEmbed {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkyAppCollectionContent {
-    /// Display name of the collection (1..=100 unicode scalars after trim).
+    /// Display name of the collection. Length bounded by
+    /// `VALIDATION_LIMITS.collection_name_{min,max}_length` (in unicode
+    /// scalars, after trim).
     pub name: String,
-    /// Optional human-readable description (..=500 unicode scalars).
+    /// Optional human-readable description. Length bounded by
+    /// `VALIDATION_LIMITS.collection_description_max_length` (unicode scalars).
     pub description: Option<String>,
 }
 
@@ -322,14 +325,20 @@ impl Validatable for PubkyAppPost {
                     )
                 })?;
             let name_chars = envelope.name.trim().chars().count();
-            if !(1..=100).contains(&name_chars) {
-                return Err("Validation Error: Collection name must be 1..=100 characters".into());
+            let name_min = VALIDATION_LIMITS.collection_name_min_length;
+            let name_max = VALIDATION_LIMITS.collection_name_max_length;
+            if !(name_min..=name_max).contains(&name_chars) {
+                return Err(format!(
+                    "Validation Error: Collection name must be {}..={} characters",
+                    name_min, name_max
+                ));
             }
             if let Some(desc) = &envelope.description {
-                if desc.chars().count() > 500 {
-                    return Err(
-                        "Validation Error: Collection description exceeds 500 characters".into(),
-                    );
+                if desc.chars().count() > VALIDATION_LIMITS.collection_description_max_length {
+                    return Err(format!(
+                        "Validation Error: Collection description exceeds {} characters",
+                        VALIDATION_LIMITS.collection_description_max_length
+                    ));
                 }
             }
             if let Some(attachments) = &self.attachments {
