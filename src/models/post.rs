@@ -314,8 +314,8 @@ impl Validatable for PubkyAppPost {
                     VALIDATION_LIMITS.collection_content_max_length
                 ));
             }
-            let envelope: PubkyAppCollectionContent = serde_json::from_str(&self.content)
-                .map_err(|e| {
+            let envelope: PubkyAppCollectionContent =
+                serde_json::from_str(&self.content).map_err(|e| {
                     format!(
                         "Validation Error: Collection content must be a valid JSON envelope: {}",
                         e
@@ -323,9 +323,7 @@ impl Validatable for PubkyAppPost {
                 })?;
             let name_chars = envelope.name.trim().chars().count();
             if !(1..=100).contains(&name_chars) {
-                return Err(
-                    "Validation Error: Collection name must be 1..=100 characters".into(),
-                );
+                return Err("Validation Error: Collection name must be 1..=100 characters".into());
             }
             if let Some(desc) = &envelope.description {
                 if desc.chars().count() > 500 {
@@ -1377,7 +1375,8 @@ mod tests {
         // Forward-compat: the envelope intentionally does NOT use deny_unknown_fields,
         // so future minor versions can add fields like `cover_image` without breaking
         // older parsers. This test locks in that behavior.
-        let envelope_json = r#"{"name":"X","description":"Y","cover_image":"https://example.com/x.png"}"#;
+        let envelope_json =
+            r#"{"name":"X","description":"Y","cover_image":"https://example.com/x.png"}"#;
         let post = PubkyAppPost::new(
             envelope_json.to_string(),
             PubkyAppPostKind::Collection,
@@ -1394,15 +1393,14 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_disallowed_attachment_protocol() {
-        let post = make_collection_post(
-            "X",
-            None,
-            Some(vec!["ftp://example.com/file".to_string()]),
-        );
+        let post =
+            make_collection_post("X", None, Some(vec!["ftp://example.com/file".to_string()]));
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Disallowed attachment protocol"));
+        assert!(result
+            .unwrap_err()
+            .contains("Disallowed attachment protocol"));
     }
 
     #[test]
