@@ -106,7 +106,7 @@ impl fmt::Display for PubkyId {
 }
 
 impl std::ops::Deref for PubkyId {
-    type Target = String;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         &self.z32
