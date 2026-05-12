@@ -34,6 +34,11 @@ pub fn sanitize_url(input: &str) -> String {
 
 /// Validates structural correctness of a Crockford Base32-encoded ID (13
 /// characters, decodes to 8 bytes). Returns the decoded bytes on success.
+///
+/// # Errors
+///
+/// This function will return an error if `id` is not exactly 13 characters
+/// long, is not valid Crockford Base32, or does not decode to exactly 8 bytes.
 pub fn validate_crockford_id(id: &str) -> Result<[u8; 8], String> {
     if id.len() != 13 {
         return Err("Validation Error: Invalid ID length: must be 13 characters".into());
@@ -68,5 +73,4 @@ mod tests {
     fn invalid_id_fails() {
         assert!(validate_crockford_id("UUUUUUUUUUUUU").is_err());
     }
-
 }
