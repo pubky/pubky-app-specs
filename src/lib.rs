@@ -9,6 +9,8 @@ mod utils;
 
 // Re-export constants
 pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
+// Re-export common utilities
+pub use common::validate_crockford_id;
 #[doc(inline)]
 pub use limits::*;
 // Re-export domain types

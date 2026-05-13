@@ -1,5 +1,5 @@
-use crate::common::timestamp;
-use base32::{decode, encode, Alphabet};
+use crate::common::{timestamp, validate_crockford_id};
+use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::de::DeserializeOwned;
 
@@ -19,21 +19,11 @@ pub trait TimestampId {
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
     /// 13 characters long, and represents a reasonable timestamp.
     fn validate_id(&self, id: &str) -> Result<(), String> {
-        // Ensure ID is 13 characters long
-        if id.len() != 13 {
-            return Err("Validation Error: Invalid ID length: must be 13 characters".into());
-        }
-
-        // Decode the Crockford Base32-encoded ID
-        let decoded_bytes =
-            decode(Alphabet::Crockford, id).ok_or("Failed to decode Crockford Base32 ID")?;
-
-        if decoded_bytes.len() != 8 {
-            return Err("Validation Error: Invalid ID length after decoding".into());
-        }
+        // Structural validation (length, encoding, decoded size)
+        let decoded_bytes = validate_crockford_id(id)?;
 
         // Convert the decoded bytes to a timestamp in microseconds
-        let timestamp_micros = i64::from_be_bytes(decoded_bytes.try_into().unwrap());
+        let timestamp_micros = i64::from_be_bytes(decoded_bytes);
 
         // Get current time in microseconds
         let now_micros = timestamp();
