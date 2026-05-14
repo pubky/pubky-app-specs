@@ -1297,6 +1297,47 @@ mod tests {
     }
 
     #[test]
+    fn test_collection_post_accepts_empty_description() {
+        // Explicit empty-string description is valid (the field is optional and
+        // 0..=500 chars allowed).
+        let post = make_collection_post("X", Some(""), None);
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_accepts_max_description() {
+        let exactly_500 = "a".repeat(500);
+        assert_eq!(exactly_500.chars().count(), 500);
+        let post = make_collection_post("X", Some(&exactly_500), None);
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_missing_name() {
+        // Envelope JSON without a `name` field at all (description-only).
+        // Distinct from `test_collection_post_rejects_empty_name`, which sends
+        // an empty string; this sends a missing key entirely.
+        let envelope = r#"{ "description": "no name here" }"#.to_string();
+        let post = PubkyAppPost::new(
+            envelope,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("name") || err.to_lowercase().contains("missing"),
+            "expected name-required error, got: {err}"
+        );
+    }
+
+    #[test]
     fn test_collection_post_rejects_parent() {
         let post = PubkyAppPost::new(
             collection_envelope_json("X", None),
@@ -1427,6 +1468,39 @@ mod tests {
     fn test_collection_post_rejects_disallowed_attachment_protocol() {
         let post =
             make_collection_post("X", None, Some(vec!["ftp://example.com/file".to_string()]));
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Disallowed attachment protocol"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_javascript_protocol() {
+        // XSS-vector defense: never accept `javascript:` URIs as attachments,
+        // even though they technically parse as URLs.
+        let post = make_collection_post(
+            "X",
+            None,
+            Some(vec!["javascript:alert(1)".to_string()]),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Disallowed attachment protocol"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_data_uri_protocol() {
+        // Same XSS-vector defense for `data:` URIs.
+        let post = make_collection_post(
+            "X",
+            None,
+            Some(vec!["data:text/plain,hello".to_string()]),
+        );
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
