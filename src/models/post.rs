@@ -1343,13 +1343,7 @@ mod tests {
         // Distinct from `test_collection_post_rejects_empty_name`, which sends
         // an empty string; this sends a missing key entirely.
         let envelope = r#"{ "description": "no name here" }"#.to_string();
-        let post = PubkyAppPost::new(
-            envelope,
-            PubkyAppPostKind::Collection,
-            None,
-            None,
-            None,
-        );
+        let post = PubkyAppPost::new(envelope, PubkyAppPostKind::Collection, None, None, None);
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
@@ -1503,11 +1497,7 @@ mod tests {
     fn test_collection_post_rejects_javascript_protocol() {
         // XSS-vector defense: never accept `javascript:` URIs as attachments,
         // even though they technically parse as URLs.
-        let post = make_collection_post(
-            "X",
-            None,
-            Some(vec!["javascript:alert(1)".to_string()]),
-        );
+        let post = make_collection_post("X", None, Some(vec!["javascript:alert(1)".to_string()]));
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
@@ -1519,11 +1509,7 @@ mod tests {
     #[test]
     fn test_collection_post_rejects_data_uri_protocol() {
         // Same XSS-vector defense for `data:` URIs.
-        let post = make_collection_post(
-            "X",
-            None,
-            Some(vec!["data:text/plain,hello".to_string()]),
-        );
+        let post = make_collection_post("X", None, Some(vec!["data:text/plain,hello".to_string()]));
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
