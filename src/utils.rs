@@ -1,8 +1,8 @@
 use crate::{
     constants::{APP_PATH, PROTOCOL, PUBLIC_PATH},
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppMute,
-    PubkyAppPost, PubkyAppTag, PubkyAppUser,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppCollectionPointer, PubkyAppFeed, PubkyAppFile,
+    PubkyAppFollow, PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -81,4 +81,23 @@ pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
 pub fn last_read_uri_builder(author_id: String) -> String {
     let last_read_path = [PUBLIC_PATH, APP_PATH, "last_read"].concat();
     [PROTOCOL, &author_id, &last_read_path].concat()
+}
+
+/// Builds a Collection-Pointer URI of the form
+/// `"pubky://<follower_id>/pub/pubky.app/collections/<target_owner_id>/<target_post_id>"`.
+///
+/// Works for both own-pointers (`target_owner_id == follower_id`) and
+/// follow-pointers (`target_owner_id != follower_id`). The role is inferred
+/// at read time by callers comparing the URI host against the path's owner.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = collectionPointerUriBuilder)
+)]
+pub fn collection_pointer_uri_builder(
+    follower_id: String,
+    target_owner_id: String,
+    target_post_id: String,
+) -> String {
+    let path = PubkyAppCollectionPointer::create_path(&target_owner_id, &target_post_id);
+    [PROTOCOL, &follower_id, &path].concat()
 }

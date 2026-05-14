@@ -2,6 +2,7 @@ use crate::{traits::Validatable, ParsedUri, Resource};
 
 pub mod blob;
 pub mod bookmark;
+pub mod collection_pointer;
 pub mod feed;
 pub mod file;
 pub mod follow;
@@ -12,8 +13,8 @@ pub mod tag;
 pub mod user;
 
 use super::{
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
-    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppCollectionPointer, PubkyAppFeed, PubkyAppFile,
+    PubkyAppFollow, PubkyAppLastRead, PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
 };
 
 /// A unified enum wrapping all PubkyApp objects.
@@ -29,6 +30,7 @@ pub enum PubkyAppObject {
     Blob(blob::PubkyAppBlob),
     Feed(feed::PubkyAppFeed),
     LastRead(last_read::PubkyAppLastRead),
+    CollectionPointer(collection_pointer::PubkyAppCollectionPointer),
 }
 
 impl PubkyAppObject {
@@ -84,6 +86,14 @@ impl PubkyAppObject {
             Resource::LastRead => {
                 let last_read = <PubkyAppLastRead as Validatable>::try_from(blob, "")?;
                 Ok(PubkyAppObject::LastRead(last_read))
+            }
+            Resource::CollectionPointer { owner: _, post_id } => {
+                // The owner is discarded at the spec layer — the body doesn't
+                // carry it — but stays available to consumers (e.g. the Nexus
+                // watcher) via the `Resource` variant. We hand the post_id
+                // segment to the validator as the canonical id.
+                let pointer = <PubkyAppCollectionPointer as Validatable>::try_from(blob, post_id)?;
+                Ok(PubkyAppObject::CollectionPointer(pointer))
             }
             Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),
         }
