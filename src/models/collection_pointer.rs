@@ -158,4 +158,69 @@ mod tests {
             <PubkyAppCollectionPointer as Validatable>::try_from(json.as_bytes(), POST_ID).unwrap();
         assert_eq!(p.created_at, 1627849723);
     }
+
+    // ---------- WASM-target tests ----------
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_create_path_wasm_static() {
+        // WASM-bound static path builder mirrors the Rust `create_path`.
+        let path = PubkyAppCollectionPointer::create_path_wasm(OWNER, POST_ID);
+        assert_eq!(
+            path,
+            "/pub/pubky.app/collections/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/0034A0X7NJ52G"
+        );
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_create_own_collection_pointer_wasm_builder() {
+        // Builder method that fills owner = self.pubky_id implicitly.
+        use crate::PubkySpecsBuilder;
+        let builder =
+            PubkySpecsBuilder::new(OWNER.to_string()).expect("Failed to construct builder");
+        let result = builder
+            .create_own_collection_pointer(POST_ID.to_string())
+            .expect("createOwnCollectionPointer should succeed");
+
+        let pointer = result.collection_pointer();
+        let now = timestamp();
+        assert!(pointer.created_at <= now && pointer.created_at >= now - 1_000_000);
+
+        let meta = result.meta();
+        let expected_path = format!("/pub/pubky.app/collections/{OWNER}/{POST_ID}");
+        assert_eq!(meta.path(), expected_path);
+        // Composite id mirrors Resource::CollectionPointer.id() in uri_parser.
+        assert_eq!(meta.id(), format!("{OWNER}/{POST_ID}"));
+        // URL host is the builder's own pubky_id; for an own-pointer it
+        // matches the path's owner segment (which is the role-inference
+        // invariant tested in models/mod.rs).
+        let expected_url = format!("pubky://{OWNER}{expected_path}");
+        assert_eq!(meta.url(), expected_url);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_create_followed_collection_pointer_wasm_builder() {
+        // Builder method that takes an explicit target owner. URI host is
+        // the builder's own pubky_id (the follower); path's owner segment
+        // is the target's. owner != user_id ⇒ follow-pointer.
+        use crate::PubkySpecsBuilder;
+        let follower = OWNER;
+        let target_owner = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let builder =
+            PubkySpecsBuilder::new(follower.to_string()).expect("Failed to construct builder");
+        let result = builder
+            .create_followed_collection_pointer(target_owner.to_string(), POST_ID.to_string())
+            .expect("createFollowedCollectionPointer should succeed");
+
+        let meta = result.meta();
+        let expected_path = format!("/pub/pubky.app/collections/{target_owner}/{POST_ID}");
+        assert_eq!(meta.path(), expected_path);
+        // URL host = follower (builder's own), not the target.
+        let expected_url = format!("pubky://{follower}{expected_path}");
+        assert_eq!(meta.url(), expected_url);
+        // Composite id reflects the path's <owner>/<post_id> segments.
+        assert_eq!(meta.id(), format!("{target_owner}/{POST_ID}"));
+    }
 }
