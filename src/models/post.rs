@@ -124,6 +124,14 @@ impl PubkyAppPostEmbed {
 /// under a `name` and optional `description`. The envelope is parsed and validated
 /// by the spec but never re-serialized as a top-level homeserver object.
 ///
+/// **Construction**: this struct is deserialized from the post's `content` JSON
+/// envelope during validation and is **not** intended to be constructed by
+/// callers directly. It is re-exported publicly (via `lib.rs`) so SDK consumers
+/// can inspect the envelope shape (OpenAPI schema, type definitions), but the
+/// authoritative way to produce a Collection post is to author a `PubkyAppPost`
+/// with `kind: Collection` and a `content` string that JSON-parses into this
+/// shape.
+///
 /// Forward-compat: `#[serde(deny_unknown_fields)]` is intentionally NOT used so
 /// future minor versions can add fields (e.g. `cover_image`) without breaking
 /// older parsers. New fields must be additive and ignorable.
@@ -358,13 +366,22 @@ impl Validatable for PubkyAppPost {
                         VALIDATION_LIMITS.collection_items_max_count
                     ));
                 }
-                for uri in attachments {
+                for (index, uri) in attachments.iter().enumerate() {
                     if uri.chars().count() > VALIDATION_LIMITS.collection_item_uri_max_length {
                         return Err(format!(
                             "Validation Error: Collection item URI exceeds {} characters",
                             VALIDATION_LIMITS.collection_item_uri_max_length
                         ));
                     }
+                    // TODO(pubky-sdk-absolute-uris): `Url::parse` rejects the
+                    // shortened pubky-sdk absolute URI form
+                    // `pubky<pubkey>/pub/<app>/<path>` (no `://` separator),
+                    // even though pubky-core / pubky-sdk treat that form as a
+                    // valid pubky resource. This rejection is systemic across
+                    // pubky-app-specs (tag.rs, bookmark.rs, user.rs, file.rs,
+                    // common.rs, uri_parser.rs all do `Url::parse` the same
+                    // way). Open a follow-up issue to add a normalization
+                    // shim that accepts both forms once Collections lands.
                     let parsed = Url::parse(uri).map_err(|_| {
                         format!("Validation Error: Invalid attachment URL: {}", uri)
                     })?;
@@ -372,9 +389,15 @@ impl Validatable for PubkyAppPost {
                         .post_allowed_attachment_protocols
                         .contains(&parsed.scheme())
                     {
+                        let allowed_protocols = VALIDATION_LIMITS
+                            .post_allowed_attachment_protocols
+                            .iter()
+                            .map(|p| format!("{}://", p))
+                            .collect::<Vec<_>>()
+                            .join(", ");
                         return Err(format!(
-                            "Validation Error: Disallowed attachment protocol: {}",
-                            parsed.scheme()
+                            "Validation Error: Collection attachment URL at index {} uses disallowed protocol '{}'; must use one of the allowed protocols: {}",
+                            index, parsed.scheme(), allowed_protocols
                         ));
                     }
                 }
@@ -1473,7 +1496,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
-            .contains("Disallowed attachment protocol"));
+            .contains("must use one of the allowed protocols"));
     }
 
     #[test]
@@ -1490,7 +1513,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
-            .contains("Disallowed attachment protocol"));
+            .contains("must use one of the allowed protocols"));
     }
 
     #[test]
@@ -1506,7 +1529,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
-            .contains("Disallowed attachment protocol"));
+            .contains("must use one of the allowed protocols"));
     }
 
     #[test]
