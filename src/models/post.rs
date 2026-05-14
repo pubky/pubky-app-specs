@@ -33,6 +33,8 @@ pub enum PubkyAppPostKind {
     Video,
     Link,
     File,
+    #[serde(other)]
+    Unknown,
 }
 
 impl fmt::Display for PubkyAppPostKind {
@@ -89,6 +91,7 @@ impl PubkyAppPostEmbed {
             PubkyAppPostKind::Video => "Video".to_string(),
             PubkyAppPostKind::Link => "Link".to_string(),
             PubkyAppPostKind::File => "File".to_string(),
+            PubkyAppPostKind::Unknown => "Unknown".to_string(),
         }
         // pub fn kind(&self) -> PubkyAppPostKind {
         //     self.kind.clone()
@@ -140,6 +143,7 @@ impl PubkyAppPost {
             PubkyAppPostKind::Video => "Video".to_string(),
             PubkyAppPostKind::Link => "Link".to_string(),
             PubkyAppPostKind::File => "File".to_string(),
+            PubkyAppPostKind::Unknown => "Unknown".to_string(),
         }
         // pub fn kind(&self) -> PubkyAppPostKind {
         //     self.kind.clone()
@@ -259,6 +263,19 @@ impl Validatable for PubkyAppPost {
             );
         }
 
+        // Reject posts whose kind couldn't be matched against any known variant.
+        // `Unknown` is a serde catch-all for forwards-compat: older binaries can
+        // deserialize events from newer clients without panicking, but such posts
+        // must never pass spec validation. Same reasoning for `embed.kind`.
+        if matches!(self.kind, PubkyAppPostKind::Unknown) {
+            return Err("Validation Error: post kind is unknown".into());
+        }
+        if let Some(ref embed) = self.embed {
+            if matches!(embed.kind, PubkyAppPostKind::Unknown) {
+                return Err("Validation Error: embed kind is unknown".into());
+            }
+        }
+
         // Validate content length based on post kind
         let (max_length, kind_name) = match self.kind {
             PubkyAppPostKind::Short => (VALIDATION_LIMITS.post_short_content_max_length, "Short"),
@@ -270,6 +287,7 @@ impl Validatable for PubkyAppPost {
                 VALIDATION_LIMITS.post_short_content_max_length,
                 "Image/Video/Link/File",
             ),
+            PubkyAppPostKind::Unknown => unreachable!("guarded by early-return above"),
         };
 
         if self.content.chars().count() > max_length {
@@ -915,5 +933,136 @@ mod tests {
             result.is_ok(),
             "Post with attachments but no content should be valid"
         );
+    }
+
+    // ----- v0.4.5 forwards-compat shim: PubkyAppPostKind::Unknown -----
+
+    #[test]
+    fn test_postkind_deserializes_unknown_kind_as_unknown() {
+        // A future spec version adds a new kind that this binary doesn't know about.
+        // The serde catch-all `Unknown` variant lets old binaries deserialize without panicking.
+        let post_json = r#"
+        {
+            "content": "Hello",
+            "kind": "totally-new-kind",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.kind, PubkyAppPostKind::Unknown);
+    }
+
+    #[test]
+    fn test_postkind_existing_variants_unchanged_after_unknown_added() {
+        // Regression guard: adding Unknown with #[serde(other)] must not break round-tripping
+        // any of the six existing lowercase string forms.
+        for (s, expected) in [
+            ("short", PubkyAppPostKind::Short),
+            ("long", PubkyAppPostKind::Long),
+            ("image", PubkyAppPostKind::Image),
+            ("video", PubkyAppPostKind::Video),
+            ("link", PubkyAppPostKind::Link),
+            ("file", PubkyAppPostKind::File),
+        ] {
+            let json = format!(
+                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
+                s
+            );
+            let post: PubkyAppPost = serde_json::from_str(&json).unwrap();
+            assert_eq!(post.kind, expected, "kind={} did not round-trip", s);
+            // re-serialize and ensure the lowercase string survives
+            let re = serde_json::to_value(&post.kind).unwrap();
+            assert_eq!(re.as_str(), Some(s));
+        }
+    }
+
+    #[test]
+    fn test_postkind_unknown_rejected_by_validator() {
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Unknown,
+            parent: None,
+            embed: None,
+            attachments: None,
+        };
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_lowercase().contains("unknown"),
+            "validator should mention 'unknown' in the error"
+        );
+    }
+
+    #[test]
+    fn test_postkind_unknown_displays_as_lowercase() {
+        assert_eq!(PubkyAppPostKind::Unknown.to_string(), "unknown");
+    }
+
+    #[test]
+    fn test_postkind_fromstr_rejects_unknown_strings() {
+        // FromStr stays strict: it does NOT produce Unknown for arbitrary input.
+        // Unknown is exclusively a serde catch-all.
+        assert!(PubkyAppPostKind::from_str("foobar").is_err());
+        assert!(PubkyAppPostKind::from_str("collection").is_err());
+    }
+
+    #[test]
+    fn test_post_deserializes_embed_with_unknown_kind_as_unknown() {
+        // Embed kinds get the same forwards-compat treatment as top-level kinds:
+        // an unrecognized embed.kind deserializes to Unknown rather than failing.
+        let post_json = r#"
+        {
+            "content": "x",
+            "kind": "short",
+            "parent": null,
+            "embed": {"kind": "totally-new-embed-kind", "uri": "pubky://x/pub/pubky.app/posts/01"},
+            "attachments": null
+        }
+        "#;
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.embed.unwrap().kind, PubkyAppPostKind::Unknown);
+    }
+
+    #[test]
+    fn test_postkind_unknown_embed_kind_rejected_by_validator() {
+        // Counterpart to `test_postkind_unknown_rejected_by_validator`:
+        // an Unknown embed.kind also fails validation, so the spec stays as
+        // strict as before for posts that reach validation.
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Short,
+            parent: None,
+            embed: Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Unknown,
+                uri: "pubky://x/pub/pubky.app/posts/01".to_string(),
+            }),
+            attachments: None,
+        };
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_lowercase();
+        assert!(
+            err.contains("embed") && err.contains("unknown"),
+            "validator should mention 'embed' and 'unknown' in the error, got: {}",
+            err
+        );
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_postkind_unknown_wasm_getter() {
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Unknown,
+            parent: None,
+            embed: None,
+            attachments: None,
+        };
+        assert_eq!(post.kind(), "Unknown");
     }
 }
