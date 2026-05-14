@@ -383,6 +383,83 @@ mod tests {
         }
     }
 
+    // ---------- CollectionPointer role-inference invariants ----------
+    //
+    // The CollectionPointer primitive carries no role field. Whether a given
+    // pointer is an own-pointer (sovereign index entry for the user's own
+    // collection) or a follow-pointer (subscription to someone else's
+    // collection) is determined at read time by comparing the URI host
+    // (`ParsedUri::user_id`) against the path-encoded `owner`. These two
+    // tests encode that contract — anything that breaks the invariant
+    // breaks consumers downstream (Nexus watcher, frontends).
+
+    #[test]
+    fn test_import_collection_pointer_own_role() {
+        // user pointing to a collection they own: owner == follower (URI host).
+        let user = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string();
+        let uri =
+            collection_pointer_uri_builder(user.clone(), user.clone(), "0034A0X7NJ52G".into());
+        let json = r#"{ "created_at": 1627849730 }"#;
+
+        let parsed = ParsedUri::try_from(uri.as_str()).unwrap();
+        if let Resource::CollectionPointer { ref owner, .. } = parsed.resource {
+            assert_eq!(
+                parsed.user_id.as_ref(),
+                owner.as_ref(),
+                "expected own-pointer (URI host == path owner)"
+            );
+        } else {
+            panic!(
+                "Expected Resource::CollectionPointer, got {:?}",
+                parsed.resource
+            );
+        }
+
+        match PubkyAppObject::from_resource(&parsed.resource, json.as_bytes()).unwrap() {
+            PubkyAppObject::CollectionPointer(p) => assert_eq!(p.created_at, 1627849730),
+            other => panic!(
+                "Expected PubkyAppObject::CollectionPointer, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_import_collection_pointer_follow_role() {
+        // user pointing to a collection they DO NOT own: owner != follower.
+        let follower = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string();
+        let target_owner = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy".to_string();
+        let uri = collection_pointer_uri_builder(
+            follower.clone(),
+            target_owner.clone(),
+            "0034A0X7NJ52G".into(),
+        );
+        let json = r#"{ "created_at": 1627849731 }"#;
+
+        let parsed = ParsedUri::try_from(uri.as_str()).unwrap();
+        if let Resource::CollectionPointer { ref owner, .. } = parsed.resource {
+            assert_ne!(
+                parsed.user_id.as_ref(),
+                owner.as_ref(),
+                "expected follow-pointer (URI host != path owner)"
+            );
+            assert_eq!(owner.as_ref(), target_owner);
+        } else {
+            panic!(
+                "Expected Resource::CollectionPointer, got {:?}",
+                parsed.resource
+            );
+        }
+
+        match PubkyAppObject::from_resource(&parsed.resource, json.as_bytes()).unwrap() {
+            PubkyAppObject::CollectionPointer(p) => assert_eq!(p.created_at, 1627849731),
+            other => panic!(
+                "Expected PubkyAppObject::CollectionPointer, got {:?}",
+                other
+            ),
+        }
+    }
+
     #[test]
     fn test_import_unknown_resource() {
         let uri =
