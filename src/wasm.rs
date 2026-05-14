@@ -294,6 +294,45 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
+    /// Creates a `kind = Collection` post — a curated list of post URIs under
+    /// a name and optional description.
+    ///
+    /// Convenience wrapper around `createPost` that builds the
+    /// `PubkyAppCollectionContent` envelope (`{ name, description }`) and
+    /// JSON-serializes it into `content` internally, so JS callers don't
+    /// have to stringify the envelope themselves.
+    ///
+    /// `parent` and `embed` are not supported for Collection posts — the
+    /// validator rejects them — so this helper omits those arguments.
+    /// `attachments` carries the curated list of post URIs (validated against
+    /// the protocol allowlist and per-URI length cap).
+    #[wasm_bindgen(js_name = createCollectionPost)]
+    pub fn create_collection_post(
+        &self,
+        name: String,
+        description: Option<String>,
+        attachments: Option<Vec<String>>,
+    ) -> Result<PostResult, String> {
+        let envelope = PubkyAppCollectionContent { name, description };
+        let content = serde_json::to_string(&envelope)
+            .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
+
+        let post = PubkyAppPost::new(
+            content,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            attachments,
+        );
+        let post_id = post.create_id();
+        post.validate(Some(&post_id))?;
+
+        let path = PubkyAppPost::create_path(&post_id);
+        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
     // -----------------------------------------------------------------------------
     // 5. PubkyAppTag
     // -----------------------------------------------------------------------------

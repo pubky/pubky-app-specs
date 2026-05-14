@@ -1545,4 +1545,37 @@ mod tests {
         };
         assert_eq!(post.kind(), "Collection");
     }
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn test_create_collection_post_wasm_builder() {
+        // End-to-end via the JS-facing builder:
+        //   PubkySpecsBuilder.createCollectionPost(name, description?, attachments?)
+        // builds the {name, description} envelope internally, packages it
+        // into a kind=Collection PubkyAppPost, and returns a PostResult
+        // ready to ship to the homeserver. JS callers don't have to
+        // JSON-stringify the envelope themselves.
+        use crate::PubkySpecsBuilder;
+        let pubky_id = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string();
+        let builder = PubkySpecsBuilder::new(pubky_id).expect("Failed to construct builder");
+        let result = builder
+            .create_collection_post(
+                "My favorites".to_string(),
+                Some("Best things".to_string()),
+                Some(vec![
+                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
+                ]),
+            )
+            .expect("createCollectionPost should succeed");
+
+        let post = result.post();
+        assert_eq!(post.kind, PubkyAppPostKind::Collection);
+        assert_eq!(post.attachments.as_ref().unwrap().len(), 1);
+        // Envelope was JSON-encoded into content; round-trip it to confirm
+        // the name/description landed where validation will look for them.
+        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content)
+            .expect("Collection content must deserialize as PubkyAppCollectionContent");
+        assert_eq!(envelope.name, "My favorites");
+        assert_eq!(envelope.description.as_deref(), Some("Best things"));
+    }
 }
