@@ -65,6 +65,20 @@ impl FromStr for PubkyAppPostKind {
     }
 }
 
+impl PubkyAppPostKind {
+    /// Returns `true` for every spec-recognized variant, `false` for `Unknown`.
+    ///
+    /// `Unknown` is the forwards-compat catch-all variant (via `#[serde(other)]`)
+    /// that captures any post-kind string this version of the spec doesn't
+    /// recognize yet. Most consumers — indexers, stream filters, search ranking —
+    /// want to skip such posts, and this helper lets them write
+    /// `if kind.is_known() { ... }` rather than
+    /// `if !matches!(kind, PubkyAppPostKind::Unknown) { ... }`.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, PubkyAppPostKind::Unknown)
+    }
+}
+
 /// Represents embedded content within a post
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
@@ -1106,6 +1120,19 @@ mod tests {
         // Unknown is exclusively a serde catch-all.
         assert!(PubkyAppPostKind::from_str("foobar").is_err());
         assert!(PubkyAppPostKind::from_str("totally-new-kind").is_err());
+    }
+
+    #[test]
+    fn test_is_known_returns_true_for_all_recognized_variants() {
+        use PubkyAppPostKind::*;
+        for k in [Short, Long, Image, Video, Link, File, Collection] {
+            assert!(k.is_known(), "{k:?} should be known");
+        }
+    }
+
+    #[test]
+    fn test_is_known_returns_false_for_unknown() {
+        assert!(!PubkyAppPostKind::Unknown.is_known());
     }
 
     #[test]
