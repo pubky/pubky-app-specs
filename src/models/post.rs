@@ -120,7 +120,7 @@ impl PubkyAppPostEmbed {
 
 /// Typed JSON envelope stored in `PubkyAppPost::content` when `kind == Collection`.
 ///
-/// A collection post curates an ordered list of other posts (URIs in `attachments`)
+/// A collection post curates an ordered list of URIs (via `attachments`)
 /// under a `name` and optional `description`. The envelope is parsed and validated
 /// by the spec but never re-serialized as a top-level homeserver object.
 ///
@@ -311,11 +311,11 @@ impl Validatable for PubkyAppPost {
         // `Unknown` is a serde catch-all for forwards-compat: older binaries can
         // deserialize events from newer clients without panicking, but such posts
         // must never pass spec validation. Same reasoning for `embed.kind`.
-        if matches!(self.kind, PubkyAppPostKind::Unknown) {
+        if !self.kind.is_known() {
             return Err("Validation Error: post kind is unknown".into());
         }
         if let Some(ref embed) = self.embed {
-            if matches!(embed.kind, PubkyAppPostKind::Unknown) {
+            if !embed.kind.is_known() {
                 return Err("Validation Error: embed kind is unknown".into());
             }
         }
@@ -342,7 +342,16 @@ impl Validatable for PubkyAppPost {
                         e
                     )
                 })?;
-            let name_chars = envelope.name.trim().chars().count();
+            // Whitespace-only names are not meaningful; reject them explicitly
+            // so the length check below can count the full string (matching
+            // description's no-trim behavior).
+            if envelope.name.trim().is_empty() {
+                return Err(
+                    "Validation Error: Collection name must contain non-whitespace characters"
+                        .into(),
+                );
+            }
+            let name_chars = envelope.name.chars().count();
             let name_min = VALIDATION_LIMITS.collection_name_min_length;
             let name_max = VALIDATION_LIMITS.collection_name_max_length;
             if !(name_min..=name_max).contains(&name_chars) {
@@ -373,15 +382,8 @@ impl Validatable for PubkyAppPost {
                             VALIDATION_LIMITS.collection_item_uri_max_length
                         ));
                     }
-                    // TODO(pubky-sdk-absolute-uris): `Url::parse` rejects the
-                    // shortened pubky-sdk absolute URI form
-                    // `pubky<pubkey>/pub/<app>/<path>` (no `://` separator),
-                    // even though pubky-core / pubky-sdk treat that form as a
-                    // valid pubky resource. This rejection is systemic across
-                    // pubky-app-specs (tag.rs, bookmark.rs, user.rs, file.rs,
-                    // common.rs, uri_parser.rs all do `Url::parse` the same
-                    // way). Open a follow-up issue to add a normalization
-                    // shim that accepts both forms once Collections lands.
+                    // Note: rejects pubky-sdk short-form URIs `pubky<pubkey>/pub/...`
+                    // (no `://`). Systemic across spec; tracked as a follow-up issue.
                     let parsed = Url::parse(uri).map_err(|_| {
                         format!("Validation Error: Invalid attachment URL: {}", uri)
                     })?;
@@ -1307,6 +1309,41 @@ mod tests {
         let post = make_collection_post(&exactly_100, None, None);
         let id = post.create_id();
         assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_whitespace_only_name() {
+        // Whitespace-only names pass `min_length=1` purely by char count, so
+        // we reject them with a dedicated guard. Without that guard, a name
+        // of `"    "` would be a 4-char valid name with no meaningful content.
+        let post = make_collection_post("    ", None, None);
+        let id = post.create_id();
+        let err = post
+            .validate(Some(&id))
+            .expect_err("whitespace-only name must fail validation");
+        assert!(
+            err.contains("whitespace"),
+            "error should mention whitespace, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_collection_post_counts_whitespace_in_name_length() {
+        // Regression guard: the validator does NOT trim before counting. A
+        // 99-char name padded with one space on each side is 101 chars and
+        // must fail max=100. With the previous trim-then-count behavior this
+        // would have been 99 chars and passed.
+        let padded = format!(" {} ", "a".repeat(99));
+        assert_eq!(padded.chars().count(), 101);
+        let post = make_collection_post(&padded, None, None);
+        let id = post.create_id();
+        let err = post
+            .validate(Some(&id))
+            .expect_err("101-char padded name must fail max length");
+        assert!(
+            err.contains("1..=100"),
+            "error should report the length range, got: {err}"
+        );
     }
 
     #[test]

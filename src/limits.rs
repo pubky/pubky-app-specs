@@ -59,9 +59,11 @@ pub struct ValidationLimits {
     pub post_allowed_attachment_protocols: &'static [&'static str],
     /// Maximum character count for the JSON envelope content of a Collection post.
     pub collection_content_max_length: usize,
-    /// Minimum character count for a Collection name (after trim).
+    /// Minimum character count for a Collection name. The validator rejects
+    /// whitespace-only names separately, then counts the full string length.
     pub collection_name_min_length: usize,
-    /// Maximum character count for a Collection name (after trim).
+    /// Maximum character count for a Collection name. Leading/trailing
+    /// whitespace counts toward the total (the validator does not trim).
     pub collection_name_max_length: usize,
     /// Maximum character count for a Collection description.
     pub collection_description_max_length: usize,
