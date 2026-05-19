@@ -311,19 +311,17 @@ impl PubkySpecsBuilder {
         &self,
         name: String,
         description: Option<String>,
-        attachments: Option<Vec<String>>,
+        items: Option<Vec<String>>,
     ) -> Result<PostResult, String> {
-        let envelope = PubkyAppCollectionContent { name, description };
+        let envelope = PubkyAppCollectionContent {
+            name,
+            description,
+            items: items.unwrap_or_default(),
+        };
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
 
-        let post = PubkyAppPost::new(
-            content,
-            PubkyAppPostKind::Collection,
-            None,
-            None,
-            attachments,
-        );
+        let post = PubkyAppPost::new(content, PubkyAppPostKind::Collection, None, None, None);
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 

@@ -57,7 +57,10 @@ pub struct ValidationLimits {
     pub post_attachment_url_max_length: usize,
     /// Allowed protocols for attachment URLs.
     pub post_allowed_attachment_protocols: &'static [&'static str],
-    /// Maximum character count for the JSON envelope content of a Collection post.
+    /// Maximum scalar count (`chars().count()`, not bytes) for the JSON
+    /// envelope content of a Collection post. Sized to hold a
+    /// max-population envelope: 100 items × 300 chars + name + description
+    /// + JSON overhead + headroom for additive future fields.
     pub collection_content_max_length: usize,
     /// Minimum character count for a Collection name. The validator rejects
     /// whitespace-only names separately, then counts the full string length.
@@ -101,7 +104,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     post_attachments_max_count: 4,
     post_attachment_url_max_length: 200,
     post_allowed_attachment_protocols: &["pubky", "http", "https"],
-    collection_content_max_length: 2_000,
+    collection_content_max_length: 40_000,
     collection_name_min_length: 1,
     collection_name_max_length: 100,
     collection_description_max_length: 500,
