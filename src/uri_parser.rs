@@ -1,8 +1,8 @@
 use crate::{
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
-    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
-    PUBLIC_PATH,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppCollectionPointer, PubkyAppFeed, PubkyAppFile,
+    PubkyAppFollow, PubkyAppLastRead, PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
+    PubkyId, APP_PATH, PROTOCOL, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -21,6 +21,13 @@ pub enum Resource {
     Blob(String),
     Feed(String),
     LastRead,
+    /// A pointer to a Collection post identified by `(owner, post_id)`.
+    /// The role (own vs follow) is inferred by callers comparing `owner`
+    /// against the URI host (`ParsedUri::user_id`).
+    CollectionPointer {
+        owner: PubkyId,
+        post_id: String,
+    },
     #[default]
     Unknown,
 }
@@ -40,6 +47,9 @@ impl fmt::Display for Resource {
             Resource::File(_) => PubkyAppFile::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Blob(_) => PubkyAppBlob::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Feed(_) => PubkyAppFeed::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::CollectionPointer { .. } => {
+                PubkyAppCollectionPointer::PATH_SEGMENT.trim_end_matches('/')
+            }
             Resource::Unknown => "unknown",
         };
         write!(f, "{}", name)
@@ -59,6 +69,11 @@ impl Resource {
             Resource::File(id) => Some(id.clone()),
             Resource::Blob(id) => Some(id.clone()),
             Resource::Feed(id) => Some(id.clone()),
+            // Composite id reflecting the path between `collections/` and end.
+            // Consumers that need just the post_id can split on `/`.
+            Resource::CollectionPointer { owner, post_id } => {
+                Some(format!("{}/{}", owner.as_ref(), post_id))
+            }
             // The following variants do not carry an id.
             Resource::User | Resource::LastRead | Resource::Unknown => None,
         }
@@ -88,6 +103,9 @@ impl ParsedUri {
             Resource::File(id) => PubkyAppFile::create_path(id),
             Resource::Blob(id) => PubkyAppBlob::create_path(id),
             Resource::Feed(id) => PubkyAppFeed::create_path(id),
+            Resource::CollectionPointer { owner, post_id } => {
+                PubkyAppCollectionPointer::create_path(owner.as_ref(), post_id)
+            }
             Resource::Unknown => return Err("Cannot convert Unknown resource to URI".to_string()),
         };
 
@@ -148,6 +166,25 @@ impl TryFrom<&str> for ParsedUri {
                 PubkyAppLastRead::PATH_SEGMENT => Resource::LastRead,
                 _ => Resource::Unknown,
             },
+            // Exactly three segments matching `collections/<owner_id>/<post_id>`.
+            // Must come BEFORE the generic `[res_type, id, ..]` arm so that
+            // collection-pointer URIs don't fall through to the registered-
+            // single-segment lookup (where "collections/" isn't a registered
+            // PATH_SEGMENT and would resolve to `Resource::Unknown`).
+            //
+            // If the guard fails (parent != "collections" or post_id empty),
+            // Rust falls through to the next arm.
+            [parent, owner_id, post_id]
+                if parent == PubkyAppCollectionPointer::PATH_SEGMENT.trim_end_matches('/')
+                    && !owner_id.is_empty()
+                    && !post_id.is_empty() =>
+            {
+                let owner = PubkyId::try_from(owner_id)?;
+                Resource::CollectionPointer {
+                    owner,
+                    post_id: post_id.to_string(),
+                }
+            }
             // Two or more segments and the id is not empty.
             [res_type, id, ..] if !id.is_empty() => {
                 let resource_type = format!("{}/", res_type);
@@ -338,6 +375,56 @@ mod tests {
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse URI with unknown resource");
         assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
         assert_eq!(parsed.resource, Resource::Unknown);
+    }
+
+    #[test]
+    fn test_valid_collection_pointer_uri() {
+        // Three-segment path: collections/<owner_id>/<post_id>.
+        // The parser produces Resource::CollectionPointer { owner, post_id }
+        // regardless of whether the URI host equals the owner; role inference
+        // is left to higher layers.
+        let target_owner = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        let post_id = "0034A0X7NJ52G";
+        let uri =
+            collection_pointer_uri_builder(USER_ID.into(), target_owner.into(), post_id.into());
+        let parsed =
+            ParsedUri::try_from(uri.clone()).expect("Failed to parse valid collection-pointer URI");
+        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
+        match &parsed.resource {
+            Resource::CollectionPointer {
+                owner,
+                post_id: pid,
+            } => {
+                assert_eq!(owner.as_ref(), target_owner);
+                assert_eq!(pid, post_id);
+            }
+            other => panic!("Expected CollectionPointer, got {other:?}"),
+        }
+        // Round-trip via try_to_uri_str.
+        let reconstructed = parsed
+            .try_to_uri_str()
+            .expect("Failed to convert CollectionPointer back to URI");
+        assert_eq!(uri, reconstructed, "CollectionPointer URI roundtrip failed");
+    }
+
+    #[test]
+    fn test_collection_pointer_empty_post_id() {
+        // Trailing slash leaves post_id empty → fall-through to Unknown.
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/collections/{USER_ID}/");
+        let parsed = ParsedUri::try_from(uri)
+            .expect("Parser must not error on empty post_id; should fall through to Unknown");
+        assert_eq!(parsed.resource, Resource::Unknown);
+    }
+
+    #[test]
+    fn test_collection_pointer_bad_owner() {
+        // Malformed owner segment → PubkyId::try_from fails → Err.
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/collections/not_a_valid_pubky/POSTID");
+        let result = ParsedUri::try_from(uri);
+        assert!(
+            result.is_err(),
+            "Parser should reject a CollectionPointer URI with a malformed owner pubkey"
+        );
     }
 
     // Failure cases

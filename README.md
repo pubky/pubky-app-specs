@@ -157,6 +157,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 - `video`
 - `link`
 - `file`
+- `collection`
 
 **Example: Valid Post**
 
@@ -172,6 +173,27 @@ Pubky.app models are designed for decentralized content sharing. The system uses
   "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"]
 }
 ```
+
+**Note on `kind = collection`:**
+
+Collection posts use a typed JSON envelope as their `content`. The envelope shape is:
+
+```json
+{
+  "name": "AI papers",
+  "description": "Best stuff",
+  "items": [
+    "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A",
+    "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B"
+  ]
+}
+```
+
+- `name` — required, 1–100 unicode scalars, non-whitespace-only.
+- `description` — optional, max 500 scalars.
+- `items` — ordered list of URIs (≤ 100, each ≤ 300 chars, protocols in `[pubky, http, https]`).
+
+For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
 
 ---
 

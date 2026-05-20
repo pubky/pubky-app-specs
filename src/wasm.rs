@@ -137,6 +137,11 @@ result_struct!(BookmarkResult, bookmark, PubkyAppBookmark);
 result_struct!(MuteResult, mute, PubkyAppMute);
 result_struct!(LastReadResult, last_read, PubkyAppLastRead);
 result_struct!(BlobResult, blob, PubkyAppBlob);
+result_struct!(
+    CollectionPointerResult,
+    collection_pointer,
+    PubkyAppCollectionPointer
+);
 
 #[wasm_bindgen]
 impl PubkySpecsBuilder {
@@ -427,6 +432,70 @@ impl PubkySpecsBuilder {
         let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
 
         Ok(BlobResult { blob, meta })
+    }
+
+    // -----------------------------------------------------------------------------
+    // 11. PubkyAppCollectionPointer
+    // -----------------------------------------------------------------------------
+    //
+    // The spec primitive is unified: one struct, one path
+    // (/pub/pubky.app/collections/<owner_id>/<post_id>), one body
+    // ({ created_at: i64 }). The role (own vs follow) is inferred at
+    // read time by comparing the URI host to the path-encoded owner.
+    //
+    // For JS ergonomics we expose TWO builder methods that match the two
+    // call-sites a frontend actually distinguishes — without forcing the
+    // caller to type its own pubky_id redundantly in the own-case.
+
+    /// Creates an **own-pointer** to one of this user's own Collection posts.
+    ///
+    /// Sovereign homeserver-side index entry that lets clients enumerate
+    /// the user's own collections via a prefix-scan on
+    /// `/pub/pubky.app/collections/<self>/`, with no Nexus dependency.
+    /// Indexers do nothing with own-pointers; the homeserver state is
+    /// enough.
+    ///
+    /// The owner is implicit (this builder's `pubky_id`); only the
+    /// `post_id` is needed.
+    #[wasm_bindgen(js_name = createOwnCollectionPointer)]
+    pub fn create_own_collection_pointer(
+        &self,
+        post_id: String,
+    ) -> Result<CollectionPointerResult, String> {
+        let owner_id = self.pubky_id.to_string();
+        self.create_followed_collection_pointer(owner_id, post_id)
+    }
+
+    /// Creates a **follow-pointer** subscribing to another user's Collection
+    /// post.
+    ///
+    /// Indexers (e.g. Nexus) materialize this as a
+    /// `(:User)-[:FOLLOWS_COLLECTION]->(:Post {kind:'collection'})` graph
+    /// edge and emit a follow-notification to the target owner.
+    ///
+    /// Pass the same value for `target_owner_id` and this builder's
+    /// `pubky_id` and you get an own-pointer instead; the spec primitive
+    /// is unified, so the distinction is purely caller-side.
+    #[wasm_bindgen(js_name = createFollowedCollectionPointer)]
+    pub fn create_followed_collection_pointer(
+        &self,
+        target_owner_id: String,
+        target_post_id: String,
+    ) -> Result<CollectionPointerResult, String> {
+        let collection_pointer = PubkyAppCollectionPointer::new();
+        collection_pointer.validate(Some(&target_post_id))?;
+
+        let path = PubkyAppCollectionPointer::create_path(&target_owner_id, &target_post_id);
+        // Composite "<owner>/<post_id>" mirrors Resource::CollectionPointer.id()
+        // in uri_parser.rs and gives JS a unique handle for the pointer
+        // (callers that need just the post_id can split on '/').
+        let composite_id = format!("{}/{}", target_owner_id, target_post_id);
+        let meta = Meta::from_object(Some(&composite_id), self.pubky_id.clone(), path);
+
+        Ok(CollectionPointerResult {
+            collection_pointer,
+            meta,
+        })
     }
 }
 
