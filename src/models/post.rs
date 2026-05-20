@@ -2,6 +2,7 @@ use crate::{
     common::sanitize_url,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
+    uri_parser::{ParsedUri, Resource},
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
@@ -390,21 +391,16 @@ impl Validatable for PubkyAppPost {
                         VALIDATION_LIMITS.collection_item_uri_max_length
                     ));
                 }
-                let parsed = Url::parse(uri)
-                    .map_err(|_| format!("Validation Error: Invalid item URL: {}", uri))?;
-                if !VALIDATION_LIMITS
-                    .post_allowed_attachment_protocols
-                    .contains(&parsed.scheme())
-                {
-                    let allowed_protocols = VALIDATION_LIMITS
-                        .post_allowed_attachment_protocols
-                        .iter()
-                        .map(|p| format!("{}://", p))
-                        .collect::<Vec<_>>()
-                        .join(", ");
+                let parsed = ParsedUri::try_from(uri.as_str()).map_err(|e| {
+                    format!(
+                        "Validation Error: Collection item at index {} is not a valid URI: {}",
+                        index, e
+                    )
+                })?;
+                if !matches!(parsed.resource, Resource::Post(_)) {
                     return Err(format!(
-                        "Validation Error: Collection item URL at index {} uses disallowed protocol '{}'; must use one of the allowed protocols: {}",
-                        index, parsed.scheme(), allowed_protocols
+                        "Validation Error: Collection item at index {} must be a pubky.app post URI, got: {}",
+                        index, uri
                     ));
                 }
             }
@@ -507,6 +503,11 @@ impl Validatable for PubkyAppPost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 52-char Crockford-base32 pubky id used in Collection-item URIs for tests.
+    /// Real pubky user-ids are 52 chars; shorter placeholders (e.g. `userA`)
+    /// fail `ParsedUri::try_from`.
+    const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
     use crate::{traits::Validatable, APP_PATH, PUBLIC_PATH};
 
     #[test]
@@ -1248,9 +1249,9 @@ mod tests {
             "AI papers",
             Some("Best stuff"),
             Some(vec![
-                "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
-                "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B".to_string(),
-                "pubky://userC/pub/pubky.app/posts/0034A0X7NJ52C".to_string(),
+                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52B"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52C"),
             ]),
         );
         let id = post.create_id();
@@ -1433,7 +1434,7 @@ mod tests {
     #[test]
     fn test_collection_post_accepts_100_items() {
         let items: Vec<String> = (0..100)
-            .map(|i| format!("pubky://userA/pub/pubky.app/posts/{:013}", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:013}", i))
             .collect();
         let post = make_collection_post("Big list", None, Some(items));
         let id = post.create_id();
@@ -1453,19 +1454,9 @@ mod tests {
     }
 
     #[test]
-    fn test_collection_post_accepts_300_char_uri() {
-        // Build a pubky URI with the user host + a long path filling out to exactly 300 chars.
-        let prefix = "pubky://userA/pub/pubky.app/posts/";
-        let pad = "x".repeat(300 - prefix.chars().count());
-        let uri = format!("{}{}", prefix, pad);
-        assert_eq!(uri.chars().count(), 300);
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
-    }
-
-    #[test]
     fn test_collection_post_rejects_301_char_uri() {
+        // Length check fires before URI shape validation, so an oversized
+        // string (regardless of pubky-validity) must be rejected at the cap.
         let prefix = "pubky://userA/pub/pubky.app/posts/";
         let pad = "x".repeat(301 - prefix.chars().count());
         let uri = format!("{}{}", prefix, pad);
@@ -1520,28 +1511,23 @@ mod tests {
     }
 
     #[test]
-    fn test_collection_post_rejects_disallowed_item_protocol() {
+    fn test_collection_post_rejects_non_post_uri() {
         let post =
             make_collection_post("X", None, Some(vec!["ftp://example.com/file".to_string()]));
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("must use one of the allowed protocols"));
+        assert!(result.unwrap_err().contains("Collection item"));
     }
 
     #[test]
     fn test_collection_post_rejects_javascript_protocol() {
-        // XSS-vector defense: never accept `javascript:` URIs as attachments,
-        // even though they technically parse as URLs.
+        // XSS-vector defense: never accept `javascript:` URIs as items.
         let post = make_collection_post("X", None, Some(vec!["javascript:alert(1)".to_string()]));
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("must use one of the allowed protocols"));
+        assert!(result.unwrap_err().contains("Collection item"));
     }
 
     #[test]
@@ -1551,9 +1537,26 @@ mod tests {
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("must use one of the allowed protocols"));
+        assert!(result.unwrap_err().contains("Collection item"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_user_uri_in_items() {
+        // Pubky-app URI that parses cleanly but is NOT a post — items must be
+        // posts only (Resource::Post(_)). Represents the wider rejection of
+        // non-post pubky.app URIs (profile, files, collection-pointer, etc.).
+        let user_uri =
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+                .to_string();
+        let post = make_collection_post("X", None, Some(vec![user_uri]));
+        let id = post.create_id();
+        let err = post
+            .validate(Some(&id))
+            .expect_err("user-profile URI must be rejected as a Collection item");
+        assert!(
+            err.contains("must be a pubky.app post URI"),
+            "expected post-URI rejection error, got: {err}"
+        );
     }
 
     #[test]
@@ -1596,13 +1599,9 @@ mod tests {
 
     #[test]
     fn test_collection_post_envelope_at_max_size() {
+        // 100 distinct valid pubky post URIs (max-count). Each ~97 chars.
         let items: Vec<String> = (0..VALIDATION_LIMITS.collection_items_max_count)
-            .map(|i| {
-                let prefix = format!("pubky://u{i:03}/pub/pubky.app/posts/");
-                let pad_len =
-                    VALIDATION_LIMITS.collection_item_uri_max_length - prefix.chars().count();
-                format!("{}{}", prefix, "x".repeat(pad_len))
-            })
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:013}", i))
             .collect();
         let max_name = "a".repeat(VALIDATION_LIMITS.collection_name_max_length);
         let max_desc = "b".repeat(VALIDATION_LIMITS.collection_description_max_length);
