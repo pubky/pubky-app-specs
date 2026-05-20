@@ -294,18 +294,16 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
-    /// Creates a `kind = Collection` post — a curated list of post URIs under
+    /// Creates a `kind = Collection` post — a curated list of URIs under
     /// a name and optional description.
     ///
     /// Convenience wrapper around `createPost` that builds the
-    /// `PubkyAppCollectionContent` envelope (`{ name, description }`) and
+    /// `PubkyAppCollectionContent` envelope (`{ name, description, items }`) and
     /// JSON-serializes it into `content` internally, so JS callers don't
     /// have to stringify the envelope themselves.
     ///
     /// `parent` and `embed` are not supported for Collection posts — the
     /// validator rejects them — so this helper omits those arguments.
-    /// `attachments` carries the curated list of post URIs (validated against
-    /// the protocol allowlist and per-URI length cap).
     #[wasm_bindgen(js_name = createCollectionPost)]
     pub fn create_collection_post(
         &self,
