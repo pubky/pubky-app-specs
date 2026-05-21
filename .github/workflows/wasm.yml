@@ -19,6 +19,6 @@ jobs:
       - name: Install Wasm-Pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Install Firefox
-        run: sudo apt-get install -y firefox
+        uses: browser-actions/setup-firefox@v1
       - name: Run Wasm-Pack Tests
         run: wasm-pack test --headless --firefox
