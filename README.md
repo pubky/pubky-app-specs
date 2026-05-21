@@ -191,7 +191,7 @@ Collection posts use a typed JSON envelope as their `content`. The envelope shap
 
 - `name`: required, 1 to 100 unicode scalars, non-whitespace-only.
 - `description`: optional, max 500 scalars.
-- `items`: ordered list of pubky.app post URIs (max 100, each at most 300 chars). Each URI must resolve to a `Resource::Post` (form: `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>`); file, profile, and external URIs are rejected.
+- `items`: ordered list of pubky.app post URIs (max 100, each at most 300 chars). Each URI must resolve to a `Resource::Post` (form: `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>`); all other URI types are rejected.
 
 For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
 
