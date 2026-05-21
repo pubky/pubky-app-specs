@@ -502,6 +502,9 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
     if url.scheme() != "pubky" {
         return Err(format!("must use the pubky:// scheme: {uri}"));
     }
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err(format!("must not include a query or fragment: {uri}"));
+    }
     let host = url
         .host_str()
         .ok_or_else(|| format!("missing pubky-id host: {uri}"))?;
@@ -1557,6 +1560,64 @@ mod tests {
         let id = post.create_id();
         let err = post.validate(Some(&id)).unwrap_err();
         assert!(err.contains("canonical post URI"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_query_string() {
+        // `Url::path_segments()` strips query strings; without an explicit
+        // query check the segment match would silently accept the URI.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A?foo=bar");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("query or fragment"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_fragment() {
+        // Same as the query-string case: `path_segments()` strips fragments.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A#frag");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("query or fragment"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_trailing_slash() {
+        // Pin the rejection: a trailing slash produces a 5-segment path which
+        // misses the canonical 4-segment match arm.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("canonical post URI"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_empty_post_id() {
+        // Pin the rejection: an empty post-id segment fails the 13-char
+        // Crockford check.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(
+            err.contains("canonical post URI") || err.contains("invalid post id"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_collection_post_accepts_canonical_max_length_uri() {
+        // Success-side boundary: the longest valid canonical post URI is
+        // pubky://<52-char-pubky-id>/pub/pubky.app/posts/<13-char-crockford>
+        // which is exactly 94 chars. Validator must accept this.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A");
+        assert_eq!(uri.chars().count(), 94);
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
     }
 
     #[test]
