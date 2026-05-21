@@ -504,9 +504,6 @@ impl Validatable for PubkyAppPost {
 mod tests {
     use super::*;
 
-    /// 52-char Crockford-base32 pubky id used in Collection-item URIs for tests.
-    /// Real pubky user-ids are 52 chars; shorter placeholders (e.g. `userA`)
-    /// fail `ParsedUri::try_from`.
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
     use crate::{traits::Validatable, APP_PATH, PUBLIC_PATH};
 
