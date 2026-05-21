@@ -1,8 +1,8 @@
 use crate::{
-    common::sanitize_url,
+    common::{sanitize_url, validate_crockford_id},
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
-    uri_parser::{ParsedUri, Resource},
+    types::PubkyId,
     APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
@@ -390,18 +390,12 @@ impl Validatable for PubkyAppPost {
                         VALIDATION_LIMITS.collection_item_uri_max_length
                     ));
                 }
-                let parsed = ParsedUri::try_from(uri.as_str()).map_err(|e| {
+                validate_collection_item_uri(uri).map_err(|e| {
                     format!(
-                        "Validation Error: Collection item at index {} is not a valid URI: {}",
+                        "Validation Error: Collection item at index {}: {}",
                         index, e
                     )
                 })?;
-                if !matches!(parsed.resource, Resource::Post(_)) {
-                    return Err(format!(
-                        "Validation Error: Collection item at index {} must be a pubky.app post URI, got: {}",
-                        index, uri
-                    ));
-                }
             }
             return Ok(());
         }
@@ -497,6 +491,35 @@ impl Validatable for PubkyAppPost {
 
         Ok(())
     }
+}
+
+/// Strict canonical post-URI check for Collection items. Rejects non-pubky
+/// schemes, malformed pubky-ids, non-canonical paths (anything other than
+/// `/pub/pubky.app/posts/<id>`, including trailing/extra segments), and
+/// non-Crockford post-ids.
+fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
+    let url = Url::parse(uri).map_err(|_| format!("not a valid URI: {uri}"))?;
+    if url.scheme() != "pubky" {
+        return Err(format!("must use the pubky:// scheme: {uri}"));
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| format!("missing pubky-id host: {uri}"))?;
+    PubkyId::try_from(host).map_err(|e| format!("invalid pubky-id in host: {e}"))?;
+    let segments: Vec<&str> = url
+        .path_segments()
+        .map(Iterator::collect)
+        .unwrap_or_default();
+    let post_id = match segments.as_slice() {
+        ["pub", "pubky.app", "posts", id] => *id,
+        _ => {
+            return Err(format!(
+                "must be a canonical post URI (pubky://<id>/pub/pubky.app/posts/<post-id>): {uri}"
+            ))
+        }
+    };
+    validate_crockford_id(post_id).map_err(|e| format!("invalid post id: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1512,6 +1535,28 @@ mod tests {
         let result = post.validate(Some(&id));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Collection item"));
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_invalid_post_id() {
+        // 13 chars but not valid Crockford: contains hyphens which aren't in the alphabet.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/abc-def-ghi-j");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("invalid post id"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_post_uri_with_extra_path_segment() {
+        // The current `ParsedUri` parser strips extra path segments via the
+        // `[res_type, id, ..]` pattern, so a strict canonical check is required
+        // at the validator level to reject these.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/extra");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
