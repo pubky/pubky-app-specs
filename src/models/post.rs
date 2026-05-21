@@ -150,7 +150,9 @@ pub struct PubkyAppCollectionContent {
     /// Ordered list of URIs this collection curates. Bounded by
     /// `VALIDATION_LIMITS.collection_items_max_count` and
     /// `VALIDATION_LIMITS.collection_item_uri_max_length`. Each URI must use
-    /// a protocol in `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
+   /// Ordered list of Post URIs this collection curates. Bounded by
+   /// `VALIDATION_LIMITS.collection_items_max_count` and
+   /// `VALIDATION_LIMITS.collection_item_uri_max_length`.
     #[serde(default)]
     pub items: Vec<String>,
 }
