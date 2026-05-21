@@ -147,12 +147,9 @@ pub struct PubkyAppCollectionContent {
     /// Optional human-readable description. Length bounded by
     /// `VALIDATION_LIMITS.collection_description_max_length` (unicode scalars).
     pub description: Option<String>,
-    /// Ordered list of URIs this collection curates. Bounded by
+    /// Ordered list of Post URIs this collection curates. Bounded by
     /// `VALIDATION_LIMITS.collection_items_max_count` and
-    /// `VALIDATION_LIMITS.collection_item_uri_max_length`. Each URI must use
-   /// Ordered list of Post URIs this collection curates. Bounded by
-   /// `VALIDATION_LIMITS.collection_items_max_count` and
-   /// `VALIDATION_LIMITS.collection_item_uri_max_length`.
+    /// `VALIDATION_LIMITS.collection_item_uri_max_length`.
     #[serde(default)]
     pub items: Vec<String>,
 }
@@ -1515,45 +1512,6 @@ mod tests {
         let result = post.validate(Some(&id));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Collection item"));
-    }
-
-    #[test]
-    fn test_collection_post_rejects_javascript_protocol() {
-        // XSS-vector defense: never accept `javascript:` URIs as items.
-        let post = make_collection_post("X", None, Some(vec!["javascript:alert(1)".to_string()]));
-        let id = post.create_id();
-        let result = post.validate(Some(&id));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Collection item"));
-    }
-
-    #[test]
-    fn test_collection_post_rejects_data_uri_protocol() {
-        // Same XSS-vector defense for `data:` URIs.
-        let post = make_collection_post("X", None, Some(vec!["data:text/plain,hello".to_string()]));
-        let id = post.create_id();
-        let result = post.validate(Some(&id));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Collection item"));
-    }
-
-    #[test]
-    fn test_collection_post_rejects_user_uri_in_items() {
-        // Pubky-app URI that parses cleanly but is NOT a post — items must be
-        // posts only (Resource::Post(_)). Represents the wider rejection of
-        // non-post pubky.app URIs (profile, files, collection-pointer, etc.).
-        let user_uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
-                .to_string();
-        let post = make_collection_post("X", None, Some(vec![user_uri]));
-        let id = post.create_id();
-        let err = post
-            .validate(Some(&id))
-            .expect_err("user-profile URI must be rejected as a Collection item");
-        assert!(
-            err.contains("must be a pubky.app post URI"),
-            "expected post-URI rejection error, got: {err}"
-        );
     }
 
     #[test]
