@@ -1454,7 +1454,7 @@ mod tests {
     fn test_collection_post_rejects_301_char_uri() {
         // Length check fires before URI shape validation, so an oversized
         // string (regardless of pubky-validity) must be rejected at the cap.
-        let prefix = "pubky://userA/pub/pubky.app/posts/";
+        let prefix = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/");
         let pad = "x".repeat(301 - prefix.chars().count());
         let uri = format!("{}{}", prefix, pad);
         assert_eq!(uri.chars().count(), 301);
