@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.4.4_
+_Version 0.5.1_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -157,6 +157,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 - `video`
 - `link`
 - `file`
+- `collection`
 
 **Example: Valid Post**
 
@@ -172,6 +173,27 @@ Pubky.app models are designed for decentralized content sharing. The system uses
   "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"]
 }
 ```
+
+**Note on `kind = collection`:**
+
+Collection posts use a typed JSON envelope as their `content`. The envelope shape is:
+
+```json
+{
+  "name": "AI papers",
+  "description": "Best stuff",
+  "items": [
+    "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A",
+    "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B"
+  ]
+}
+```
+
+- `name`: required, 1 to 100 unicode scalars, non-whitespace-only.
+- `description`: optional, max 500 scalars.
+- `items`: ordered list of pubky.app post URIs (max 100, each at most 300 chars). Each URI must resolve to a `Resource::Post` (form: `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>`); all other URI types are rejected.
+
+For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
 
 ---
 
