@@ -1651,7 +1651,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_envelope_at_max_size() {
-        // 100 distinct valid pubky post URIs (max-count). Each ~97 chars.
+        // 100 distinct valid pubky post URIs (max-count). Each exactly 94 chars.
         let items: Vec<String> = (0..VALIDATION_LIMITS.collection_items_max_count)
             .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:013}", i))
             .collect();
