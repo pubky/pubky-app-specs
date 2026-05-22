@@ -391,10 +391,7 @@ impl Validatable for PubkyAppPost {
                     ));
                 }
                 validate_collection_item_uri(uri).map_err(|e| {
-                    format!(
-                        "Validation Error: Collection item at index {}: {}",
-                        index, e
-                    )
+                    format!("Validation Error: Collection item at index {index}: {e}")
                 })?;
             }
             return Ok(());
