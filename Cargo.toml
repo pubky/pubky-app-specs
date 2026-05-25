@@ -37,7 +37,7 @@ web-sys = "0.3.77"
 wasm-bindgen-test = "0.3.68"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-pubky = "0.8.0"
+pubky = "0.9.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1.52.3", features = ["full"] }

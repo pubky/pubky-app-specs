@@ -1733,9 +1733,9 @@ checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
 name = "pubky"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25d85fdb77a0ee17213b1885f7d5c5d0536fa3ab11f93d395b4b5975c885467d"
+checksum = "ae9ba3d850bf58b40fc1e85e8ca2316b44163993da776ec5cd641dd667e108c7"
 dependencies = [
  "base64",
  "cookie",
@@ -1779,9 +1779,9 @@ dependencies = [
 
 [[package]]
 name = "pubky-common"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43f46a46110dc48bcd99d5768333fc4f8e757697ed168150e20260e8a1b9de56"
+checksum = "8521009c64d9a1c71b582daedfd8eb22403b7b70c9724e1f06a9933d5f7c15fe"
 dependencies = [
  "argon2",
  "base32",
