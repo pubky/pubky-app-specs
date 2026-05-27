@@ -342,8 +342,7 @@ impl Validatable for PubkyAppPost {
                 );
             }
             // Anti-misuse guard: items belong in the envelope, not in
-            // `post.attachments`. Relax this when Collections gain real
-            // attachments (e.g. cover image).
+            // `post.attachments`.
             if matches!(&self.attachments, Some(a) if !a.is_empty()) {
                 return Err(
                     "Validation Error: Collection posts must not use post.attachments — items belong in the content envelope"
