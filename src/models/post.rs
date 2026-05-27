@@ -15,6 +15,8 @@ const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
@@ -138,6 +140,7 @@ impl PubkyAppPostEmbed {
 /// older parsers. New fields must be additive and ignorable.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkyAppCollectionContent {
     /// Display name of the collection. Length bounded by
