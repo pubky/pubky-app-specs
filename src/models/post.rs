@@ -1434,6 +1434,16 @@ mod tests {
     }
 
     #[test]
+    fn test_collection_post_rejects_cover_image_too_long() {
+        // post_attachment_url_max_length is 200; this URL exceeds it.
+        let too_long = format!("https://example.com/{}", "a".repeat(200));
+        let post = make_collection_post_with_cover(Some(&too_long));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("cover_image URL exceeds"), "got: {err}");
+    }
+
+    #[test]
     fn test_collection_post_rejects_oversized_description() {
         let too_long = "a".repeat(501);
         let post = make_collection_post("X", Some(&too_long), None);
