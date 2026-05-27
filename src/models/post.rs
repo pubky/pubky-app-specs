@@ -149,6 +149,7 @@ pub struct PubkyAppCollectionContent {
     pub name: String,
     /// Optional human-readable description. Length bounded by
     /// `VALIDATION_LIMITS.collection_description_max_length` (unicode scalars).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Ordered list of Post URIs this collection curates. Count bounded by
     /// `VALIDATION_LIMITS.collection_items_max_count`; each URI must be in
@@ -158,6 +159,7 @@ pub struct PubkyAppCollectionContent {
     /// Optional hero/cover image URL. Length bounded by
     /// `VALIDATION_LIMITS.post_attachment_url_max_length`; protocol must be in
     /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
 }
 
