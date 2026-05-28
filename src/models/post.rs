@@ -1572,10 +1572,10 @@ mod tests {
     #[test]
     fn test_collection_envelope_tolerates_extra_fields() {
         // Forward-compat: the envelope intentionally does NOT use deny_unknown_fields,
-        // so future minor versions can add fields like `cover_image` without breaking
-        // older parsers. This test locks in that behavior.
-        let envelope_json =
-            r#"{"name":"X","description":"Y","cover_image":"https://example.com/x.png"}"#;
+        // so future minor versions can add fields without breaking older parsers.
+        // Use a deliberately-fictional canary field name so this test stays
+        // meaningful even after real fields land.
+        let envelope_json = r#"{"name":"X","_forward_compat_canary":"future-only"}"#;
         let post = PubkyAppPost::new(
             envelope_json.to_string(),
             PubkyAppPostKind::Collection,
@@ -1586,7 +1586,7 @@ mod tests {
         let id = post.create_id();
         assert!(
             post.validate(Some(&id)).is_ok(),
-            "extra envelope fields must be tolerated"
+            "unknown envelope fields must be tolerated"
         );
     }
 
