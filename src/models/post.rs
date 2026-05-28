@@ -15,6 +15,8 @@ const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
@@ -138,6 +140,7 @@ impl PubkyAppPostEmbed {
 /// older parsers. New fields must be additive and ignorable.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkyAppCollectionContent {
     /// Display name of the collection. Length bounded by
@@ -146,12 +149,18 @@ pub struct PubkyAppCollectionContent {
     pub name: String,
     /// Optional human-readable description. Length bounded by
     /// `VALIDATION_LIMITS.collection_description_max_length` (unicode scalars).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Ordered list of Post URIs this collection curates. Count bounded by
     /// `VALIDATION_LIMITS.collection_items_max_count`; each URI must be in
     /// exact canonical form (see `validate_collection_item_uri`).
     #[serde(default)]
     pub items: Vec<String>,
+    /// Optional hero/cover image URL. Length bounded by
+    /// `VALIDATION_LIMITS.post_attachment_url_max_length`; protocol must be in
+    /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_image: Option<String>,
 }
 
 /// Represents raw post in homeserver with content and kind
@@ -333,8 +342,7 @@ impl Validatable for PubkyAppPost {
                 );
             }
             // Anti-misuse guard: items belong in the envelope, not in
-            // `post.attachments`. Relax this when Collections gain real
-            // attachments (e.g. cover image).
+            // `post.attachments`.
             if matches!(&self.attachments, Some(a) if !a.is_empty()) {
                 return Err(
                     "Validation Error: Collection posts must not use post.attachments — items belong in the content envelope"
@@ -374,6 +382,31 @@ impl Validatable for PubkyAppPost {
                     return Err(format!(
                         "Validation Error: Collection description exceeds {} characters",
                         VALIDATION_LIMITS.collection_description_max_length
+                    ));
+                }
+            }
+            if let Some(cover) = &envelope.cover_image {
+                if cover.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+                    return Err(format!(
+                        "Validation Error: Collection cover_image URL exceeds {} characters",
+                        VALIDATION_LIMITS.post_attachment_url_max_length
+                    ));
+                }
+                let parsed = Url::parse(cover).map_err(|_| {
+                    "Validation Error: Collection cover_image must be a valid URL".to_string()
+                })?;
+                if !VALIDATION_LIMITS
+                    .post_allowed_attachment_protocols
+                    .contains(&parsed.scheme())
+                {
+                    let allowed = VALIDATION_LIMITS
+                        .post_allowed_attachment_protocols
+                        .iter()
+                        .map(|p| format!("{p}://"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(format!(
+                        "Validation Error: Collection cover_image must use one of the allowed protocols: {allowed}"
                     ));
                 }
             }
@@ -1227,6 +1260,7 @@ mod tests {
             name: name.to_string(),
             description: description.map(|d| d.to_string()),
             items: items.to_vec(),
+            cover_image: None,
         })
         .unwrap()
     }
@@ -1244,6 +1278,17 @@ mod tests {
             None,
             None,
         )
+    }
+
+    fn make_collection_post_with_cover(cover_image: Option<&str>) -> PubkyAppPost {
+        let envelope = PubkyAppCollectionContent {
+            name: "X".to_string(),
+            description: None,
+            items: vec![],
+            cover_image: cover_image.map(|s| s.to_string()),
+        };
+        let content = serde_json::to_string(&envelope).expect("envelope serialization");
+        PubkyAppPost::new(content, PubkyAppPostKind::Collection, None, None, None)
     }
 
     #[test]
@@ -1349,6 +1394,53 @@ mod tests {
             err.contains("1..=100"),
             "error should report the length range, got: {err}"
         );
+    }
+
+    #[test]
+    fn test_collection_post_accepts_cover_image_pubky_uri() {
+        let cover = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/files/0034A0X7NJ52A");
+        let post = make_collection_post_with_cover(Some(&cover));
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_accepts_cover_image_https() {
+        let post = make_collection_post_with_cover(Some("https://example.com/cover.png"));
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_cover_image_invalid_url() {
+        let post = make_collection_post_with_cover(Some("not a url"));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(
+            err.contains("cover_image must be a valid URL"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_collection_post_rejects_cover_image_disallowed_protocol() {
+        let post = make_collection_post_with_cover(Some("ftp://example.com/cover.png"));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(
+            err.contains("cover_image must use one of the allowed protocols"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_collection_post_rejects_cover_image_too_long() {
+        // post_attachment_url_max_length is 200; this URL exceeds it.
+        let too_long = format!("https://example.com/{}", "a".repeat(200));
+        let post = make_collection_post_with_cover(Some(&too_long));
+        let id = post.create_id();
+        let err = post.validate(Some(&id)).unwrap_err();
+        assert!(err.contains("cover_image URL exceeds"), "got: {err}");
     }
 
     #[test]
@@ -1480,10 +1572,10 @@ mod tests {
     #[test]
     fn test_collection_envelope_tolerates_extra_fields() {
         // Forward-compat: the envelope intentionally does NOT use deny_unknown_fields,
-        // so future minor versions can add fields like `cover_image` without breaking
-        // older parsers. This test locks in that behavior.
-        let envelope_json =
-            r#"{"name":"X","description":"Y","cover_image":"https://example.com/x.png"}"#;
+        // so future minor versions can add fields without breaking older parsers.
+        // Use a deliberately-fictional canary field name so this test stays
+        // meaningful even after real fields land.
+        let envelope_json = r#"{"name":"X","_forward_compat_canary":"future-only"}"#;
         let post = PubkyAppPost::new(
             envelope_json.to_string(),
             PubkyAppPostKind::Collection,
@@ -1494,7 +1586,7 @@ mod tests {
         let id = post.create_id();
         assert!(
             post.validate(Some(&id)).is_ok(),
-            "extra envelope fields must be tolerated"
+            "unknown envelope fields must be tolerated"
         );
     }
 
@@ -1713,6 +1805,7 @@ mod tests {
                 Some(vec![
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
                 ]),
+                Some("https://example.com/cover.png".to_string()),
             )
             .expect("createCollectionPost should succeed");
 
@@ -1724,5 +1817,9 @@ mod tests {
         assert_eq!(envelope.name, "My favorites");
         assert_eq!(envelope.description.as_deref(), Some("Best things"));
         assert_eq!(envelope.items.len(), 1);
+        assert_eq!(
+            envelope.cover_image.as_deref(),
+            Some("https://example.com/cover.png")
+        );
     }
 }

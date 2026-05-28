@@ -60,8 +60,8 @@ pub struct ValidationLimits {
     /// Maximum scalar count (`chars().count()`, not bytes) for the JSON
     /// envelope content of a Collection post. Sized to hold a
     /// max-population envelope (100 canonical post URIs at 94 chars each,
-    /// plus name, description, JSON overhead, and headroom for additive
-    /// future fields).
+    /// plus name, description, cover_image (up to 200 chars), JSON
+    /// overhead, and headroom for additive future fields).
     pub collection_content_max_length: usize,
     /// Minimum character count for a Collection name. The validator rejects
     /// whitespace-only names separately, then counts the full string length.

@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.5.1_
+_Version 0.5.2_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -182,6 +182,7 @@ Collection posts use a typed JSON envelope as their `content`. The envelope shap
 {
   "name": "AI papers",
   "description": "Best stuff",
+  "cover_image": "pubky://userA/pub/pubky.app/files/0034A0X7NJ52C",
   "items": [
     "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A",
     "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B"
@@ -191,7 +192,8 @@ Collection posts use a typed JSON envelope as their `content`. The envelope shap
 
 - `name`: required, 1 to 100 unicode scalars, non-whitespace-only.
 - `description`: optional, max 500 scalars.
-- `items`: ordered list of pubky.app post URIs (max 100, each at most 300 chars). Each URI must resolve to a `Resource::Post` (form: `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>`); all other URI types are rejected.
+- `cover_image`: optional hero/cover image URL (max 200 chars). Validated as a general attachment URL — protocol must be `pubky`, `http`, or `https`.
+- `items`: ordered list of pubky.app post URIs (max 100). Each URI must be in exact canonical form `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>` (94 chars); any deviation (extra path segments, query, fragment, userinfo, etc.) is rejected.
 
 For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
 
