@@ -12,7 +12,7 @@ use crate::{ParsedUri, Resource};
 
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PubkyId {
     z32: String,
     #[cfg(not(target_arch = "wasm32"))]
