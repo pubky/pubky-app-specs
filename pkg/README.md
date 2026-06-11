@@ -392,7 +392,7 @@ Example output shape:
   "userStatusMaxLength": 50,
   "postShortContentMaxLength": 2000,
   "postLongContentMaxLength": 50000,
-  "postAttachmentsMaxCount": 4,
+  "postAttachmentsMaxCount": 10,
   "postAttachmentUrlMaxLength": 200,
   "postAllowedAttachmentProtocols": ["pubky", "http", "https"],
   "fileNameMinLength": 1,
