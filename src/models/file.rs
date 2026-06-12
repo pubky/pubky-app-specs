@@ -162,9 +162,15 @@ impl Validatable for PubkyAppFile {
             return Err("Validation Error: Invalid name length".into());
         }
 
-        if let Some(c) = self.name.chars().find(|c| {
-            VALIDATION_LIMITS.file_name_invalid_chars.contains(c) || c.is_control()
-        }) {
+        // Keep file-name validation data-driven so client validation built from
+        // exported limits cannot drift from Rust validation. The list includes
+        // the control characters that an inline `char::is_control()` check
+        // would catch.
+        if let Some(c) = self
+            .name
+            .chars()
+            .find(|c| VALIDATION_LIMITS.file_name_invalid_chars.contains(c))
+        {
             return Err(format!(
                 "Validation Error: File name '{}' contains invalid character: {}",
                 self.name, c
@@ -323,6 +329,17 @@ mod tests {
 
     #[test]
     fn test_validate_file_name_chars() {
+        for c in (0..=char::MAX as u32)
+            .filter_map(char::from_u32)
+            .filter(|c| c.is_control())
+        {
+            assert!(
+                VALIDATION_LIMITS.file_name_invalid_chars.contains(&c),
+                "Expected control character U+{:04X} to be exported as invalid",
+                c as u32
+            );
+        }
+
         let valid_names = ["example.png", "résumé.pdf", "文档.pdf"];
         for name in valid_names {
             let file = valid_file_with_name(name);
