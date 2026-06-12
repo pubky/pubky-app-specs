@@ -37,6 +37,7 @@ pub enum PubkyAppFeedLayout {
     Columns,
     Wide,
     Visual,
+    List,
 }
 
 /// Enum representing the sort order of the feed.
@@ -284,6 +285,7 @@ impl FromStr for PubkyAppFeedLayout {
             "columns" => Ok(PubkyAppFeedLayout::Columns),
             "wide" => Ok(PubkyAppFeedLayout::Wide),
             "visual" => Ok(PubkyAppFeedLayout::Visual),
+            "list" => Ok(PubkyAppFeedLayout::List),
             _ => Err(format!("Invalid feed layout: {}", s)),
         }
     }
@@ -618,6 +620,10 @@ mod tests {
         assert_eq!(
             "visual".parse::<PubkyAppFeedLayout>().unwrap(),
             PubkyAppFeedLayout::Visual
+        );
+        assert_eq!(
+            "list".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::List
         );
 
         // Invalid case
