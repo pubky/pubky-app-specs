@@ -77,6 +77,8 @@ pub struct ValidationLimits {
     pub file_name_min_length: usize,
     /// Maximum file name length in characters.
     pub file_name_max_length: usize,
+    /// Disallowed file name characters that break HTTP Content-Disposition headers.
+    pub file_name_invalid_chars: &'static [char],
     /// Maximum file src length in characters.
     pub file_src_max_length: usize,
     /// Maximum number of tags allowed in a feed.
@@ -110,6 +112,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     collection_items_max_count: 100,
     file_name_min_length: 1,
     file_name_max_length: 255,
+    file_name_invalid_chars: &['"', '\\'],
     file_src_max_length: 1024,
     feed_tags_max_count: 5,
 };
