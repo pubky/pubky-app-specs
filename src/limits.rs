@@ -13,6 +13,23 @@
 
 use serde::Serialize;
 
+/// Disallowed file name characters.
+///
+/// Includes the quoted-string characters that break `Content-Disposition`
+/// filenames plus all Unicode control characters (`char::is_control()`), so
+/// serialized validation limits can represent the complete character rule.
+pub const FILE_NAME_INVALID_CHARS: &[char] = &[
+    '"', '\\', '\u{0000}', '\u{0001}', '\u{0002}', '\u{0003}', '\u{0004}', '\u{0005}', '\u{0006}',
+    '\u{0007}', '\u{0008}', '\u{0009}', '\u{000A}', '\u{000B}', '\u{000C}', '\u{000D}', '\u{000E}',
+    '\u{000F}', '\u{0010}', '\u{0011}', '\u{0012}', '\u{0013}', '\u{0014}', '\u{0015}', '\u{0016}',
+    '\u{0017}', '\u{0018}', '\u{0019}', '\u{001A}', '\u{001B}', '\u{001C}', '\u{001D}', '\u{001E}',
+    '\u{001F}', '\u{007F}', '\u{0080}', '\u{0081}', '\u{0082}', '\u{0083}', '\u{0084}', '\u{0085}',
+    '\u{0086}', '\u{0087}', '\u{0088}', '\u{0089}', '\u{008A}', '\u{008B}', '\u{008C}', '\u{008D}',
+    '\u{008E}', '\u{008F}', '\u{0090}', '\u{0091}', '\u{0092}', '\u{0093}', '\u{0094}', '\u{0095}',
+    '\u{0096}', '\u{0097}', '\u{0098}', '\u{0099}', '\u{009A}', '\u{009B}', '\u{009C}', '\u{009D}',
+    '\u{009E}', '\u{009F}',
+];
+
 /// Bundled validation limits for quick consumption.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +94,8 @@ pub struct ValidationLimits {
     pub file_name_min_length: usize,
     /// Maximum file name length in characters.
     pub file_name_max_length: usize,
+    /// Complete set of disallowed file name characters.
+    pub file_name_invalid_chars: &'static [char],
     /// Maximum file src length in characters.
     pub file_src_max_length: usize,
     /// Maximum number of tags allowed in a feed.
@@ -110,6 +129,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     collection_items_max_count: 100,
     file_name_min_length: 1,
     file_name_max_length: 255,
+    file_name_invalid_chars: FILE_NAME_INVALID_CHARS,
     file_src_max_length: 1024,
     feed_tags_max_count: 5,
 };

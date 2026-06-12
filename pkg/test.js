@@ -474,6 +474,46 @@ describe("PubkySpecs Example Objects Tests", () => {
       );
     });
 
+    it("should expose complete file name invalid characters", () => {
+      assert.ok(
+        Array.isArray(validationLimits.fileNameInvalidChars),
+        "fileNameInvalidChars should be an array"
+      );
+
+      for (const invalidChar of ['"', "\\", "\n", "\r", "\0"]) {
+        assert.ok(
+          validationLimits.fileNameInvalidChars.includes(invalidChar),
+          `fileNameInvalidChars should include ${JSON.stringify(invalidChar)}`
+        );
+      }
+
+      for (let codePoint = 0; codePoint <= 0x9f; codePoint += 1) {
+        const isControl =
+          codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+        if (!isControl) {
+          continue;
+        }
+
+        const controlChar = String.fromCodePoint(codePoint);
+        assert.ok(
+          validationLimits.fileNameInvalidChars.includes(controlChar),
+          `fileNameInvalidChars should include control character U+${codePoint
+            .toString(16)
+            .toUpperCase()
+            .padStart(4, "0")}`
+        );
+      }
+
+      assert.ok(
+        !validationLimits.fileNameInvalidChars.includes("é"),
+        "fileNameInvalidChars should not reject Unicode letters"
+      );
+      assert.ok(
+        !validationLimits.fileNameInvalidChars.includes("文"),
+        "fileNameInvalidChars should not reject CJK characters"
+      );
+    });
+
     it("getValidationLimits should return a copy that matches validationLimits", () => {
       const limitsCopy = getValidationLimits();
 
