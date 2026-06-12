@@ -135,7 +135,13 @@ describe("PubkySpecs Example Objects Tests", () => {
         `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
         `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ54I`,
         `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55J`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55A`, // 5th attachment exceeds limit
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55K`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55L`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55M`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55N`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55O`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55P`,
+        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55A`, // 11th attachment exceeds limit
       ];
 
       assert.throws(

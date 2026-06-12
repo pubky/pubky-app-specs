@@ -100,7 +100,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     user_status_max_length: 50,
     post_short_content_max_length: 2000,
     post_long_content_max_length: 50_000,
-    post_attachments_max_count: 4,
+    post_attachments_max_count: 10,
     post_attachment_url_max_length: 200,
     post_allowed_attachment_protocols: &["pubky", "http", "https"],
     collection_content_max_length: 40_000,
