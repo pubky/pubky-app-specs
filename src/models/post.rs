@@ -359,6 +359,37 @@ impl Validatable for PubkyAppPost {
             }
         }
 
+        // Validate lock URL if present, for every kind (including collections,
+        // which return early below). Missing or null locks keep posts unlocked.
+        // Reuses the attachment URL limit and protocol allowlist for consistency.
+        if let Some(ref lock_url) = self.lock {
+            if lock_url.trim().is_empty() {
+                return Err("Validation Error: Lock URL cannot be empty".into());
+            }
+            if lock_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+                return Err(format!(
+                    "Validation Error: Lock URL exceeds maximum length (max: {} characters)",
+                    VALIDATION_LIMITS.post_attachment_url_max_length
+                ));
+            }
+            let parsed = Url::parse(lock_url)
+                .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
+            if !VALIDATION_LIMITS
+                .post_allowed_attachment_protocols
+                .contains(&parsed.scheme())
+            {
+                let allowed = VALIDATION_LIMITS
+                    .post_allowed_attachment_protocols
+                    .iter()
+                    .map(|p| format!("{p}://"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!(
+                    "Validation Error: Lock URL must use one of the allowed protocols: {allowed}"
+                ));
+            }
+        }
+
         if matches!(self.kind, PubkyAppPostKind::Collection) {
             if self.parent.is_some() || self.embed.is_some() {
                 return Err(
@@ -469,12 +500,6 @@ impl Validatable for PubkyAppPost {
                 "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
                 kind_name, max_length
             ));
-        }
-
-        // Validate lock URL format if present. Missing or null locks keep posts unlocked.
-        if let Some(ref lock_url) = self.lock {
-            Url::parse(lock_url)
-                .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
         }
 
         // Validate parent URI format if present
@@ -861,6 +886,70 @@ mod tests {
         assert!(post.lock.is_none());
         let id = post.create_id();
         assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_invalid_lock_url() {
+        let content = collection_envelope_json("My collection", None, &[]);
+        let post = PubkyAppPost::new_with_lock(
+            content,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+            Some("not a url".to_string()),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid lock URL format"));
+    }
+
+    #[test]
+    fn test_collection_post_accepts_valid_lock_url() {
+        let content = collection_envelope_json("My collection", None, &[]);
+        let lock = format!("pubky://{TEST_PUBKY_ID}/pub");
+        let post = PubkyAppPost::new_with_lock(
+            content,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+            Some(lock.clone()),
+        );
+        let id = post.create_id();
+        assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_disallowed_scheme_lock_url() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("javascript:alert(1)".to_string()),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("allowed protocols"));
+    }
+
+    #[test]
+    fn test_validate_empty_lock_url_rejected() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("".to_string()),
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_err());
     }
 
     #[test]
