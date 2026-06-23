@@ -3,7 +3,7 @@ use crate::{
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
     types::PubkyId,
-    APP_PATH, PUBLIC_PATH,
+    APP_PATH, PROTOCOL, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -361,7 +361,8 @@ impl Validatable for PubkyAppPost {
 
         // Validate lock URL if present, for every kind (including collections,
         // which return early below). Missing or null locks keep posts unlocked.
-        // Reuses the attachment URL limit and protocol allowlist for consistency.
+        // Lock servers live on the Pubky network, so the URL must be `pubky://`
+        // with a host; the length cap is shared with attachment URLs.
         if let Some(ref lock_url) = self.lock {
             if lock_url.trim().is_empty() {
                 return Err("Validation Error: Lock URL cannot be empty".into());
@@ -374,25 +375,16 @@ impl Validatable for PubkyAppPost {
             }
             let parsed = Url::parse(lock_url)
                 .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
-            // Reject opaque URLs like `pubky:lock-id` that have a valid scheme
-            // but no authority and so point at no resolvable lock server.
+            if parsed.scheme() != PROTOCOL.trim_end_matches("://") {
+                return Err(format!(
+                    "Validation Error: Lock URL must use the {PROTOCOL} scheme: {lock_url}"
+                ));
+            }
+            // Reject opaque URLs like `pubky:lock-id` that carry the scheme but
+            // no authority and so point at no resolvable lock server.
             if parsed.host().is_none() {
                 return Err(format!(
                     "Validation Error: Lock URL must include a host: {lock_url}"
-                ));
-            }
-            if !VALIDATION_LIMITS
-                .post_allowed_attachment_protocols
-                .contains(&parsed.scheme())
-            {
-                let allowed = VALIDATION_LIMITS
-                    .post_allowed_attachment_protocols
-                    .iter()
-                    .map(|p| format!("{p}://"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(format!(
-                    "Validation Error: Lock URL must use one of the allowed protocols: {allowed}"
                 ));
             }
         }
@@ -844,20 +836,20 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_https_lock_url() {
-        let lock_url = "https://locks.example.com/session/0034A0X7NJ52G".to_string();
+    fn test_validate_non_pubky_lock_url_rejected() {
         let post = PubkyAppPost::new_with_lock(
             "Visible preview".to_string(),
             PubkyAppPostKind::Short,
             None,
             None,
             None,
-            Some(lock_url.clone()),
+            Some("https://locks.example.com/session/0034A0X7NJ52G".to_string()),
         );
 
         let id = post.create_id();
-        assert_eq!(post.lock.as_deref(), Some(lock_url.as_str()));
-        assert!(post.validate(Some(&id)).is_ok());
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must use the pubky:// scheme"));
     }
 
     #[test]
@@ -927,22 +919,6 @@ mod tests {
         let id = post.create_id();
         assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
         assert!(post.validate(Some(&id)).is_ok());
-    }
-
-    #[test]
-    fn test_validate_disallowed_scheme_lock_url() {
-        let post = PubkyAppPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkyAppPostKind::Short,
-            None,
-            None,
-            None,
-            Some("ftp://files.example.com/lock".to_string()),
-        );
-        let id = post.create_id();
-        let result = post.validate(Some(&id));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("allowed protocols"));
     }
 
     #[test]
