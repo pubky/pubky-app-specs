@@ -184,6 +184,9 @@ pub struct PubkyAppPost {
     pub embed: Option<PubkyAppPostEmbed>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub attachments: Option<Vec<String>>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock: Option<String>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -223,6 +226,11 @@ impl PubkyAppPost {
         self.attachments.clone()
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn lock(&self) -> Option<String> {
+        self.lock.clone()
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -248,12 +256,25 @@ impl PubkyAppPost {
         embed: Option<PubkyAppPostEmbed>,
         attachments: Option<Vec<String>>,
     ) -> Self {
+        Self::new_with_lock(content, kind, parent, embed, attachments, None)
+    }
+
+    /// Creates a new lockable `PubkyAppPost` instance and sanitizes it.
+    pub fn new_with_lock(
+        content: String,
+        kind: PubkyAppPostKind,
+        parent: Option<String>,
+        embed: Option<PubkyAppPostEmbed>,
+        attachments: Option<Vec<String>>,
+        lock: Option<String>,
+    ) -> Self {
         let post = PubkyAppPost {
             content,
             kind,
             parent,
             embed,
             attachments,
+            lock,
         };
         post.sanitize()
     }
@@ -291,12 +312,15 @@ impl Validatable for PubkyAppPost {
                 .collect()
         });
 
+        let lock = self.lock.map(|uri_str| sanitize_url(&uri_str));
+
         PubkyAppPost {
             content,
             kind: self.kind,
             parent,
             embed,
             attachments,
+            lock,
         }
     }
 
@@ -445,6 +469,12 @@ impl Validatable for PubkyAppPost {
                 "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
                 kind_name, max_length
             ));
+        }
+
+        // Validate lock URL format if present. Missing or null locks keep posts unlocked.
+        if let Some(ref lock_url) = self.lock {
+            Url::parse(lock_url)
+                .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
         }
 
         // Validate parent URI format if present
@@ -765,6 +795,75 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_pubky_lock_url() {
+        let expected_lock = format!("pubky://{TEST_PUBKY_ID}/pub");
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some(expected_lock.clone()),
+        );
+
+        let id = post.create_id();
+        assert_eq!(post.lock.as_deref(), Some(expected_lock.as_str()));
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_https_lock_url() {
+        let lock_url = "https://locks.example.com/session/0034A0X7NJ52G".to_string();
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some(lock_url.clone()),
+        );
+
+        let id = post.create_id();
+        assert_eq!(post.lock.as_deref(), Some(lock_url.as_str()));
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_lock_url() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("not a url".to_string()),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid lock URL format"));
+    }
+
+    #[test]
+    fn test_missing_lock_deserializes_unlocked() {
+        let post_json = r#"
+        {
+            "content": "Hello World!",
+            "kind": "short",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert!(post.lock.is_none());
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
     fn test_try_from_valid() {
         let post_json = r#"
         {
@@ -918,6 +1017,7 @@ mod tests {
                 parent: None,
                 embed: None,
                 attachments: Some(vec![invalid_url.to_string()]),
+                lock: None,
             };
 
             let id = post.create_id();
@@ -936,6 +1036,7 @@ mod tests {
             parent: None,
             embed: None,
             attachments: Some(vec!["not a valid url".to_string()]),
+            lock: None,
         };
 
         let id = post.create_id();
@@ -988,6 +1089,7 @@ mod tests {
             parent: None,
             embed: None,
             attachments: Some(vec!["   ".to_string()]), // Whitespace only
+            lock: None,
         };
 
         let id = post.create_id();
@@ -1161,6 +1263,7 @@ mod tests {
             parent: None,
             embed: None,
             attachments: None,
+            lock: None,
         };
         let id = post.create_id();
         let result = post.validate(Some(&id));
@@ -1228,6 +1331,7 @@ mod tests {
                 uri: "pubky://x/pub/pubky.app/posts/01".to_string(),
             }),
             attachments: None,
+            lock: None,
         };
         let id = post.create_id();
         let result = post.validate(Some(&id));
@@ -1249,6 +1353,7 @@ mod tests {
             parent: None,
             embed: None,
             attachments: None,
+            lock: None,
         };
         assert_eq!(post.kind(), "Unknown");
     }
@@ -1782,6 +1887,7 @@ mod tests {
             parent: None,
             embed: None,
             attachments: None,
+            lock: None,
         };
         assert_eq!(post.kind(), "Collection");
     }

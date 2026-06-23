@@ -260,8 +260,9 @@ impl PubkySpecsBuilder {
         parent: Option<String>,
         embed: Option<PubkyAppPostEmbed>,
         attachments: Option<Vec<String>>,
+        lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkyAppPost::new(content, kind, parent, embed, attachments);
+        let post = PubkyAppPost::new_with_lock(content, kind, parent, embed, attachments, lock);
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
