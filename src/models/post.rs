@@ -374,6 +374,13 @@ impl Validatable for PubkyAppPost {
             }
             let parsed = Url::parse(lock_url)
                 .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
+            // Reject opaque URLs like `pubky:lock-id` that have a valid scheme
+            // but no authority and so point at no resolvable lock server.
+            if parsed.host().is_none() {
+                return Err(format!(
+                    "Validation Error: Lock URL must include a host: {lock_url}"
+                ));
+            }
             if !VALIDATION_LIMITS
                 .post_allowed_attachment_protocols
                 .contains(&parsed.scheme())
@@ -930,12 +937,28 @@ mod tests {
             None,
             None,
             None,
-            Some("javascript:alert(1)".to_string()),
+            Some("ftp://files.example.com/lock".to_string()),
         );
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("allowed protocols"));
+    }
+
+    #[test]
+    fn test_validate_hostless_lock_url_rejected() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("pubky:lock-id".to_string()),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must include a host"));
     }
 
     #[test]
