@@ -1733,9 +1733,9 @@ checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
 name = "pubky"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8aba83a5e7fee3d70c913c1ab567e32ba8024f729d3494ac624e8e37d33fa27d"
+checksum = "3dabfa82f58ad04e2b65fcecc02ca953dec608533dfa820b03ee174b2593e8af"
 dependencies = [
  "base64",
  "cookie",
@@ -1748,12 +1748,14 @@ dependencies = [
  "pkarr",
  "pubky-common",
  "reqwest",
+ "rustls",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
  "wasm-bindgen-futures",
  "web-time",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1780,9 +1782,9 @@ dependencies = [
 
 [[package]]
 name = "pubky-common"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf53e10c1d8f2a928a46d3e24e561a622c09d1cc58f1db700b9bfae138e2a625"
+checksum = "a7115f4177712ffb1d261e93a9a4992ef12da80c4b70decb1395bf8ac919c24c"
 dependencies = [
  "argon2",
  "base32",
@@ -2070,6 +2072,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "758025cb5fccfd3bc2fd74708fd4682be41d99e5dff73c377c0646c6012c73a4"
 dependencies = [
  "aws-lc-rs",
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -3054,6 +3057,15 @@ name = "webpki-root-certs"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "804f18a4ac2676ffb4e8b5b5fa9ae38af06df08162314f96a68d2a363e21a8ca"
+dependencies = [
+ "rustls-pki-types",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf"
 dependencies = [
  "rustls-pki-types",
 ]
