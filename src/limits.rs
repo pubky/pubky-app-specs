@@ -73,6 +73,23 @@ pub struct ValidationLimits {
     pub collection_description_max_length: usize,
     /// Maximum number of items (attachment URIs) per Collection.
     pub collection_items_max_count: usize,
+    // `lock_content_*`: limits for the public `PubkyAppLockContent` envelope
+    // stored in a `kind = lock` post's `content`.
+    /// Maximum scalar count for the whole `PubkyAppLockContent` JSON envelope.
+    pub lock_content_max_length: usize,
+    /// Maximum character count for the envelope `header` (public teaser body).
+    pub lock_content_header_max_length: usize,
+    /// Minimum character count for the envelope `title` (lock-card label).
+    pub lock_content_title_min_length: usize,
+    /// Maximum character count for the envelope `title` (lock-card label).
+    pub lock_content_title_max_length: usize,
+    // `lock_*`: limits for the private `PubkyAppLock` resource (the single JSON
+    // doc inlining the guarded post and its base64-encoded attachment files).
+    /// Maximum size in bytes of the serialized `PubkyAppLock` JSON resource
+    /// (the resource written to the homeserver at `/pub/locks/:id`). This caps the
+    /// whole base64-inlined resource, not individual files; with base64 overhead
+    /// the effective raw-content budget is roughly 73% of this value.
+    pub lock_max_size_bytes: usize,
     /// Minimum file name length in characters.
     pub file_name_min_length: usize,
     /// Maximum file name length in characters.
@@ -108,6 +125,11 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     collection_name_max_length: 100,
     collection_description_max_length: 500,
     collection_items_max_count: 100,
+    lock_content_max_length: 2_500,
+    lock_content_header_max_length: 2_000,
+    lock_content_title_min_length: 1,
+    lock_content_title_max_length: 100,
+    lock_max_size_bytes: 100 * (1 << 20), // 100 MB, aligned with blob caps.
     file_name_min_length: 1,
     file_name_max_length: 255,
     file_src_max_length: 1024,

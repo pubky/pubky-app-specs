@@ -148,7 +148,6 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 | `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
 | `embed`       | Object   | Reposted content (type + URI).       | Optional. URI must be valid if present.                                    |
 | `attachments` | Array    | List of attachment URIs.             | Optional. Each must be a valid URI.                                        |
-| `lock`        | String   | Lock server URL for protected posts. | Optional. If present, must be a valid `pubky://` URL with a host, up to 200 characters. Missing or `null` means unlocked. |
 
 **Post Kinds:**
 
@@ -159,6 +158,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 - `link`
 - `file`
 - `collection`
+- `lock`
 
 **Example: Valid Post**
 
@@ -171,14 +171,29 @@ Pubky.app models are designed for decentralized content sharing. The system uses
     "kind": "short",
     "uri": "pubky://user_id/pub/pubky.app/posts/0000000000000"
   },
-  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"],
+  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"]
+}
+```
+
+**Note on `kind = lock`:**
+
+A locked post uses a typed JSON envelope as its `content` and advertises the gate metadata publicly while the guarded payload lives behind a Lock Server. The envelope shape is:
+
+```json
+{
+  "header": "We were reckless adopting Lightning without understanding the tradeoffs.",
+  "title": "Locked Article",
+  "header_kind": "image",
   "lock": "pubky://lock_server_id/pub/locks/0000000000000"
 }
 ```
 
-**Locking:**
+- `header`: required public teaser used as the lock post's body, interpreted per `header_kind`; non-whitespace-only; max `lock_content_header_max_length` scalars.
+- `title`: required lock-card label; 1 to 100 scalars; non-whitespace-only.
+- `header_kind`: required display kind of the teaser. Must be one of `short`, `image`, `video`, `link`, `file` (`long`, `collection`, `lock`, and unknown kinds are rejected).
+- `lock`: required Lock Server URL. Must be a valid `pubky://` URL with a host, up to 200 characters.
 
-Posts are unlocked by default. A post may include `lock` to advertise that the full post is protected behind a lock server. When present, `lock` must be a valid `pubky://` URL with a host, up to 200 characters. Consumers that receive JSON without `lock`, or JSON with `"lock": null`, must treat the post as a regular unlocked post.
+For `kind = lock`, `parent` and `embed` must be unset. Teaser media (for an `image`/`file` header, for example) is carried in `post.attachments` and validated with the same rules as any other post. The `content` field is bounded by `lock_content_max_length` scalars. The guarded payload (the full post plus its attachment files) is described separately by `PubkyAppLock` (see below).
 
 **Note on `kind = collection`:**
 
@@ -202,6 +217,76 @@ Collection posts use a typed JSON envelope as their `content`. The envelope shap
 - `items`: ordered list of pubky.app post URIs (max 100). Each URI must be in exact canonical form `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>` (94 chars); any deviation (extra path segments, query, fragment, userinfo, etc.) is rejected.
 
 For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
+
+---
+
+### PubkyAppLock
+
+**Description:** The locked content resource served by the Lock Server.
+
+A locked post advertises a `lock` URL (in its public `PubkyAppLockContent` envelope) pointing at a `PubkyAppLock`. This is a single, self-contained JSON resource that bundles the full, unlocked `PubkyAppPost` together with all of its attachment files, each inlined as base64 in `files[].content_base64`. It is only released after the Lock Server verifies access.
+
+This is distinct from the public lock teaser (`header`/`title`) that a locked post carries in its `content` envelope — that teaser is public gate metadata, while `PubkyAppLock` is the private, guarded payload.
+
+**Identity:** `PubkyAppLock` is **content-addressed**: its ID is the blake3 hash of the serialized resource (same scheme as tags/bookmarks). The on-homeserver storage path is owned by the Locks app/SDK and is intentionally not defined by this spec.
+
+| **Field** | **Type** | **Description**                                  | **Validation Rules**                                                  |
+| --------- | -------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| `post`    | Object   | The full, unlocked post packaged in the resource. | Required. Stored `post.attachments` must be empty; validated as unlocked content with `files` reconstructed as attachments. |
+| `files`   | Array    | Attachment files inlined alongside `post`.        | Optional. Max 10 entries.                                             |
+
+The stored `post.attachments` must be empty: `files` is the single source of truth for the packed attachments, and the client reconstructs `post.attachments` from `files` (in order) on unlock. During validation, `files` are treated as the post's attachments so attachment-only locked media posts validate the same way they will behave after unlock.
+
+The overall size limit is enforced on the **whole serialized JSON resource** (what is written to the homeserver), which must be ≤ 100 MB. Because the files are base64-inlined (~33% overhead) alongside the post and JSON structure, the effective raw-content budget is roughly 73 MB.
+
+Each entry of `files` is a `PubkyAppLockFile`:
+
+| **Field**        | **Type** | **Description**                               | **Validation Rules**                                                        |
+| ---------------- | -------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| `name`           | String   | Original display name of the file.            | Required. 1–255 characters.                                                 |
+| `content_type`   | String   | MIME type of the file.                        | Required. Must be a valid IANA mime type.                                   |
+| `size`           | Integer  | Decoded size of the file in bytes.            | Required. Positive integer; must equal the decoded `content_base64` length. |
+| `content_base64` | String   | The file bytes, base64-encoded (standard).    | Required. Must be valid base64 whose decoded length equals `size`.          |
+
+**Example:**
+
+```json
+{
+  "post": {
+    "content": "The full unlocked article body.",
+    "kind": "long",
+    "parent": null,
+    "embed": null,
+    "attachments": null
+  },
+  "files": [
+    { "name": "cover.png", "content_type": "image/png", "size": 2048, "content_base64": "iVBORw0KGgoAAAANSUhEUgAA..." },
+    { "name": "episode.mp3", "content_type": "audio/mpeg", "size": 4096, "content_base64": "SUQzBAAAAAAAI1RTU0UAAAAP..." }
+  ]
+}
+```
+
+**Creating a lock:**
+
+`createLockBundle(post, files)` builds the resource for you. `files` is an array of `{ name, content_type, data }`, where `data` is the raw file bytes (`Uint8Array`); `size` and `content_base64` are derived automatically. The returned `meta` carries only the content-hash `id` (its `path`/`url` are empty, since the path is owned by the Locks app/SDK):
+
+```js
+const lockResult = builder.createLockBundle(post, [
+  { name: "cover.png", content_type: "image/png", data: coverU8 },
+  { name: "episode.mp3", content_type: "audio/mpeg", data: audioU8 },
+]);
+const lockId = lockResult.meta.id; // blake3 content hash
+const json = lockResult.lock.toJson();
+```
+
+**Security:**
+
+There is **no** homeserver/backend validation of locks — anything the Lock Server returns is untrusted. Clients MUST run `validate()` on the parsed resource (which decodes every `content_base64` and checks its length against `size`) and verify the resource's ID matches its content hash before presenting any content:
+
+```js
+const lock = PubkyAppLock.fromJson(json);
+lock.validate(); // decodes each content_base64, checks sizes, mime types, inner post
+```
 
 ---
 

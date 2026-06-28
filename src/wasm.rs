@@ -1,6 +1,8 @@
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, HasPath, HashId, TimestampId, Validatable};
 use crate::*;
+use base64::{engine::general_purpose::STANDARD as LOCK_BASE64, Engine as _};
+use serde::Deserialize;
 use serde_wasm_bindgen::{from_value, to_value};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
@@ -137,6 +139,7 @@ result_struct!(BookmarkResult, bookmark, PubkyAppBookmark);
 result_struct!(MuteResult, mute, PubkyAppMute);
 result_struct!(LastReadResult, last_read, PubkyAppLastRead);
 result_struct!(BlobResult, blob, PubkyAppBlob);
+result_struct!(LockResult, lock, PubkyAppLock);
 
 #[wasm_bindgen]
 impl PubkySpecsBuilder {
@@ -260,9 +263,8 @@ impl PubkySpecsBuilder {
         parent: Option<String>,
         embed: Option<PubkyAppPostEmbed>,
         attachments: Option<Vec<String>>,
-        lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkyAppPost::new_with_lock(content, kind, parent, embed, attachments, lock);
+        let post = PubkyAppPost::new(content, kind, parent, embed, attachments);
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
@@ -323,6 +325,44 @@ impl PubkySpecsBuilder {
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
 
         let post = PubkyAppPost::new(content, PubkyAppPostKind::Collection, None, None, None);
+        let post_id = post.create_id();
+        post.validate(Some(&post_id))?;
+
+        let path = PubkyAppPost::create_path(&post_id);
+        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
+    /// Creates a `kind = Lock` post — a locked post whose `content` is a
+    /// `PubkyAppLockContent` envelope advertising the public gate metadata
+    /// (`header`, `title`, `header_kind`) plus the `lock` Lock Server URL.
+    ///
+    /// Convenience wrapper around `createPost` that builds the
+    /// `PubkyAppLockContent` envelope and JSON-serializes it into `content`
+    /// internally, so JS callers don't have to stringify the envelope
+    /// themselves.
+    ///
+    /// `parent` and `embed` are not supported for Lock posts — the validator
+    /// rejects them — so this helper omits those arguments.
+    #[wasm_bindgen(js_name = createLockPost)]
+    pub fn create_lock_post(
+        &self,
+        header: String,
+        title: String,
+        header_kind: PubkyAppPostKind,
+        lock: String,
+    ) -> Result<PostResult, String> {
+        let envelope = PubkyAppLockContent {
+            header,
+            title,
+            header_kind,
+            lock,
+        };
+        let content = serde_json::to_string(&envelope)
+            .map_err(|e| format!("Failed to serialize Lock envelope: {e}"))?;
+
+        let post = PubkyAppPost::new(content, PubkyAppPostKind::Lock, None, None, None);
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 
@@ -431,6 +471,62 @@ impl PubkySpecsBuilder {
 
         Ok(BlobResult { blob, meta })
     }
+
+    // -----------------------------------------------------------------------------
+    // 11. PubkyAppLock
+    // -----------------------------------------------------------------------------
+
+    /// Builds a `PubkyAppLock` document — the full, unlocked post plus its
+    /// attachment files inlined as base64 — content-addressed via `HashId` and
+    /// served by the Lock Server.
+    ///
+    /// `files` is a JS array of `{ name, content_type, data }` objects, where
+    /// `data` is a `Uint8Array` of the raw file bytes. `size` and
+    /// `content_base64` are derived automatically from `data`.
+    ///
+    /// The lock's homeserver path is owned by the Locks app/SDK, so the returned
+    /// `meta` carries only the content-hash `id` (its `path`/`url` are empty).
+    #[wasm_bindgen(js_name = createLockBundle)]
+    pub fn create_lock_bundle(
+        &self,
+        post: PubkyAppPost,
+        files: JsValue,
+    ) -> Result<LockResult, String> {
+        let raw_files: Vec<LockFileInput> = if files.is_null() || files.is_undefined() {
+            Vec::new()
+        } else {
+            from_value(files).map_err(|e| e.to_string())?
+        };
+
+        let files_vec: Vec<PubkyAppLockFile> = raw_files
+            .into_iter()
+            .map(|f| {
+                PubkyAppLockFile::new(
+                    f.name,
+                    f.content_type,
+                    f.data.len(),
+                    LOCK_BASE64.encode(&f.data),
+                )
+            })
+            .collect();
+
+        let lock = PubkyAppLock::new(post, files_vec);
+        let lock_id = lock.create_id();
+        lock.validate(Some(&lock_id))?;
+
+        let meta = Meta::from_object(Some(&lock_id), self.pubky_id.clone(), String::new());
+
+        Ok(LockResult { lock, meta })
+    }
+}
+
+/// Raw file input for [`PubkySpecsBuilder::create_lock_bundle`]: the display
+/// `name`, MIME `content_type`, and raw `data` bytes (a JS `Uint8Array`).
+#[derive(Deserialize)]
+struct LockFileInput {
+    name: String,
+    content_type: String,
+    data: Vec<u8>,
 }
 
 /// This object represents the result of parsing a Pubky URI. It contains:

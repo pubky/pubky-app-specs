@@ -1762,6 +1762,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "base32",
+ "base64",
  "blake3",
  "js-sys",
  "mime",
