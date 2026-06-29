@@ -325,13 +325,35 @@ impl Validatable for PubkyAppPost {
     }
 
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        self.validate_with_attachments_source(id, false)
+    }
+}
+
+impl PubkyAppPost {
+    /// Validates the guarded payload of a [`crate::PubkyAppLockedPost`]. With
+    /// `has_bundle_files`, the bundle's files (not yet written, so no URIs)
+    /// satisfy the "must have content/embed/attachments" rule.
+    pub fn validate_in_lock_bundle(&self, has_bundle_files: bool) -> Result<(), String> {
+        self.validate_with_attachments_source(None, has_bundle_files)
+    }
+
+    fn validate_with_attachments_source(
+        &self,
+        id: Option<&str>,
+        has_bundle_files: bool,
+    ) -> Result<(), String> {
         // Validate the post ID
         if let Some(id) = id {
             self.validate_id(id)?;
         }
 
-        // Validate that post has meaningful content (at least one of: content, embed, or attachments)
-        if self.content.trim().is_empty() && self.embed.is_none() && self.attachments.is_none() {
+        // Validate that post has meaningful content (at least one of: content,
+        // embed, attachments, or bundle-packed files).
+        if self.content.trim().is_empty()
+            && self.embed.is_none()
+            && self.attachments.is_none()
+            && !has_bundle_files
+        {
             return Err(
                 "Validation Error: Post must have content, an embed, or attachments".into(),
             );

@@ -137,6 +137,16 @@ result_struct!(BookmarkResult, bookmark, PubkyAppBookmark);
 result_struct!(MuteResult, mute, PubkyAppMute);
 result_struct!(LastReadResult, last_read, PubkyAppLastRead);
 result_struct!(BlobResult, blob, PubkyAppBlob);
+result_struct!(LockedPostResult, locked_post, PubkyAppLockedPost);
+
+/// Raw file input for [`PubkySpecsBuilder::create_locked_post`]: the display
+/// `name`, MIME `content_type`, and raw `data` bytes (a JS `Uint8Array`).
+#[derive(serde::Deserialize)]
+struct LockedFileInput {
+    name: String,
+    content_type: String,
+    data: Vec<u8>,
+}
 
 #[wasm_bindgen]
 impl PubkySpecsBuilder {
@@ -330,6 +340,41 @@ impl PubkySpecsBuilder {
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
 
         Ok(PostResult { post, meta })
+    }
+
+    /// Builds a `PubkyAppLockedPost` — the private, single-blob bundle that
+    /// packs the full unlocked `post` together with all of its attachment
+    /// `files` (raw bytes, no base64) into one content-addressed binary
+    /// artifact. `files` is an array of `{ name, content_type, data }`, where
+    /// `data` is a `Uint8Array`.
+    ///
+    /// The returned `meta` carries the content-hash `id` and the recommended
+    /// `/priv/pubky.app/posts/:id` path. Get the bytes to upload via
+    /// `result.lockedPost.toBytes()`.
+    #[wasm_bindgen(js_name = createLockedPost)]
+    pub fn create_locked_post(
+        &self,
+        post: PubkyAppPost,
+        files: JsValue,
+    ) -> Result<LockedPostResult, String> {
+        let raw_files: Vec<LockedFileInput> = if files.is_null() || files.is_undefined() {
+            Vec::new()
+        } else {
+            from_value(files).map_err(|e| e.to_string())?
+        };
+        let files_vec: Vec<LockedFile> = raw_files
+            .into_iter()
+            .map(|f| LockedFile::new(f.name, f.content_type, f.data))
+            .collect();
+
+        let locked_post = PubkyAppLockedPost::new(post, files_vec);
+        let id = locked_post.create_id()?;
+        locked_post.validate(Some(&id))?;
+
+        let path = PubkyAppLockedPost::create_path(&id);
+        let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
+
+        Ok(LockedPostResult { locked_post, meta })
     }
 
     // -----------------------------------------------------------------------------

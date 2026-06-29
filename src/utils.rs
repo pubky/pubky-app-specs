@@ -1,8 +1,8 @@
 use crate::{
     constants::{APP_PATH, PROTOCOL, PUBLIC_PATH},
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppMute,
-    PubkyAppPost, PubkyAppTag, PubkyAppUser,
+    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLockedPost,
+    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -25,6 +25,13 @@ pub fn user_uri_builder(user_id: String) -> String {
 pub fn post_uri_builder(author_id: String, post_id: String) -> String {
     let post_path = PubkyAppPost::create_path(&post_id);
     [PROTOCOL, &author_id, &post_path].concat()
+}
+
+/// Builds a locked-post bundle URI: "pubky://<author_id>/priv/pubky.app/posts/<locked_post_id>"
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = lockedPostUriBuilder))]
+pub fn locked_post_uri_builder(author_id: String, locked_post_id: String) -> String {
+    let path = PubkyAppLockedPost::create_path(&locked_post_id);
+    [PROTOCOL, &author_id, &path].concat()
 }
 
 /// Builds a Follow URI of the form "pubky://<author_id>/pub/pubky.app/follows/<follow_id>"

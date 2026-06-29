@@ -20,6 +20,7 @@ pub use models::feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, Pubk
 pub use models::file::{PubkyAppFile, VALID_MIME_TYPES};
 pub use models::follow::PubkyAppFollow;
 pub use models::last_read::PubkyAppLastRead;
+pub use models::locked_post::{LockedFile, PubkyAppLockedPost};
 pub use models::mute::PubkyAppMute;
 pub use models::post::{
     PubkyAppCollectionContent, PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind,

@@ -180,6 +180,31 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 
 Posts are unlocked by default. A post may include `lock` to advertise that the full post is protected behind a lock server. When present, `lock` must be a valid `pubky://` URL with a host, up to 200 characters. Consumers that receive JSON without `lock`, or JSON with `"lock": null`, must treat the post as a regular unlocked post.
 
+Locking has three layers, kept deliberately separate:
+
+1. **The teaser post**: its `kind` (short/long/collection/video/…) stays the real kind so the post indexes and renders normally (a locked article still shows in article streams, a locked collection on the collections page). Its `lock` field is the `pubky://` URL of layer 2.
+2. **The public lock-metadata file**: author-signed public gate metadata (routing, pricing, and the content-hash ID committing to the private bundle). Its shape is owned by the lock-server model and is **out of scope for this crate**.
+3. **The private bundle** (`PubkyAppLockedPost`, below): the gated payload the lock server serves after verifying access.
+
+The `lock` field points at layer 2, not the bundle. The bundle's content-hash commitment lives in the author-signed layer 2, which is what lets a client trust an untrusted lock server.
+
+**`PubkyAppLockedPost` (private bundle):**
+
+The full unlocked post plus all of its attachment files, packed into a single content-addressed **binary** blob stored at `/priv/pubky.app/posts/:id`. Files are raw bytes (no base64), so there is no encoding overhead. Container layout:
+
+```text
+magic "PALP" (4) | version (1) | manifest_len: u32 LE (4) | manifest JSON | file bytes…
+```
+
+The manifest is `{ post, files: [{ name, content_type, size }] }` (`size` is a `u64`); the file bytes follow concatenated in order and are sliced back out by `size`. This crate is the canonical writer; the golden-vector test pins the exact bytes and ID.
+
+- **Identity:** the ID is Crockford-Base32 of the first half of `blake3(bytes)` over the exact stored bytes.
+- **Integrity:** the lock server is untrusted. After fetching, a client MUST recompute the ID over the received bytes, check it against the ID committed in the author-signed layer-2 metadata, and run `validate()` (packed post, file count/names/MIME types, total size) before presenting anything.
+- **Invariants:** the packed post must not set its own `attachments` (the bundle's `files` are the source of truth) and must not itself carry a `lock`. File count and total size reuse the attachment and blob limits.
+- **Unlock:** reconstructing the post's `attachments` from `files` (writing them out and mapping to URIs) is the client/SDK's responsibility, out of scope for this crate.
+
+Build it with `createLockedPost(post, files)` where `files` is an array of `{ name, content_type, data }` (`data` a `Uint8Array`); read it back with `PubkyAppLockedPost.fromBytes(bytes)` and upload bytes via `result.lockedPost.toBytes()`.
+
 **Note on `kind = collection`:**
 
 Collection posts use a typed JSON envelope as their `content`. The envelope shape is:
