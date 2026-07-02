@@ -112,13 +112,7 @@ async function createPost(pubkyId, content) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create the Post object
-  const { post, meta } = specs.createPost(
-    content,
-    PubkyAppPostKind.Short,
-    null, // parent post URI (for replies)
-    null, // embed object (for reposts)
-    null, // attachments (array of file URLs, max 3)
-  );
+  const { post, meta } = specs.createPost(content, PubkyAppPostKind.Short);
 
   // Store the post
   const postJson = post.toJson();
@@ -146,8 +140,8 @@ async function createPostWithAttachments(pubkyId, content, fileUrls) {
   const { post, meta } = specs.createPost(
     content,
     PubkyAppPostKind.Image,
-    null, // parent
-    null, // embed
+    null,
+    null,
     fileUrls, // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
   );
 
@@ -164,7 +158,39 @@ async function createPostWithAttachments(pubkyId, content, fileUrls) {
 }
 ```
 
-### 4) Following a User
+### 4) Creating a Locked Post
+
+```js
+import { Client } from "@synonymdev/pubky";
+import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
+
+async function createLockedPost(pubkyId, previewContent, lockServerUrl) {
+  const client = new Client();
+  const specs = new PubkySpecsBuilder(pubkyId);
+
+  const { post, meta } = specs.createPost(
+    previewContent,
+    PubkyAppPostKind.Long,
+    null,
+    null,
+    null,
+    lockServerUrl
+  );
+
+  const postJson = post.toJson();
+  console.log("Lock URL:", postJson.lock);
+
+  await client.fetch(meta.url, {
+    method: "PUT",
+    body: JSON.stringify(postJson),
+  });
+
+  console.log("Locked post stored at:", meta.url);
+  return { post, meta };
+}
+```
+
+### 5) Following a User
 
 ```js
 import { Client } from "@synonymdev/pubky";
@@ -192,6 +218,8 @@ async function followUser(myPubkyId, userToFollow) {
 
 This library supports many more domain objects beyond `User` and `Post`. Here are a few more you can explore:
 
+- **Locked posts**: optional 6th `lock` argument on `createPost(...)` — see [Creating a Locked Post](#4-creating-a-locked-post) above
+- **Collection posts**: `createCollectionPost(...)`
 - **Feeds**: `createFeed(...)`
 - **Bookmarks**: `createBookmark(...)`
 - **Tags**: `createTag(...)`

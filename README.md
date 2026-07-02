@@ -1,6 +1,6 @@
 # Pubky.app Data Model Specification
 
-_Version 0.5.3_
+_Version 0.6.0_
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
@@ -148,6 +148,7 @@ Pubky.app models are designed for decentralized content sharing. The system uses
 | `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
 | `embed`       | Object   | Reposted content (type + URI).       | Optional. URI must be valid if present.                                    |
 | `attachments` | Array    | List of attachment URIs.             | Optional. Each must be a valid URI.                                        |
+| `lock`        | String   | Lock server URL for protected posts. | Optional. If present, must be a valid `pubky://` URL with a host, up to 200 characters. Missing or `null` means unlocked. |
 
 **Post Kinds:**
 
@@ -170,9 +171,14 @@ Pubky.app models are designed for decentralized content sharing. The system uses
     "kind": "short",
     "uri": "pubky://user_id/pub/pubky.app/posts/0000000000000"
   },
-  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"]
+  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"],
+  "lock": "pubky://lock_server_id/pub/locks/0000000000000"
 }
 ```
+
+**Locking:**
+
+Posts are unlocked by default. A post may include `lock` to advertise that the full post is protected behind a lock server. When present, `lock` must be a valid `pubky://` URL with a host, up to 200 characters. Consumers that receive JSON without `lock`, or JSON with `"lock": null`, must treat the post as a regular unlocked post.
 
 **Note on `kind = collection`:**
 

@@ -1,4 +1,4 @@
-import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -68,13 +68,7 @@ describe("PubkySpecs Example Objects Tests", () => {
   describe("Post Pubky-app-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(
-        postContent, 
-        PubkyAppPostKind.Short, 
-        null, 
-        null, 
-        null
-      );
+      const { post, meta } = specsBuilder.createPost(postContent, PubkyAppPostKind.Short);
 
       // Test meta properties
       assert.ok(meta.id, "Post should have an ID");
@@ -96,11 +90,9 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(parentPostUri, parentPostUriRaw, "Parent post URI should match");
 
       const { post: replyPost } = specsBuilder.createPost(
-        "This is a reply to the first post!", 
-        PubkyAppPostKind.Short, 
-        parentPostUriRaw, 
-        null, 
-        null
+        "This is a reply to the first post!",
+        PubkyAppPostKind.Short,
+        parentPostUriRaw
       );
 
       // Test reply content
@@ -115,11 +107,10 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       const embed = new PubkyAppPostEmbed(embedUriRaw, PubkyAppPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
-        "This is a repost to random post!", 
-        PubkyAppPostKind.Short, 
-        null, 
-        embed, 
-        null
+        "This is a repost to random post!",
+        PubkyAppPostKind.Short,
+        null,
+        embed
       );
 
       // Test repost content
@@ -164,6 +155,173 @@ describe("PubkySpecs Example Objects Tests", () => {
         },
         "Expected validation error for too many attachments"
       );
+    });
+
+    describe("Post lock", () => {
+      const validLockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
+
+      it("should create locked post with valid pubky lock URL", () => {
+        const postContent = "Visible preview for locked content";
+        const { post } = specsBuilder.createPost(
+          postContent,
+          PubkyAppPostKind.Long,
+          null,
+          null,
+          null,
+          validLockUrl
+        );
+
+        assert.strictEqual(post.lock, validLockUrl, "lock getter should return lock URL");
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.content, postContent, "Post content should match");
+        assert.strictEqual(postJson.lock, validLockUrl, "toJson should include lock URL");
+      });
+
+      it("should create unlocked post when lock is omitted", () => {
+        const { post } = specsBuilder.createPost("Hello", PubkyAppPostKind.Short);
+        const lock = post.lock;
+        assert.ok(
+          lock === null || lock === undefined,
+          "createPost should produce unlocked post"
+        );
+        const postJson = post.toJson();
+        assert.ok(
+          postJson.lock === null || postJson.lock === undefined,
+          "toJson should not include lock for unlocked post"
+        );
+      });
+
+      it("should deserialize post without lock field as unlocked", () => {
+        const post = PubkyAppPost.fromJson({
+          content: "Hello World!",
+          kind: "short",
+          parent: null,
+          embed: null,
+          attachments: null,
+        });
+        const lock = post.lock;
+        assert.ok(
+          lock === null || lock === undefined,
+          "fromJson without lock should deserialize as unlocked"
+        );
+      });
+
+      it("cannot create post with non-pubky lock URL", () => {
+        assert.throws(
+          () => {
+            specsBuilder.createPost(
+              "Preview",
+              PubkyAppPostKind.Short,
+              null,
+              null,
+              null,
+              "https://locks.example.com/session/0034A0X7NJ52G"
+            );
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(
+              msg.includes("pubky://"),
+              `Expected pubky:// scheme error, got: "${msg}"`
+            );
+            return true;
+          },
+          "Expected validation error for non-pubky lock URL"
+        );
+      });
+
+      it("cannot create post with hostless lock URL", () => {
+        assert.throws(
+          () => {
+            specsBuilder.createPost(
+              "Preview",
+              PubkyAppPostKind.Short,
+              null,
+              null,
+              null,
+              "pubky:lock-id"
+            );
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(msg.includes("host"), `Expected host error, got: "${msg}"`);
+            return true;
+          },
+          "Expected validation error for hostless lock URL"
+        );
+      });
+    });
+
+    describe("Collection posts", () => {
+      const collectionItemUri = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`;
+      const coverImageUrl = `pubky://${RIO}/pub/pubky.app/files/0034A0X7NJ52G`;
+
+      it("should create collection post with JSON envelope content", () => {
+        assert.strictEqual(
+          typeof specsBuilder.createCollectionPost,
+          "function",
+          "PubkySpecsBuilder should expose createCollectionPost"
+        );
+
+        const { post, meta } = specsBuilder.createCollectionPost(
+          "Favorite posts",
+          "Posts worth revisiting",
+          [collectionItemUri],
+          coverImageUrl
+        );
+
+        assert.ok(meta.id, "Collection post should have an ID");
+        assert.ok(meta.url, "Collection post should have a URL");
+        const postChunks = meta.url.split("/");
+        assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
+        assert.strictEqual(postChunks[5], "posts", "URL should contain posts path");
+        assert.strictEqual(postChunks[6], meta.id, "URL should contain post ID");
+
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.kind, "collection", "Post kind should be collection");
+        assert.ok(
+          postJson.attachments === null || postJson.attachments === undefined,
+          "Collection items should not be stored in post.attachments"
+        );
+
+        const envelope = JSON.parse(postJson.content);
+        assert.strictEqual(envelope.name, "Favorite posts", "Collection name should match");
+        assert.strictEqual(
+          envelope.description,
+          "Posts worth revisiting",
+          "Collection description should match"
+        );
+        assert.deepStrictEqual(envelope.items, [collectionItemUri], "Collection items should match");
+        assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
+      });
+
+      it("cannot create collection post with too many items", () => {
+        assert.strictEqual(
+          typeof specsBuilder.createCollectionPost,
+          "function",
+          "PubkySpecsBuilder should expose createCollectionPost"
+        );
+
+        const tooManyItems = Array.from(
+          { length: validationLimits.collectionItemsMaxCount + 1 },
+          (_, index) => `pubky://${RIO}/pub/pubky.app/posts/${String(index).padStart(13, "0")}`
+        );
+
+        assert.throws(
+          () => {
+            specsBuilder.createCollectionPost("Too many", null, tooManyItems, null);
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(
+              msg.includes(`${validationLimits.collectionItemsMaxCount} items`),
+              `Expected collection item limit error, got: "${msg}"`
+            );
+            return true;
+          },
+          "Expected validation error for too many collection items"
+        );
+      });
     });
   });
 
