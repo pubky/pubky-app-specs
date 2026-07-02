@@ -137,6 +137,22 @@ const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilde
 );
 field("ID", postWithAttachmentsMeta.id);
 field("Attachments", `${postWithAttachments.toJson().attachments.length} files`);
+console.log();
+
+// Locked post (gated behind a lock server)
+console.log(`  ${c.yellow}▸ Locked Post${c.reset}`);
+const lockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
+const { post: lockedPost, meta: lockedPostMeta } = specsBuilder.createPostWithLock(
+  "We were reckless adopting Lightning without understanding the tradeoffs.",
+  PubkyAppPostKind.Long,
+  null,
+  null,
+  null,
+  lockUrl
+);
+field("ID", lockedPostMeta.id);
+field("Content", lockedPost.toJson().content);
+field("Lock", lockedPost.lock);
 
 // =============================================================================
 // 3. Social Actions

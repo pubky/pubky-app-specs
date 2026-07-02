@@ -1,4 +1,4 @@
-import { PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -164,6 +164,107 @@ describe("PubkySpecs Example Objects Tests", () => {
         },
         "Expected validation error for too many attachments"
       );
+    });
+
+    describe("Post lock", () => {
+      const validLockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
+
+      it("should create locked post with valid pubky lock URL", () => {
+        const postContent = "Visible preview for locked content";
+        const { post } = specsBuilder.createPostWithLock(
+          postContent,
+          PubkyAppPostKind.Long,
+          null,
+          null,
+          null,
+          validLockUrl
+        );
+
+        assert.strictEqual(post.lock, validLockUrl, "lock getter should return lock URL");
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.content, postContent, "Post content should match");
+        assert.strictEqual(postJson.lock, validLockUrl, "toJson should include lock URL");
+      });
+
+      it("should create unlocked post via createPost", () => {
+        const { post } = specsBuilder.createPost(
+          "Hello",
+          PubkyAppPostKind.Short,
+          null,
+          null,
+          null
+        );
+        const lock = post.lock;
+        assert.ok(
+          lock === null || lock === undefined,
+          "createPost should produce unlocked post"
+        );
+        const postJson = post.toJson();
+        assert.ok(
+          postJson.lock === null || postJson.lock === undefined,
+          "toJson should not include lock for unlocked post"
+        );
+      });
+
+      it("should deserialize post without lock field as unlocked", () => {
+        const post = PubkyAppPost.fromJson({
+          content: "Hello World!",
+          kind: "short",
+          parent: null,
+          embed: null,
+          attachments: null,
+        });
+        const lock = post.lock;
+        assert.ok(
+          lock === null || lock === undefined,
+          "fromJson without lock should deserialize as unlocked"
+        );
+      });
+
+      it("cannot create post with non-pubky lock URL", () => {
+        assert.throws(
+          () => {
+            specsBuilder.createPostWithLock(
+              "Preview",
+              PubkyAppPostKind.Short,
+              null,
+              null,
+              null,
+              "https://locks.example.com/session/0034A0X7NJ52G"
+            );
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(
+              msg.includes("pubky://"),
+              `Expected pubky:// scheme error, got: "${msg}"`
+            );
+            return true;
+          },
+          "Expected validation error for non-pubky lock URL"
+        );
+      });
+
+      it("cannot create post with hostless lock URL", () => {
+        assert.throws(
+          () => {
+            specsBuilder.createPostWithLock(
+              "Preview",
+              PubkyAppPostKind.Short,
+              null,
+              null,
+              null,
+              "pubky:lock-id"
+            );
+          },
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(msg.includes("host"), `Expected host error, got: "${msg}"`);
+            return true;
+          },
+          "Expected validation error for hostless lock URL"
+        );
+      });
     });
   });
 
