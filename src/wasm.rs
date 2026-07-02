@@ -252,6 +252,7 @@ impl PubkySpecsBuilder {
     // 4. PubkyAppPost
     // -----------------------------------------------------------------------------
 
+    /// Optional `lock`: `pubky://` URL with a host pointing at a lock server.
     #[wasm_bindgen(js_name = createPost)]
     pub fn create_post(
         &self,
@@ -260,37 +261,9 @@ impl PubkySpecsBuilder {
         parent: Option<String>,
         embed: Option<PubkyAppPostEmbed>,
         attachments: Option<Vec<String>>,
+        lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkyAppPost::new(content, kind, parent, embed, attachments);
-        let post_id = post.create_id();
-        post.validate(Some(&post_id))?;
-
-        let path = PubkyAppPost::create_path(&post_id);
-        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
-
-        Ok(PostResult { post, meta })
-    }
-
-    /// Creates a post gated behind a lock server. Same as [`createPost`](Self::create_post)
-    /// but sets the optional `lock` URL (must be a valid `pubky://` URL with a host).
-    #[wasm_bindgen(js_name = createPostWithLock)]
-    pub fn create_post_with_lock(
-        &self,
-        content: String,
-        kind: PubkyAppPostKind,
-        parent: Option<String>,
-        embed: Option<PubkyAppPostEmbed>,
-        attachments: Option<Vec<String>>,
-        lock: String,
-    ) -> Result<PostResult, String> {
-        let post = PubkyAppPost::new_with_lock(
-            content,
-            kind,
-            parent,
-            embed,
-            attachments,
-            Some(lock),
-        );
+        let post = PubkyAppPost::new_with_lock(content, kind, parent, embed, attachments, lock);
         let post_id = post.create_id();
         post.validate(Some(&post_id))?;
 

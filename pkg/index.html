@@ -23,7 +23,7 @@
           console.log("User created:", userMeta.url);
           
           // Create a post
-          const { post, meta: postMeta } = specsBuilder.createPost("Hello from browser!", PubkyAppPostKind.Short, null, null, null);
+          const { post, meta: postMeta } = specsBuilder.createPost("Hello from browser!", PubkyAppPostKind.Short);
           console.log("Post created:", postMeta.url);
           
           // Create a follow

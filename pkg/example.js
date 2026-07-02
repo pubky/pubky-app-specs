@@ -82,10 +82,7 @@ header("POSTS");
 console.log(`  ${c.yellow}▸ Simple Post${c.reset}`);
 const { post, meta } = specsBuilder.createPost(
   "Hello, Pubky world! This is my first post.",
-  PubkyAppPostKind.Short,
-  null,
-  null,
-  null
+  PubkyAppPostKind.Short
 );
 field("ID", meta.id);
 field("URL", meta.url);
@@ -97,9 +94,7 @@ console.log(`  ${c.yellow}▸ Reply Post${c.reset}`);
 const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   "This is a reply to the first post!",
   PubkyAppPostKind.Short,
-  userMeta.url,
-  null,
-  null
+  userMeta.url
 );
 field("ID", replyMeta.id);
 field("Parent", replyPost.toJson().parent);
@@ -115,8 +110,7 @@ const { post: repost, meta: repostMeta } = specsBuilder.createPost(
   "Check out this awesome video!",
   PubkyAppPostKind.Short,
   null,
-  embed,
-  null
+  embed
 );
 field("ID", repostMeta.id);
 field("Embed URI", repost.toJson().embed.uri);
@@ -142,7 +136,7 @@ console.log();
 // Locked post (gated behind a lock server)
 console.log(`  ${c.yellow}▸ Locked Post${c.reset}`);
 const lockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
-const { post: lockedPost, meta: lockedPostMeta } = specsBuilder.createPostWithLock(
+const { post: lockedPost, meta: lockedPostMeta } = specsBuilder.createPost(
   "We were reckless adopting Lightning without understanding the tradeoffs.",
   PubkyAppPostKind.Long,
   null,

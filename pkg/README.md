@@ -112,13 +112,7 @@ async function createPost(pubkyId, content) {
   const specs = new PubkySpecsBuilder(pubkyId);
 
   // Create the Post object
-  const { post, meta } = specs.createPost(
-    content,
-    PubkyAppPostKind.Short,
-    null, // parent post URI (for replies)
-    null, // embed object (for reposts)
-    null, // attachments (array of file URLs)
-  );
+  const { post, meta } = specs.createPost(content, PubkyAppPostKind.Short);
 
   // Store the post
   const postJson = post.toJson();
@@ -146,8 +140,8 @@ async function createPostWithAttachments(pubkyId, content, fileUrls) {
   const { post, meta } = specs.createPost(
     content,
     PubkyAppPostKind.Image,
-    null, // parent
-    null, // embed
+    null,
+    null,
     fileUrls, // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
   );
 
@@ -174,13 +168,13 @@ async function createLockedPost(pubkyId, previewContent, lockServerUrl) {
   const client = new Client();
   const specs = new PubkySpecsBuilder(pubkyId);
 
-  const { post, meta } = specs.createPostWithLock(
+  const { post, meta } = specs.createPost(
     previewContent,
     PubkyAppPostKind.Long,
     null,
     null,
     null,
-    lockServerUrl, // must be pubky:// with a host, e.g. "pubky://lock_server_id/pub/locks/0034A0X7NJ52G"
+    lockServerUrl
   );
 
   const postJson = post.toJson();
@@ -224,7 +218,7 @@ async function followUser(myPubkyId, userToFollow) {
 
 This library supports many more domain objects beyond `User` and `Post`. Here are a few more you can explore:
 
-- **Locked posts**: `createPostWithLock(...)` — see [Creating a Locked Post](#4-creating-a-locked-post) above
+- **Locked posts**: optional 6th `lock` argument on `createPost(...)` — see [Creating a Locked Post](#4-creating-a-locked-post) above
 - **Collection posts**: `createCollectionPost(...)`
 - **Feeds**: `createFeed(...)`
 - **Bookmarks**: `createBookmark(...)`

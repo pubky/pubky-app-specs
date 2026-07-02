@@ -68,13 +68,7 @@ describe("PubkySpecs Example Objects Tests", () => {
   describe("Post Pubky-app-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(
-        postContent, 
-        PubkyAppPostKind.Short, 
-        null, 
-        null, 
-        null
-      );
+      const { post, meta } = specsBuilder.createPost(postContent, PubkyAppPostKind.Short);
 
       // Test meta properties
       assert.ok(meta.id, "Post should have an ID");
@@ -96,11 +90,9 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(parentPostUri, parentPostUriRaw, "Parent post URI should match");
 
       const { post: replyPost } = specsBuilder.createPost(
-        "This is a reply to the first post!", 
-        PubkyAppPostKind.Short, 
-        parentPostUriRaw, 
-        null, 
-        null
+        "This is a reply to the first post!",
+        PubkyAppPostKind.Short,
+        parentPostUriRaw
       );
 
       // Test reply content
@@ -115,11 +107,10 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       const embed = new PubkyAppPostEmbed(embedUriRaw, PubkyAppPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
-        "This is a repost to random post!", 
-        PubkyAppPostKind.Short, 
-        null, 
-        embed, 
-        null
+        "This is a repost to random post!",
+        PubkyAppPostKind.Short,
+        null,
+        embed
       );
 
       // Test repost content
@@ -171,7 +162,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       it("should create locked post with valid pubky lock URL", () => {
         const postContent = "Visible preview for locked content";
-        const { post } = specsBuilder.createPostWithLock(
+        const { post } = specsBuilder.createPost(
           postContent,
           PubkyAppPostKind.Long,
           null,
@@ -186,14 +177,8 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.strictEqual(postJson.lock, validLockUrl, "toJson should include lock URL");
       });
 
-      it("should create unlocked post via createPost", () => {
-        const { post } = specsBuilder.createPost(
-          "Hello",
-          PubkyAppPostKind.Short,
-          null,
-          null,
-          null
-        );
+      it("should create unlocked post when lock is omitted", () => {
+        const { post } = specsBuilder.createPost("Hello", PubkyAppPostKind.Short);
         const lock = post.lock;
         assert.ok(
           lock === null || lock === undefined,
@@ -224,7 +209,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       it("cannot create post with non-pubky lock URL", () => {
         assert.throws(
           () => {
-            specsBuilder.createPostWithLock(
+            specsBuilder.createPost(
               "Preview",
               PubkyAppPostKind.Short,
               null,
@@ -248,7 +233,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       it("cannot create post with hostless lock URL", () => {
         assert.throws(
           () => {
-            specsBuilder.createPostWithLock(
+            specsBuilder.createPost(
               "Preview",
               PubkyAppPostKind.Short,
               null,
