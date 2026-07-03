@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-WASM bindings for Pubky.app data models. Use this package to create, sanitize, validate, and serialize JSON objects that match the canonical Rust specs used by Pubky clients and indexers.
+JavaScript and TypeScript bindings for Pubky.app data models, generated from the canonical Rust specs.
 
 The package initializes WASM automatically, so no manual `.wasm` loading is required.
 
