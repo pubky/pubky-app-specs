@@ -1,284 +1,85 @@
-# Pubky.app Data Model Specification
+# pubky-app-specs
 
-_Version 0.6.0_
+[![crates.io](https://img.shields.io/crates/v/pubky-app-specs)](https://crates.io/crates/pubky-app-specs)
+[![docs.rs](https://img.shields.io/docsrs/pubky-app-specs)](https://docs.rs/pubky-app-specs)
+[![npm](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Rust types, sanitization, and validation for [Pubky.app](https://pubky.app) data models. Use this crate to build JSON that matches what [Pubky indexers](https://github.com/pubky/pubky-nexus) expect.
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
 >
-> When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability.
+> When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability
 
-### JS package
+## Installation
 
-The package is available as an npm module [pubky-app-specs](https://www.npmjs.com/package/pubky-app-specs). Alternatively, you can build from source using the provided build scripts:
-
-```bash
-cd pkg
-npm run build
-```
-
-Test with:
+**Rust** ([crates.io](https://crates.io/crates/pubky-app-specs)):
 
 ```bash
-cd pkg
-npm run install
-npm run test
+cargo add pubky-app-specs
 ```
 
-Examples with:
+**JavaScript / TypeScript** ([npm](https://www.npmjs.com/package/pubky-app-specs)): see [`pkg/README.md`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/README.md).
 
-```bash
-cd pkg
-npm run example
+## Rust quick start
+
+```rust
+use pubky_app_specs::{
+    traits::{HasPath, Validatable},
+    PubkyAppUser,
+};
+use serde_json::to_vec;
+
+// Create a user profile
+let user = PubkyAppUser::new("Alice".into(), None, None, None, None);
+let path = PubkyAppUser::create_path(); // /pub/pubky.app/profile.json
+let json = to_vec(&user).unwrap();
+
+// Parse and validate JSON from storage
+let profile = PubkyAppUser::try_from(&json, "").unwrap();
 ```
 
----
+For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/pubky/pubky-app-specs/blob/main/examples/create_user.rs).
 
-## Table of Contents
+## Why use this crate
 
-- [Pubky.app Data Model Specification](#pubkyapp-data-model-specification)
-  - [JS package](#js-package)
-  - [Table of Contents](#table-of-contents)
-  - [Introduction](#introduction)
-  - [Quick Start](#quick-start)
-    - [Concepts:](#concepts)
-  - [Data Models](#data-models)
-    - [PubkyAppUser](#pubkyappuser)
-    - [PubkyAppFile](#pubkyappfile)
-    - [PubkyAppPost](#pubkyapppost)
-    - [PubkyAppTag](#pubkyapptag)
-    - [PubkyAppBookmark](#pubkyappbookmark)
-    - [PubkyAppFollow](#pubkyappfollow)
-    - [PubkyAppFeed](#pubkyappfeed)
-  - [Validation Rules](#validation-rules)
-    - [Common Rules](#common-rules)
-  - [License](#license)
+- **Validation consistency** — same sanitization and validation rules as Pubky indexers.
+- **Auto IDs and paths** — generates IDs, paths, and URLs according to Pubky standards.
+- **Single source of truth** — Rust models drive native apps, WASM bindings, and this spec.
 
----
+## Features
 
-## Introduction
+| Feature   | Purpose                        |
+| --------- | ------------------------------ |
+| `openapi` | OpenAPI schemas via `utoipa`   |
 
-This document specifies the data models and validation rules for the **Pubky.app** clients interactions. It defines the structure of data entities, their properties, and the validation rules to ensure data integrity and consistency. This is intended for developers building compatible libraries or clients.
-
-This document intents to be a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src). If you intend to develop in Rust, use them directly. In case of disagreement between this document and the Rust implementation, the Rust implementation prevails.
-
----
-
-## Quick Start
-
-Pubky.app models are designed for decentralized content sharing. The system uses a combination of timestamp-based IDs and Blake3-hashed IDs encoded in Crockford Base32 to ensure unique identifiers for each entity.
-
-### Concepts:
-
-- **Timestamp IDs** for sequential objects like posts and files.
-- **Hash IDs** for content-based uniqueness (e.g., tags and bookmarks).
-- **Validation Rules** ensure consistent and interoperable data formats.
-
----
-
-## Data Models
-
-### PubkyAppUser
-
-**Description:** Represents a user's profile information.
-
-**URI:** `/pub/pubky.app/profile.json`
-
-| **Field** | **Type** | **Description**                         | **Validation Rules**                                                                         |
-| --------- | -------- | --------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `name`    | String   | User's name.                            | Required. Length: 3–50 characters. Cannot be `"[DELETED]"`.                                  |
-| `bio`     | String   | Short biography.                        | Optional. Maximum length: 160 characters.                                                    |
-| `image`   | String   | URL to the user's profile image.        | Optional. Valid URL. Maximum length: 300 characters.                                         |
-| `links`   | Array    | List of associated links (title + URL). | Optional. Maximum of 5 links, each with title (100 chars max) and valid URL (300 chars max). |
-| `status`  | String   | User's current status.                  | Optional. Maximum length: 50 characters.                                                     |
-
-**Validation Notes:**
-
-- Reserved keyword `[DELETED]` cannot be used for `name`.
-- Each `UserLink` in `links` must have a valid title and URL.
-
-**Example: Valid User**
-
-```json
-{
-  "name": "Alice",
-  "bio": "Toxic maximalist.",
-  "image": "pubky://user_id/pub/pubky.app/files/0000000000000",
-  "links": [
-    {
-      "title": "GitHub",
-      "url": "https://github.com/alice"
-    }
-  ],
-  "status": "Exploring decentralized tech."
-}
+```toml
+pubky-app-specs = { version = "0.6", features = ["openapi"] }
 ```
 
----
+- **MSRV:** 1.89 (see `rust-version` in `Cargo.toml`)
+- **API docs:** [docs.rs/pubky-app-specs](https://docs.rs/pubky-app-specs)
 
-### PubkyAppFile
+## Models
 
-**Description:** Represents a file uploaded by the user, containing its metadata, including a reference to the actual blob of the file in `src` property.
+| Rust type           | Purpose                                  |
+| ------------------- | ---------------------------------------- |
+| `PubkyAppUser`      | User profile information                 |
+| `PubkyAppFile`      | Uploaded file metadata                   |
+| `PubkyAppPost`      | Posts, replies, embeds, and collections  |
+| `PubkyAppTag`       | Tags applied to Pubky URIs               |
+| `PubkyAppBookmark`  | Bookmarks for Pubky URIs                 |
+| `PubkyAppFollow`    | Follow relationships                     |
+| `PubkyAppFeed`      | Feed configurations                      |
+| `PubkyAppMute`      | Muted users                              |
+| `PubkyAppBlob`      | Raw binary file data                     |
+| `PubkyAppLastRead`  | Last-read notification timestamp         |
 
-**URI:** `/pub/pubky.app/files/:file_id`
+## Specification
 
-| **Field**      | **Type** | **Description**             | **Validation Rules**                           |
-| -------------- | -------- | --------------------------- | ---------------------------------------------- |
-| `name`         | String   | Name of the file.           | Required. Must be 1-255 characters             |
-| `created_at`   | Integer  | Unix timestamp of creation. | Required.                                      |
-| `src`          | String   | File blob URL               | Required. must be a valid URL. Max length 1024 |
-| `content_type` | String   | MIME type of the file.      | Required. Valid IANA mime types                |
-| `size`         | Integer  | Size of the file in bytes.  | Required. Positive integer. Max size is 10Mb   |
-
-**Validation Notes:**
-
-- The `file_id` in the URI must be a valid **Timestamp ID**.
-
----
-
-### PubkyAppPost
-
-**Description:** Represents a user's post.
-
-**URI:** `/pub/pubky.app/posts/:post_id`
-
-| **Field**     | **Type** | **Description**                      | **Validation Rules**                                                       |
-| ------------- | -------- | ------------------------------------ | -------------------------------------------------------------------------- |
-| `content`     | String   | Content of the post.                 | Required. Max length: 2000 (short), 50000 (long). Cannot be `"[DELETED]"`. |
-| `kind`        | String   | Type of post.                        | Required. Must be a valid `PubkyAppPostKind` value.                        |
-| `parent`      | String   | URI of the parent post (if a reply). | Optional. Must be a valid URI if present.                                  |
-| `embed`       | Object   | Reposted content (type + URI).       | Optional. URI must be valid if present.                                    |
-| `attachments` | Array    | List of attachment URIs.             | Optional. Each must be a valid URI.                                        |
-| `lock`        | String   | Lock server URL for protected posts. | Optional. If present, must be a valid `pubky://` URL with a host, up to 200 characters. Missing or `null` means unlocked. |
-
-**Post Kinds:**
-
-- `short`
-- `long`
-- `image`
-- `video`
-- `link`
-- `file`
-- `collection`
-
-**Example: Valid Post**
-
-```json
-{
-  "content": "Hello world! This is my first post.",
-  "kind": "short",
-  "parent": null,
-  "embed": {
-    "kind": "short",
-    "uri": "pubky://user_id/pub/pubky.app/posts/0000000000000"
-  },
-  "attachments": ["pubky://user_id/pub/pubky.app/files/0000000000000"],
-  "lock": "pubky://lock_server_id/pub/locks/0000000000000"
-}
-```
-
-**Locking:**
-
-Posts are unlocked by default. A post may include `lock` to advertise that the full post is protected behind a lock server. When present, `lock` must be a valid `pubky://` URL with a host, up to 200 characters. Consumers that receive JSON without `lock`, or JSON with `"lock": null`, must treat the post as a regular unlocked post.
-
-**Note on `kind = collection`:**
-
-Collection posts use a typed JSON envelope as their `content`. The envelope shape is:
-
-```json
-{
-  "name": "AI papers",
-  "description": "Best stuff",
-  "cover_image": "pubky://userA/pub/pubky.app/files/0034A0X7NJ52C",
-  "items": [
-    "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A",
-    "pubky://userB/pub/pubky.app/posts/0034A0X7NJ52B"
-  ]
-}
-```
-
-- `name`: required, 1 to 100 unicode scalars, non-whitespace-only.
-- `description`: optional, max 500 scalars.
-- `cover_image`: optional hero/cover image URL (max 200 chars). Validated as a general attachment URL — protocol must be `pubky`, `http`, or `https`.
-- `items`: ordered list of pubky.app post URIs (max 100). Each URI must be in exact canonical form `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>` (94 chars); any deviation (extra path segments, query, fragment, userinfo, etc.) is rejected.
-
-For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
-
----
-
-### PubkyAppTag
-
-**Description:** Represents a tag applied to a URI.
-
-**URI:** `/pub/pubky.app/tags/:tag_id`
-
-| **Field**    | **Type** | **Description**             | **Validation Rules**                                     |
-| ------------ | -------- | --------------------------- | -------------------------------------------------------- |
-| `uri`        | String   | URI of the tagged object.   | Required. Must be a valid URI.                           |
-| `label`      | String   | Label for the tag.          | Required. Trimmed, lowercase. Max length: 20 characters. |
-| `created_at` | Integer  | Unix timestamp of creation. | Required.                                                |
-
-**Validation Notes:**
-
-- The `tag_id` is a **Hash ID** derived from the `uri` and `label`.
-
----
-
-### PubkyAppBookmark
-
-**Description:** Represents a bookmark to a URI.
-
-**URI:** `/pub/pubky.app/bookmarks/:bookmark_id`
-
-| **Field**    | **Type** | **Description**        | **Validation Rules**           |
-| ------------ | -------- | ---------------------- | ------------------------------ |
-| `uri`        | String   | URI of the bookmark.   | Required. Must be a valid URI. |
-| `created_at` | Integer  | Timestamp of creation. | Required.                      |
-
-**Validation Notes:**
-
-- The `bookmark_id` is a **Hash ID** derived from the `uri`.
-
----
-
-### PubkyAppFollow
-
-**Description:** Represents a follow relationship.
-
-**URI:** `/pub/pubky.app/follows/:user_id`
-
-| **Field**    | **Type** | **Description**        | **Validation Rules** |
-| ------------ | -------- | ---------------------- | -------------------- |
-| `created_at` | Integer  | Timestamp of creation. | Required.            |
-
----
-
-### PubkyAppFeed
-
-**Description:** Represents a feed configuration.
-
-**URI:** `/pub/pubky.app/feeds/:feed_id`
-
-| **Field** | **Type** | **Description**                           | **Validation Rules**               |
-| --------- | -------- | ----------------------------------------- | ---------------------------------- |
-| `tags`    | Array    | List of tags for filtering.               | Optional. Strings must be trimmed. |
-| `reach`   | String   | Feed visibility (e.g., `all`, `friends`). | Required. Must be a valid reach.   |
-| `layout`  | String   | Feed layout style (e.g., `columns`).      | Required. Must be valid layout.    |
-| `sort`    | String   | Sort order (e.g., `recent`).              | Required. Must be valid sort.      |
-| `content` | String   | Type of content filtered.                 | Optional.                          |
-| `name`    | String   | Name of the feed.                         | Required.                          |
-
----
-
-## Validation Rules
-
-### Common Rules
-
-1. **Timestamp IDs:** 13-character Crockford Base32 strings derived from timestamps (in microseconds).
-2. **Hash IDs:** First half of the bytes from the resulting Blake3-hashed strings encoded in Crockford Base32.
-3. **URLs:** All URLs must pass standard validation.
-
----
+See the [full data model specification](https://github.com/pubky/pubky-app-specs/blob/main/SPEC.md) for URI layout, examples, and validation rules.
 
 ## License
 
-This specification is released under the MIT License.
+MIT

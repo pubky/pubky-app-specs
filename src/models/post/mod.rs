@@ -122,7 +122,6 @@ impl PubkyAppPostEmbed {
     }
 }
 
-
 /// Represents raw post in homeserver with content and kind
 /// URI: /pub/pubky.app/posts/:post_id
 /// Where post_id is CrockfordBase32 encoding of timestamp
@@ -445,7 +444,6 @@ impl Validatable for PubkyAppPost {
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

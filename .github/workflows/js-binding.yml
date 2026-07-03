@@ -45,3 +45,8 @@ jobs:
         npm run test
         
         echo "All tests completed successfully!"
+
+    - name: Verify npm package contents
+      run: |
+        cd ./pkg
+        npm pack --dry-run .

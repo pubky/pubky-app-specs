@@ -1,5 +1,5 @@
-// Application version
-pub static VERSION: &str = "0.5.0";
+// Application version (synced with Cargo.toml at compile time)
+pub static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Path constants
 pub static PUBLIC_PATH: &str = "/pub/";

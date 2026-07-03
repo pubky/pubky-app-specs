@@ -66,10 +66,13 @@ fn write_validation_limits_assets() -> io::Result<()> {
     fs::create_dir_all(&pkg_dir)?;
 
     let json = serde_json::to_string_pretty(&pubky_app_specs::VALIDATION_LIMITS)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
 
     fs::write(pkg_dir.join("validationLimits.json"), format!("{json}\n"))?;
-    fs::write(pkg_dir.join("validationLimits.js"), validation_limits_esm())?;
+    fs::write(
+        pkg_dir.join("validationLimits.js"),
+        validation_limits_esm(&json),
+    )?;
     fs::write(
         pkg_dir.join("validationLimits.cjs"),
         validation_limits_cjs(),
@@ -80,12 +83,14 @@ fn write_validation_limits_assets() -> io::Result<()> {
     Ok(())
 }
 
-fn validation_limits_esm() -> &'static str {
-    "import limits from \"./validationLimits.json\" assert { type: \"json\" };\n\
+fn validation_limits_esm(json: &str) -> String {
+    format!(
+        "const limits = {json};\n\
 \n\
 export const validationLimits = limits;\n\
 export const getValidationLimits = () => JSON.parse(JSON.stringify(limits));\n\
 export default limits;\n"
+    )
 }
 
 fn validation_limits_cjs() -> &'static str {
@@ -103,20 +108,18 @@ module.exports = {\n\
 fn update_package_json(pkg_dir: &Path) -> io::Result<()> {
     let package_json_path = pkg_dir.join("package.json");
     let package_json = fs::read_to_string(&package_json_path)?;
-    let mut package: Value = serde_json::from_str(&package_json)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let mut package: Value = serde_json::from_str(&package_json).map_err(io::Error::other)?;
 
     ensure_files(&mut package);
     ensure_exports(&mut package);
 
-    let updated = serde_json::to_string_pretty(&package)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let updated = serde_json::to_string_pretty(&package).map_err(io::Error::other)?;
     fs::write(package_json_path, format!("{updated}\n"))?;
     Ok(())
 }
 
 fn ensure_files(package: &mut Value) {
-    if !package.get("files").is_some() {
+    if package.get("files").is_none() {
         package["files"] = Value::Array(Vec::new());
     }
 
@@ -137,7 +140,7 @@ fn ensure_files(package: &mut Value) {
 }
 
 fn ensure_exports(package: &mut Value) {
-    if !package.get("exports").is_some() {
+    if package.get("exports").is_none() {
         package["exports"] = Value::Object(serde_json::Map::new());
     }
 
