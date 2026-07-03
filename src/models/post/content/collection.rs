@@ -1,8 +1,4 @@
-use crate::{
-    common::validate_crockford_id,
-    limits::VALIDATION_LIMITS,
-    types::PubkyId,
-};
+use crate::{common::validate_crockford_id, limits::VALIDATION_LIMITS, types::PubkyId};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -59,9 +55,7 @@ pub struct PubkyAppCollectionContent {
 /// Validates a `kind = Collection` post, including its JSON content envelope.
 pub(crate) fn validate_collection_post(post: &PubkyAppPost) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
-        return Err(
-            "Validation Error: Collection posts cannot have parent or embed".into(),
-        );
+        return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
     // Anti-misuse guard: items belong in the envelope, not in `post.attachments`.
     if post.attachments.is_some() {
@@ -88,8 +82,7 @@ pub(crate) fn validate_collection_post(post: &PubkyAppPost) -> Result<(), String
 fn validate_collection_envelope(envelope: &PubkyAppCollectionContent) -> Result<(), String> {
     if envelope.name.trim().is_empty() {
         return Err(
-            "Validation Error: Collection name must contain non-whitespace characters"
-                .into(),
+            "Validation Error: Collection name must contain non-whitespace characters".into(),
         );
     }
     let name_chars = envelope.name.chars().count();
@@ -141,9 +134,8 @@ fn validate_collection_envelope(envelope: &PubkyAppCollectionContent) -> Result<
         ));
     }
     for (index, uri) in envelope.items.iter().enumerate() {
-        validate_collection_item_uri(uri).map_err(|e| {
-            format!("Validation Error: Collection item at index {index}: {e}")
-        })?;
+        validate_collection_item_uri(uri)
+            .map_err(|e| format!("Validation Error: Collection item at index {index}: {e}"))?;
     }
     Ok(())
 }
@@ -172,12 +164,11 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
+    use super::*;
     use crate::traits::{TimestampId, Validatable};
 
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
-
 
     fn collection_envelope_json(name: &str, description: Option<&str>, items: &[String]) -> String {
         serde_json::to_string(&PubkyAppCollectionContent {
