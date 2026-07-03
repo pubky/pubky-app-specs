@@ -3,17 +3,24 @@ name = "pubky-app-specs"
 version = "0.6.0"
 edition = "2021"
 rust-version = "1.89"
-description = "Pubky.app Data Model Specifications"
+description = "Pubky.app data models with validation, sanitization, and URI helpers"
+readme = "README.md"
 homepage = "https://pubky.app"
 repository = "https://github.com/pubky/pubky-app-specs"
 license = "MIT"
-documentation = "https://github.com/pubky/pubky-app-specs"
+documentation = "https://docs.rs/pubky-app-specs"
+keywords = ["pubky", "pubky-app", "nexus", "social", "watcher"]
 exclude = [
     ".github",
     "pkg",
     "test",
-    "build.sh"
+    "build.sh",
+    "src/bin",
 ]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

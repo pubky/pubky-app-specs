@@ -31,6 +31,31 @@ yarn add pubky-app-specs
 
 ---
 
+## Building from source
+
+To build the WASM bindings locally (contributors or pre-publish verification):
+
+**Prerequisites:** Rust (MSRV 1.89), `wasm32-unknown-unknown` target, [wasm-pack](https://rustwasm.github.io/wasm-pack/), and Node.js.
+
+```bash
+# From the repository root
+rustup target add wasm32-unknown-unknown
+
+cd pkg
+npm install          # devDependencies (e.g. mocha)
+npm run build        # runs `cargo run --bin bundle_specs_npm`
+```
+
+Test and try the examples:
+
+```bash
+cd pkg
+npm run test         # mocha test.js
+npm run example      # node example.js
+```
+
+---
+
 ## 🚀 Quick Start
 
 1. **Import** the library.

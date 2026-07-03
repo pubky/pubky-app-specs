@@ -1,42 +1,96 @@
-# Pubky.app Data Model Specification
+# pubky-app-specs
 
-_Version 0.6.0_
+[![crates.io](https://img.shields.io/crates/v/pubky-app-specs)](https://crates.io/crates/pubky-app-specs)
+[![docs.rs](https://img.shields.io/docsrs/pubky-app-specs)](https://docs.rs/pubky-app-specs)
+[![npm](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Rust types, sanitization, and validation for [Pubky.app](https://pubky.app) data models. Use this crate to build JSON that matches what [Pubky indexers](https://github.com/pubky/pubky-nexus) expect.
 
 > ⚠️ **Warning: Rapid Development Phase**  
 > This specification is in an **early development phase** and is evolving quickly. Expect frequent changes and updates as the system matures. Consider this a **v0 draft**.
 >
-> When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability.
+> When we reach the first stable, long-term support version of the schemas, paths will adopt the format: `pubky.app/v1/` to indicate compatibility and stability
 
-### JS package
+## Installation
 
-The package is available as an npm module [pubky-app-specs](https://www.npmjs.com/package/pubky-app-specs). Alternatively, you can build from source using the provided build scripts:
-
-```bash
-cd pkg
-npm run build
-```
-
-Test with:
+**Rust** ([crates.io](https://crates.io/crates/pubky-app-specs)):
 
 ```bash
-cd pkg
-npm run install
-npm run test
+cargo add pubky-app-specs
 ```
 
-Examples with:
+**JavaScript / TypeScript** ([npm](https://www.npmjs.com/package/pubky-app-specs)): see [`pkg/README.md`](pkg/README.md).
 
-```bash
-cd pkg
-npm run example
+## Rust quick start
+
+```rust
+use pubky_app_specs::{
+    traits::{HasPath, Validatable},
+    PubkyAppUser,
+};
+use serde_json::to_vec;
+
+// Create a user profile
+let user = PubkyAppUser::new("Alice".into(), None, None, None, None);
+let path = PubkyAppUser::create_path(); // /pub/pubky.app/profile.json
+let json = to_vec(&user).unwrap();
+
+// Parse and validate JSON from storage
+let profile = PubkyAppUser::try_from(&json, "").unwrap();
 ```
+
+For a full homeserver flow, see [`examples/create_user.rs`](examples/create_user.rs).
+
+## Why use this crate
+
+- **Validation consistency** — same sanitization and validation rules as Pubky indexers.
+- **Auto IDs and paths** — generates IDs, paths, and URLs according to Pubky standards.
+- **Single source of truth** — Rust models drive native apps, WASM bindings, and this spec.
+
+## Features
+
+| Feature   | Purpose                        |
+| --------- | ------------------------------ |
+| `openapi` | OpenAPI schemas via `utoipa`   |
+
+```toml
+pubky-app-specs = { version = "0.6", features = ["openapi"] }
+```
+
+- **MSRV:** 1.89 (see `rust-version` in `Cargo.toml`)
+- **API docs:** [docs.rs/pubky-app-specs](https://docs.rs/pubky-app-specs)
+
+## Models
+
+| Rust type           | Spec section                         |
+| ------------------- | ------------------------------------ |
+| `PubkyAppUser`      | [PubkyAppUser](#pubkyappuser)        |
+| `PubkyAppFile`      | [PubkyAppFile](#pubkyappfile)        |
+| `PubkyAppPost`      | [PubkyAppPost](#pubkyapppost)        |
+| `PubkyAppTag`       | [PubkyAppTag](#pubkyapptag)          |
+| `PubkyAppBookmark`  | [PubkyAppBookmark](#pubkyappbookmark)|
+| `PubkyAppFollow`    | [PubkyAppFollow](#pubkyappfollow)    |
+| `PubkyAppFeed`      | [PubkyAppFeed](#pubkyappfeed)        |
+| `PubkyAppMute`      | [PubkyAppMute](#pubkyappmute)        |
+| `PubkyAppBlob`      | [PubkyAppBlob](#pubkyappblob)        |
+| `PubkyAppLastRead`  | [PubkyAppLastRead](#pubkyapplastread)|
 
 ---
 
+# Data model specification
+
+_Version 0.6.0_
+
 ## Table of Contents
 
-- [Pubky.app Data Model Specification](#pubkyapp-data-model-specification)
-  - [JS package](#js-package)
+- [pubky-app-specs](#pubky-app-specs)
+  - [Installation](#installation)
+  - [Rust quick start](#rust-quick-start)
+  - [Why use this crate](#why-use-this-crate)
+  - [Features](#features)
+  - [Models](#models)
+- [Data model specification](#data-model-specification)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Quick Start](#quick-start)
@@ -48,7 +102,11 @@ npm run example
     - [PubkyAppTag](#pubkyapptag)
     - [PubkyAppBookmark](#pubkyappbookmark)
     - [PubkyAppFollow](#pubkyappfollow)
+    - [PubkyAppMute](#pubkyappmute)
+    - [PubkyAppBlob](#pubkyappblob)
+    - [PubkyAppLastRead](#pubkyapplastread)
     - [PubkyAppFeed](#pubkyappfeed)
+      - [`feed` object (`PubkyAppFeedConfig`)](#feed-object-pubkyappfeedconfig)
   - [Validation Rules](#validation-rules)
     - [Common Rules](#common-rules)
   - [License](#license)
@@ -59,7 +117,7 @@ npm run example
 
 This document specifies the data models and validation rules for the **Pubky.app** clients interactions. It defines the structure of data entities, their properties, and the validation rules to ensure data integrity and consistency. This is intended for developers building compatible libraries or clients.
 
-This document intents to be a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src). If you intend to develop in Rust, use them directly. In case of disagreement between this document and the Rust implementation, the Rust implementation prevails.
+This document is a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src).
 
 ---
 
@@ -252,20 +310,98 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 
 ---
 
+### PubkyAppMute
+
+**Description:** Represents a mute relationship (a user the author has muted).
+
+**URI:** `/pub/pubky.app/mutes/:user_id`
+
+| **Field**    | **Type** | **Description**        | **Validation Rules** |
+| ------------ | -------- | ---------------------- | -------------------- |
+| `created_at` | Integer  | Timestamp of creation. | Required.            |
+
+**Validation Notes:**
+
+- The `user_id` in the URI is the **Pubky ID** of the muted user (same pattern as follows).
+
+---
+
+### PubkyAppBlob
+
+**Description:** Raw binary data backing an uploaded file. Stored as bytes on the homeserver, not as a JSON object.
+
+**URI:** `/pub/pubky.app/blobs/:blob_id`
+
+| **Field** | **Type** | **Description**              | **Validation Rules**                          |
+| --------- | -------- | ---------------------------- | --------------------------------------------- |
+| *(body)*  | Bytes    | Raw file content.            | Required. Non-empty. Max size 100 MB.         |
+
+**Validation Notes:**
+
+- The `blob_id` is a **Hash ID** derived from the Blake3 hash of the blob bytes.
+- Unlike other models, the homeserver body is the raw byte payload itself (not JSON).
+
+---
+
+### PubkyAppLastRead
+
+**Description:** Tracks the last-read notification timestamp for a user.
+
+**URI:** `/pub/pubky.app/last_read`
+
+| **Field**   | **Type** | **Description**                              | **Validation Rules**        |
+| ----------- | -------- | -------------------------------------------- | --------------------------- |
+| `timestamp` | Integer  | Last-read time (Unix epoch, **milliseconds**). | Required. Positive integer. |
+
+**Validation Notes:**
+
+- Single resource per user (no ID segment in the path).
+- `timestamp` uses **milliseconds**, unlike `created_at` on other models which use microseconds.
+
+---
+
 ### PubkyAppFeed
 
 **Description:** Represents a feed configuration.
 
 **URI:** `/pub/pubky.app/feeds/:feed_id`
 
-| **Field** | **Type** | **Description**                           | **Validation Rules**               |
-| --------- | -------- | ----------------------------------------- | ---------------------------------- |
-| `tags`    | Array    | List of tags for filtering.               | Optional. Strings must be trimmed. |
-| `reach`   | String   | Feed visibility (e.g., `all`, `friends`). | Required. Must be a valid reach.   |
-| `layout`  | String   | Feed layout style (e.g., `columns`).      | Required. Must be valid layout.    |
-| `sort`    | String   | Sort order (e.g., `recent`).              | Required. Must be valid sort.      |
-| `content` | String   | Type of content filtered.                 | Optional.                          |
-| `name`    | String   | Name of the feed.                         | Required.                          |
+| **Field**      | **Type**  | **Description**             | **Validation Rules**                    |
+| -------------- | --------- | --------------------------- | --------------------------------------- |
+| `feed`         | Object    | Feed filter/sort settings.  | Required. See `feed` object below.      |
+| `name`         | String    | Display name of the feed.   | Required. Non-empty after trim.         |
+| `created_at`   | Integer   | Unix timestamp of creation. | Required.                               |
+
+#### `feed` object (`PubkyAppFeedConfig`)
+
+| **Field**   | **Type** | **Description**                    | **Validation Rules**                                      |
+| ----------- | -------- | ---------------------------------- | --------------------------------------------------------- |
+| `tags`      | Array    | Tags for filtering.                | Optional. Max 5 tags. Each tag follows tag label rules.     |
+| `reach`     | String   | Feed visibility scope.             | Required. One of: `following`, `followers`, `friends`, `all`. |
+| `layout`    | String   | Feed layout style.                 | Required. One of: `columns`, `wide`, `visual`, `list`.    |
+| `sort`      | String   | Sort order.                        | Required. One of: `recent`, `popularity`.                   |
+| `content`   | String   | Post kind to filter by.            | Optional. A valid `PubkyAppPostKind` value.               |
+
+**Validation Notes:**
+
+- The `feed_id` is a **Hash ID** derived from the serialized `feed` object.
+- Tags are trimmed, lowercased, and empty entries are removed on sanitize.
+
+**Example: Valid Feed**
+
+```json
+{
+  "feed": {
+    "tags": ["crab", "rust"],
+    "reach": "following",
+    "layout": "columns",
+    "sort": "recent",
+    "content": "video"
+  },
+  "name": "My Feed",
+  "created_at": 1700000000
+}
+```
 
 ---
 
