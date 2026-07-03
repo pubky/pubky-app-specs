@@ -108,14 +108,12 @@ module.exports = {\n\
 fn update_package_json(pkg_dir: &Path) -> io::Result<()> {
     let package_json_path = pkg_dir.join("package.json");
     let package_json = fs::read_to_string(&package_json_path)?;
-    let mut package: Value = serde_json::from_str(&package_json)
-        .map_err(io::Error::other)?;
+    let mut package: Value = serde_json::from_str(&package_json).map_err(io::Error::other)?;
 
     ensure_files(&mut package);
     ensure_exports(&mut package);
 
-    let updated = serde_json::to_string_pretty(&package)
-        .map_err(io::Error::other)?;
+    let updated = serde_json::to_string_pretty(&package).map_err(io::Error::other)?;
     fs::write(package_json_path, format!("{updated}\n"))?;
     Ok(())
 }
