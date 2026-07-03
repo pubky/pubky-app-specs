@@ -7,7 +7,7 @@ WASM bindings for Pubky.app data models. Use this package to create, sanitize, v
 
 The package initializes WASM automatically, so no manual `.wasm` loading is required.
 
-## Why Use This Crate Instead of Manual JSONs?
+## Why Use This Package Instead of Manual JSONs?
 
 - **Validation Consistency**: Ensures your app uses the same sanitization and validation rules as [Pubky indexers](https://github.com/pubky/pubky-nexus), avoiding errors.
 - **Schema Versioning**: Automatically stay up-to-date with schema changes, reducing maintenance overhead.
