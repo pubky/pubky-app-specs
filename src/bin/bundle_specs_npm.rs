@@ -69,7 +69,7 @@ fn write_validation_limits_assets() -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     fs::write(pkg_dir.join("validationLimits.json"), format!("{json}\n"))?;
-    fs::write(pkg_dir.join("validationLimits.js"), validation_limits_esm())?;
+    fs::write(pkg_dir.join("validationLimits.js"), validation_limits_esm(&json))?;
     fs::write(
         pkg_dir.join("validationLimits.cjs"),
         validation_limits_cjs(),
@@ -80,12 +80,14 @@ fn write_validation_limits_assets() -> io::Result<()> {
     Ok(())
 }
 
-fn validation_limits_esm() -> &'static str {
-    "import limits from \"./validationLimits.json\" assert { type: \"json\" };\n\
+fn validation_limits_esm(json: &str) -> String {
+    format!(
+        "const limits = {json};\n\
 \n\
 export const validationLimits = limits;\n\
 export const getValidationLimits = () => JSON.parse(JSON.stringify(limits));\n\
 export default limits;\n"
+    )
 }
 
 fn validation_limits_cjs() -> &'static str {

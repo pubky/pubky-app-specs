@@ -14,6 +14,7 @@ import {
   feedUriBuilder,
   getValidMimeTypes,
 } from "./index.js";
+import { getValidationLimits, validationLimits } from "./validationLimits.js";
 
 // =============================================================================
 // ANSI color helpers for pretty output
@@ -30,6 +31,8 @@ const c = {
   gray: "\x1b[90m",
   white: "\x1b[37m",
   bgBlue: "\x1b[44m",
+  bgGreen: "\x1b[42m",
+  black: "\x1b[30m",
 };
 
 const divider = () => console.log(c.gray + "─".repeat(70) + c.reset);
@@ -296,10 +299,21 @@ testTypes.forEach(type => {
 });
 
 // =============================================================================
+// 8. Validation Limits
+// =============================================================================
+header("VALIDATION LIMITS");
+const limitsCopy = getValidationLimits();
+
+field("User name max", validationLimits.userNameMaxLength);
+field("Short post max", validationLimits.postShortContentMaxLength);
+field("Max attachments", validationLimits.postAttachmentsMaxCount);
+field("Copy matches", JSON.stringify(limitsCopy) === JSON.stringify(validationLimits));
+
+// =============================================================================
 // Done!
 // =============================================================================
 console.log();
-console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
-console.log(`${c.bgBlue}${c.white}${c.bright}                 ALL EXAMPLES COMPLETED SUCCESSFULLY!                 ${c.reset}`);
-console.log(`${c.bgBlue}${c.white}${c.bright}                                                                      ${c.reset}`);
+console.log(`${c.bgGreen}${c.black}${c.bright}                                                                      ${c.reset}`);
+console.log(`${c.bgGreen}${c.black}${c.bright}                 ALL EXAMPLES COMPLETED SUCCESSFULLY!                 ${c.reset}`);
+console.log(`${c.bgGreen}${c.black}${c.bright}                                                                      ${c.reset}`);
 console.log();

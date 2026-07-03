@@ -1,326 +1,73 @@
-# Pubky App Specs · `pubky-app-specs`
+# pubky-app-specs
 
 [![npm version](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A WASM library for building and validating structured JSON models compatible with Pubky.App social powered by [`@synonymdev/pubky`](https://www.npmjs.com/package/@synonymdev/pubky). It handles domain objects like **Users**, **Posts**, **Feeds**, **Bookmarks**, **Tags**, and more. Each object is:
+WASM bindings for Pubky.app data models. Use this package to create, sanitize, validate, and serialize JSON objects that match the canonical Rust specs used by Pubky clients and indexers.
 
-- **Sanitized** and **Validated** via Rust logic.
-- **Auto-ID’ed** and **Auto-Pathed** according to your domain rules.
-- **Exported** to JavaScript/TypeScript with minimal overhead.
+The package initializes WASM automatically, so no manual `.wasm` loading is required.
 
-## 🤔 Why Use This Crate Instead of [Manual JSONs](https://github.com/pubky/pubky-app-specs?tab=readme-ov-file#data-models)?
-
-- **Validation Consistency**: Ensures your app uses the same sanitization and validation rules as [Pubky indexers](https://github.com/pubky/pubky-nexus), avoiding errors.
-- **Schema Versioning**: Automatically stay up-to-date with schema changes, reducing maintenance overhead.
-- **Auto IDs & Paths**: Generates unique IDs, paths, and URLs according to Pubky standards.
-- **Rust-to-JavaScript Compatibility**: Type-safe models that work seamlessly across Rust and JavaScript/TypeScript.
-- **Future-Proof**: Easily adapt to new Pubky object types without rewriting JSON manually.
-
----
-
-## ⚙️ Installation
+## Installation
 
 ```bash
 npm install pubky-app-specs
-# or
+```
+
+```bash
 yarn add pubky-app-specs
 ```
 
-> **Note**: This package uses WASM with embedded bytes for automatic initialization. No manual WASM loading required - just import and use!
-
----
-
-## Building from source
-
-To build the WASM bindings locally (contributors or pre-publish verification):
-
-**Prerequisites:** Rust (MSRV 1.89), `wasm32-unknown-unknown` target, [wasm-pack](https://rustwasm.github.io/wasm-pack/), and Node.js.
-
-```bash
-# From the repository root
-rustup target add wasm32-unknown-unknown
-
-cd pkg
-npm install          # devDependencies (e.g. mocha)
-npm run build        # runs `cargo run --bin bundle_specs_npm`
-```
-
-Test and try the examples:
-
-```bash
-cd pkg
-npm run test         # mocha test.js
-npm run example      # node example.js
-```
-
----
-
-## 🚀 Quick Start
-
-1. **Import** the library.
-2. **Construct** a `PubkySpecsBuilder(pubkyId)` object.
-3. **Create** validated domain objects (User, Post, Tag, etc.).
-4. **Store** them on the [PubKy homeserver](https://github.com/synonymdev/pubky) or any distributed storage solution you prefer.
-
-### Import & Usage
+## Quick Start
 
 ```js
-// ES Modules
-import { PubkySpecsBuilder } from "pubky-app-specs";
+import { PubkyAppPostKind, PubkySpecsBuilder } from "pubky-app-specs";
 
-// OR CommonJS
-const { PubkySpecsBuilder } = require("pubky-app-specs");
+const pubkyId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
+const specs = new PubkySpecsBuilder(pubkyId);
 
-function loadSpecs(pubkyId) {
-  // Create a specs builder instance - WASM is already initialized
-  const specs = new PubkySpecsBuilder(pubkyId);
-  return specs;
-}
+const { user, meta: userMeta } = specs.createUser(
+  "Alice",
+  "Building on Pubky",
+  null,
+  null,
+  "active"
+);
+
+console.log(userMeta.url); // pubky://.../pub/pubky.app/profile.json
+console.log(user.toJson());
+
+const { post, meta: postMeta } = specs.createPost(
+  "Hello, Pubky!",
+  PubkyAppPostKind.Short
+);
+
+console.log(postMeta.url);
+console.log(post.toJson());
 ```
 
----
+Each create method returns:
 
-## 🎨 Example Usage
+- `meta`: generated `id`, storage `path`, and full `url`
+- a typed WASM model object with `.toJson()`
 
-Below are **succinct** examples to illustrate how to create or update data using **`pubky-app-specs`** and then **store** it with [`@synonymdev/pubky`](https://www.npmjs.com/package/@synonymdev/pubky).
-
-### 1) Creating a New User
+## Common Models
 
 ```js
-import { Client, PublicKey } from "@synonymdev/pubky";
-import { PubkySpecsBuilder } from "pubky-app-specs";
-
-async function createUser(pubkyId) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(pubkyId);
-
-  // Create user object with minimal fields
-  const { user, meta } = specs.createUser(
-    "Alice", // Name
-    "Hello from WASM", // Bio
-    null, // Image URL or File
-    null, // Links
-    "active", // Status
-  );
-
-  // meta contains { id, path, url }.
-  // user is the Rust "PubkyAppUser" object.
-
-  // We bring the Rust object to JS using the .toJson() method.
-  const userJson = user.toJson();
-
-  // Store in homeserver via pubky
-  const response = await client.fetch(meta.url, {
-    method: "PUT",
-    body: JSON.stringify(userJson),
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to store user: ${response.statusText}`);
-  }
-
-  console.log("User stored at:", meta.url);
-  return { user, meta };
-}
+const { user, meta } = specs.createUser(name, bio, image, links, status);
+const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock);
+const { file, meta } = specs.createFile(name, src, contentType, size);
+const { blob, meta } = specs.createBlob(bytes);
+const { bookmark, meta } = specs.createBookmark(uri);
+const { tag, meta } = specs.createTag(uri, label);
+const { follow, meta } = specs.createFollow(pubkyId);
+const { mute, meta } = specs.createMute(pubkyId);
+const { feed, meta } = specs.createFeed(tags, reach, layout, sort, content, name);
+const { last_read, meta } = specs.createLastRead();
 ```
 
-### 2) Creating a Post
+For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/example.js).
 
-```js
-import { Client } from "@synonymdev/pubky";
-import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
-
-async function createPost(pubkyId, content) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(pubkyId);
-
-  // Create the Post object
-  const { post, meta } = specs.createPost(content, PubkyAppPostKind.Short);
-
-  // Store the post
-  const postJson = post.toJson();
-  await client.fetch(meta.url, {
-    method: "PUT",
-    body: JSON.stringify(postJson),
-  });
-
-  console.log("Post stored at:", meta.url);
-  return { post, meta };
-}
-```
-
-### 3) Creating a Post with Attachments
-
-```js
-import { Client } from "@synonymdev/pubky";
-import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
-
-async function createPostWithAttachments(pubkyId, content, fileUrls) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(pubkyId);
-
-  // Create post with attachments (max 3 allowed)
-  const { post, meta } = specs.createPost(
-    content,
-    PubkyAppPostKind.Image,
-    null,
-    null,
-    fileUrls, // e.g. ["pubky://user/pub/pubky.app/files/abc123"]
-  );
-
-  const postJson = post.toJson();
-  console.log("Attachments:", postJson.attachments);
-
-  await client.fetch(meta.url, {
-    method: "PUT",
-    body: JSON.stringify(postJson),
-  });
-
-  console.log("Post with attachments stored at:", meta.url);
-  return { post, meta };
-}
-```
-
-### 4) Creating a Locked Post
-
-```js
-import { Client } from "@synonymdev/pubky";
-import { PubkySpecsBuilder, PubkyAppPostKind } from "pubky-app-specs";
-
-async function createLockedPost(pubkyId, previewContent, lockServerUrl) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(pubkyId);
-
-  const { post, meta } = specs.createPost(
-    previewContent,
-    PubkyAppPostKind.Long,
-    null,
-    null,
-    null,
-    lockServerUrl
-  );
-
-  const postJson = post.toJson();
-  console.log("Lock URL:", postJson.lock);
-
-  await client.fetch(meta.url, {
-    method: "PUT",
-    body: JSON.stringify(postJson),
-  });
-
-  console.log("Locked post stored at:", meta.url);
-  return { post, meta };
-}
-```
-
-### 5) Following a User
-
-```js
-import { Client } from "@synonymdev/pubky";
-import { PubkySpecsBuilder } from "pubky-app-specs";
-
-async function followUser(myPubkyId, userToFollow) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(myPubkyId);
-
-  const { follow, meta } = specs.createFollow(userToFollow);
-
-  // We only need to store the JSON in the homeserver
-  await client.fetch(meta.url, {
-    method: "PUT",
-    body: JSON.stringify(follow.toJson()),
-  });
-
-  console.log(`Successfully followed: ${userToFollow}`);
-}
-```
-
----
-
-## 📁 Additional Models
-
-This library supports many more domain objects beyond `User` and `Post`. Here are a few more you can explore:
-
-- **Locked posts**: optional 6th `lock` argument on `createPost(...)` — see [Creating a Locked Post](#4-creating-a-locked-post) above
-- **Collection posts**: `createCollectionPost(...)`
-- **Feeds**: `createFeed(...)`
-- **Bookmarks**: `createBookmark(...)`
-- **Tags**: `createTag(...)`
-- **Mutes**: `createMute(...)`
-- **Follows**: `createFollow(...)`
-- **LastRead**: `createLastRead(...)`
-- **Blobs**: `createBlob(...)`
-- **Files**: `createFile(...)`
-
-Each has a `meta` field for storing relevant IDs/paths and a typed data object.
-
-### Creating a File with Blob
-
-```js
-import { Client } from "@synonymdev/pubky";
-import { PubkySpecsBuilder, getValidMimeTypes } from "pubky-app-specs";
-
-async function uploadFile(pubkyId, fileData, fileName, contentType, fileSize) {
-  const client = new Client();
-  const specs = new PubkySpecsBuilder(pubkyId);
-
-  // First, create and store the blob (raw binary data)
-  const { blob, meta: blobMeta } = specs.createBlob(fileData);
-
-  await client.fetch(blobMeta.url, {
-    method: "PUT",
-    body: JSON.stringify(blob.toJson()),
-  });
-
-  // Then create the file metadata pointing to the blob
-  const { file, meta: fileMeta } = specs.createFile(
-    fileName, // e.g. "vacation-photo.jpg"
-    blobMeta.url, // Reference to the blob
-    contentType, // e.g. "image/jpeg"
-    fileSize, // Size in bytes
-  );
-
-  await client.fetch(fileMeta.url, {
-    method: "PUT",
-    body: JSON.stringify(file.toJson()),
-  });
-
-  console.log("File stored at:", fileMeta.url);
-  return { file, meta: fileMeta };
-}
-```
-
----
-
-## ✅ Validating File MIME Types
-
-Use `getValidMimeTypes()` to get the list of allowed MIME types for file attachments. This helps validate files before upload without duplicating the validation list.
-
-```js
-import { getValidMimeTypes } from "pubky-app-specs";
-
-// Get the list of valid MIME types
-const validMimeTypes = getValidMimeTypes();
-// Returns: ["application/javascript", "application/json", "application/pdf", "image/png", ...]
-
-// Validate a file before upload
-function isValidFileType(mimeType) {
-  return validMimeTypes.includes(mimeType);
-}
-
-// Example usage
-if (isValidFileType(file.type)) {
-  // Proceed with upload
-} else {
-  console.error(`Invalid file type: ${file.type}`);
-}
-```
-
-## 🔗 URI Builder Utilities
-
-These helper functions construct properly formatted Pubky URIs:
+## URI Helpers
 
 ```js
 import {
@@ -334,129 +81,72 @@ import {
   blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
+  parse_uri,
 } from "pubky-app-specs";
 
-const userId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
-const targetUserId = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
+const userUri = userUriBuilder(pubkyId);
+const postUri = postUriBuilder(pubkyId, "0033SSE3B1FQ0");
+const parsed = parse_uri(postUri);
 
-// Build URIs for different resources
-userUriBuilder(userId); // pubky://{userId}/pub/pubky.app/profile.json
-postUriBuilder(userId, "0033SSE3B1FQ0"); // pubky://{userId}/pub/pubky.app/posts/{postId}
-bookmarkUriBuilder(userId, "ABC123"); // pubky://{userId}/pub/pubky.app/bookmarks/{bookmarkId}
-followUriBuilder(userId, targetUserId); // pubky://{userId}/pub/pubky.app/follows/{targetUserId}
-tagUriBuilder(userId, "XYZ789"); // pubky://{userId}/pub/pubky.app/tags/{tagId}
-muteUriBuilder(userId, targetUserId); // pubky://{userId}/pub/pubky.app/mutes/{targetUserId}
-lastReadUriBuilder(userId); // pubky://{userId}/pub/pubky.app/last_read
-blobUriBuilder(userId, "BLOB123"); // pubky://{userId}/pub/pubky.app/blobs/{blobId}
-fileUriBuilder(userId, "FILE456"); // pubky://{userId}/pub/pubky.app/files/{fileId}
-feedUriBuilder(userId, "FEED789"); // pubky://{userId}/pub/pubky.app/feeds/{feedId}
+console.log(parsed.user_id);
+console.log(parsed.resource);
+console.log(parsed.resource_id);
 ```
 
----
+## Validation Limits
 
-## 📌 Parsing a Pubky URI
-
-The `parse_uri()` function converts a Pubky URI string into a strongly typed object.
-
-**Usage:**
+Validation limits are published as JSON so apps can reuse canonical limits without initializing WASM.
 
 ```js
-import { parse_uri } from "pubky-app-specs";
+import limits, {
+  getValidationLimits,
+  validationLimits,
+} from "pubky-app-specs/validationLimits";
 
-try {
-  const result = parse_uri("pubky://userID/pub/pubky.app/posts/postID");
-  console.log(result.user_id); // "userID"
-  console.log(result.resource); // e.g. "posts"
-  console.log(result.resource_id); // "postID" or null
-} catch (error) {
-  console.error("URI parse error:", error);
-}
-```
+console.log(validationLimits.userNameMaxLength);
+console.log(limits.postShortContentMaxLength);
 
-**Returns:**
-
-A `ParsedUriResult` object with:
-
-- **user_id:** The parsed user identifier.
-- **resource:** A string indicating the resource type.
-- **resource_id:** An optional resource identifier.
-
----
-
-## Validation limits
-
-Validation limits are published as JSON so UIs and tests can reuse the
-canonical rules without WASM, plus optional WASM accessors when needed.
-
-### ✅ Recommended (no WASM)
-
-**Named export from the package root:**
-
-```js
-import { validationLimits, getValidationLimits } from "pubky-app-specs";
-
-console.log(validationLimits);
 const copy = getValidationLimits();
 ```
 
-**Direct subpath import (ESM):**
+For raw JSON imports:
 
 ```js
-import limits from "pubky-app-specs/validationLimits";
-// or
 import limitsJson from "pubky-app-specs/validationLimits.json";
+
+console.log(limitsJson.postAttachmentsMaxCount);
 ```
 
-**Direct subpath import (CJS):**
+## MIME Types
 
 ```js
-const { validationLimits, getValidationLimits } = require("pubky-app-specs");
-// or
-const limits = require("pubky-app-specs/validationLimits");
-```
+import { getValidMimeTypes } from "pubky-app-specs";
 
-### WASM accessors
+const validMimeTypes = getValidMimeTypes();
 
-```js
-import { PubkySpecsBuilder, getValidationLimits } from "pubky-app-specs";
-
-const limitsFromWasm = getValidationLimits();
-
-const builder = new PubkySpecsBuilder("pubky_id_here");
-const limitsFromBuilder = builder.validationLimits;
-```
-
-Example output shape:
-
-```json
-{
-  "maxBlobSizeBytes": 104857600,
-  "maxFileSizeBytes": 104857600,
-  "tagLabelMinLength": 1,
-  "tagLabelMaxLength": 20,
-  "tagInvalidChars": [",", ":", " ", "\t", "\n", "\r"],
-  "userNameMinLength": 3,
-  "userNameMaxLength": 50,
-  "userBioMaxLength": 160,
-  "userImageUrlMaxLength": 300,
-  "userLinksMaxCount": 5,
-  "userLinkTitleMaxLength": 100,
-  "userLinkUrlMaxLength": 300,
-  "userStatusMaxLength": 50,
-  "postShortContentMaxLength": 2000,
-  "postLongContentMaxLength": 50000,
-  "postAttachmentsMaxCount": 10,
-  "postAttachmentUrlMaxLength": 200,
-  "postAllowedAttachmentProtocols": ["pubky", "http", "https"],
-  "fileNameMinLength": 1,
-  "fileNameMaxLength": 255,
-  "fileSrcMaxLength": 1024,
-  "feedTagsMaxCount": 5
+if (!validMimeTypes.includes(file.type)) {
+  throw new Error(`Unsupported file type: ${file.type}`);
 }
 ```
 
----
+## Specification
 
-## 📄 License
+See the [full data model specification](https://github.com/pubky/pubky-app-specs/blob/main/SPEC.md) for URI layout, field rules, examples, and validation behavior.
+
+## Building from Source
+
+Prerequisites: Rust, the `wasm32-unknown-unknown` target, [`wasm-pack`](https://rustwasm.github.io/wasm-pack/), and Node.js.
+
+```bash
+rustup target add wasm32-unknown-unknown
+
+cd pkg
+npm install
+npm run build
+npm run test
+npm run example
+```
+
+## License
 
 MIT
