@@ -4,8 +4,7 @@ pub mod limits;
 mod models;
 pub mod traits;
 mod types;
-mod uri_parser;
-mod utils;
+mod uri;
 
 // Re-export constants
 pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
@@ -28,8 +27,7 @@ pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
 pub use models::PubkyAppObject;
 pub use types::PubkyId;
-pub use uri_parser::{ParsedUri, Resource};
-pub use utils::*;
+pub use uri::*;
 
 // Our WASM module
 #[cfg(target_arch = "wasm32")]
