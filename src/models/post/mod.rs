@@ -1,5 +1,6 @@
 use crate::{
     common::sanitize_url,
+    is_pubky_scheme,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
     APP_PATH, PROTOCOL, PUBLIC_PATH,
@@ -334,7 +335,7 @@ impl Validatable for PubkyAppPost {
             }
             let parsed = Url::parse(lock_url)
                 .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
-            if parsed.scheme() != PROTOCOL.trim_end_matches("://") {
+            if !is_pubky_scheme(parsed.scheme()) {
                 return Err(format!(
                     "Validation Error: Lock URL must use the {PROTOCOL} scheme: {lock_url}"
                 ));
@@ -425,7 +426,8 @@ impl Validatable for PubkyAppPost {
                 // Ensure the URL uses an allowed protocol
                 if !VALIDATION_LIMITS
                     .post_allowed_attachment_protocols
-                    .contains(&parsed_url.scheme())
+                    .iter()
+                    .any(|&protocol| parsed_url.scheme().eq_ignore_ascii_case(protocol))
                 {
                     let allowed_protocols = VALIDATION_LIMITS
                         .post_allowed_attachment_protocols
