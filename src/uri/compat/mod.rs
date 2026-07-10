@@ -3,4 +3,4 @@
 mod tag;
 mod parsed;
 
-pub use parsed::CompatParsedUri;
+pub use parsed::ExtendedParsedUri;

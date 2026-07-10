@@ -2,7 +2,7 @@
 //!
 //! - **Build** — `*_uri_builder` functions
 //! - **Parse (strict)** — [`ParsedUri`] for `pubky.app` spec paths
-//! - **Parse (compat)** — [`CompatParsedUri`] for ingest (cross-app tags)
+//! - **Parse (extended)** — [`ExtendedParsedUri`] for ingest (cross-app tags)
 //! - **Parse (structure)** — [`try_parse_pubky_path`] / [`PubkyPath`] (advanced)
 
 mod builders;
@@ -24,7 +24,7 @@ pub use parsed::ParsedUri;
 pub use resource::Resource;
 
 // Compat
-pub use compat::CompatParsedUri;
+pub use compat::ExtendedParsedUri;
 
 // Structure (advanced)
 pub use path::{try_parse_pubky_path, PubkyPath};
