@@ -1,9 +1,10 @@
-use crate::PubkyId;
+use crate::{PubkyId, APP_PATH};
 use serde::{Deserialize, Serialize};
 use std::convert::{From, TryFrom};
 
-use super::tag::TagPath;
+use super::super::path::try_parse_pubky_path;
 use super::super::{ParsedUri, Resource};
+use super::tag::TagPath;
 
 /// Parsed URI for ingest boundaries: strict [`super::super::ParsedUri`] paths
 /// plus cross-app universal tag paths.
@@ -68,7 +69,11 @@ impl ExtendedParsedUri {
                 resource: resource.clone(),
             }
             .try_to_uri_str(),
-            ExtendedParsedUri::UniversalTag { user_id, app, resource } => {
+            ExtendedParsedUri::UniversalTag {
+                user_id,
+                app,
+                resource,
+            } => {
                 let Resource::Tag(tag_id) = resource else {
                     return Err(format!(
                         "Universal tag URI must have Tag resource, got {resource}"
@@ -98,8 +103,10 @@ impl TryFrom<&str> for ExtendedParsedUri {
     type Error = String;
 
     fn try_from(uri: &str) -> Result<Self, Self::Error> {
-        if let Ok(parsed_uri) = ParsedUri::try_from(uri) {
-            return Ok(parsed_uri.into());
+        let path = try_parse_pubky_path(uri)?;
+
+        if path.app == APP_PATH.trim_matches('/') {
+            return ParsedUri::try_from(uri).map(Into::into);
         }
 
         if let Some(parsed) = TagPath::parse(uri) {
@@ -110,9 +117,7 @@ impl TryFrom<&str> for ExtendedParsedUri {
             });
         }
 
-        Err(format!(
-            "URI is not a recognized pubky.app path or universal tag path: {uri}"
-        ))
+        Err(format!("URI is not a recognized universal tag path: {uri}"))
     }
 }
 
@@ -157,8 +162,7 @@ mod tests {
     fn test_parse_universal_tag_uri_mapky() {
         let tag_id = "ABC123";
         let uri = format!("pubky://{USER_ID}/pub/mapky/tags/{tag_id}");
-        let parsed =
-            ExtendedParsedUri::try_from(uri.as_str()).expect("mapky tag URI should parse");
+        let parsed = ExtendedParsedUri::try_from(uri.as_str()).expect("mapky tag URI should parse");
 
         assert!(matches!(parsed, ExtendedParsedUri::UniversalTag { .. }));
         assert_eq!(parsed.user_id(), &PubkyId::try_from(USER_ID).unwrap());
@@ -195,6 +199,34 @@ mod tests {
     #[test]
     fn test_reject_missing_user_id() {
         assert!(ExtendedParsedUri::try_from("pubky:///pub/pubky.app/").is_err());
+    }
+
+    #[test]
+    fn test_propagate_invalid_pubky_id_on_pubky_app_uri() {
+        let uri = "pubky://not-a-pubky-id/pub/pubky.app/posts/0032SSN7Q4EVG";
+        let extended_err =
+            ExtendedParsedUri::try_from(uri).expect_err("invalid pubky id should fail");
+        let parsed_err = ParsedUri::try_from(uri).expect_err("invalid pubky id should fail");
+        assert_eq!(extended_err, parsed_err);
+    }
+
+    #[test]
+    fn test_propagate_invalid_follow_id_on_pubky_app_uri() {
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/follows/NOT_A_PUBKY_ID");
+        let extended_err =
+            ExtendedParsedUri::try_from(uri.as_str()).expect_err("invalid follow id should fail");
+        let parsed_err =
+            ParsedUri::try_from(uri.as_str()).expect_err("invalid follow id should fail");
+        assert_eq!(extended_err, parsed_err);
+    }
+
+    #[test]
+    fn test_propagate_structural_error_for_foreign_uri() {
+        let uri = "pubky://not-a-pubky-id/pub/mapky/tags/ABC123";
+        let extended_err = ExtendedParsedUri::try_from(uri)
+            .expect_err("invalid pubky id on foreign URI should fail");
+        let path_err = try_parse_pubky_path(uri).expect_err("invalid pubky id should fail");
+        assert_eq!(extended_err, path_err);
     }
 
     #[test]

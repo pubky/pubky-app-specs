@@ -71,7 +71,9 @@ fn resource_from_segments(segments: &[String]) -> Result<Resource, String> {
             let resource_type = format!("{res_type}/");
             Ok(match resource_type.as_str() {
                 PubkyAppPost::PATH_SEGMENT => Resource::Post(id.clone()),
-                PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(id.as_str()).map(Resource::Follow)?,
+                PubkyAppFollow::PATH_SEGMENT => {
+                    PubkyId::try_from(id.as_str()).map(Resource::Follow)?
+                }
                 PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(id.as_str()).map(Resource::Mute)?,
                 PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.clone()),
                 PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.clone()),

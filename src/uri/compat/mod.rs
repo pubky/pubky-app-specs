@@ -1,6 +1,6 @@
 //! Compatibility URI admission beyond strict `pubky.app` spec parsing.
 
-mod tag;
 mod parsed;
+mod tag;
 
 pub use parsed::ExtendedParsedUri;

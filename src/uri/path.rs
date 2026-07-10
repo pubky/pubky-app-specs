@@ -17,9 +17,7 @@ pub fn try_parse_pubky_path(uri: &str) -> Result<PubkyPath, String> {
     let parsed_url = Url::parse(uri).map_err(|e| format!("Invalid URL: {e}"))?;
 
     if !is_pubky_scheme(parsed_url.scheme()) {
-        return Err(format!(
-            "Invalid URI, must start with '{PROTOCOL}': {uri}"
-        ));
+        return Err(format!("Invalid URI, must start with '{PROTOCOL}': {uri}"));
     }
 
     let user_id_str = parsed_url
@@ -47,7 +45,10 @@ pub fn try_parse_pubky_path(uri: &str) -> Result<PubkyPath, String> {
     Ok(PubkyPath {
         user_id,
         app: segments[1].to_string(),
-        segments: segments[2..].iter().map(|segment| segment.to_string()).collect(),
+        segments: segments[2..]
+            .iter()
+            .map(|segment| segment.to_string())
+            .collect(),
     })
 }
 

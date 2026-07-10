@@ -66,7 +66,8 @@ mod tests {
 
     #[test]
     fn test_parse_eventky() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/eventky.app/tags/XYZ";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/eventky.app/tags/XYZ";
         let parsed = TagPath::parse(uri).expect("eventky tag URI should parse");
         assert_eq!(parsed.app, "eventky.app");
         assert_eq!(parsed.tag_id, "XYZ");
@@ -74,7 +75,8 @@ mod tests {
 
     #[test]
     fn test_parse_uppercase_scheme_normalizes_on_to_uri_str() {
-        let uri = "PUBKY://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123";
+        let uri =
+            "PUBKY://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123";
         let parsed = TagPath::parse(uri).expect("uppercase scheme should parse");
         assert_eq!(parsed.to_uri_str(), BASE_URI);
     }
@@ -97,7 +99,8 @@ mod tests {
 
     #[test]
     fn test_parse_pubky_app_returns_none() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky.app/tags/123";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky.app/tags/123";
         assert!(TagPath::parse(uri).is_none());
     }
 
@@ -108,13 +111,15 @@ mod tests {
 
     #[test]
     fn test_parse_no_tags_segment() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/events/123";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/events/123";
         assert!(TagPath::parse(uri).is_none());
     }
 
     #[test]
     fn test_parse_uppercase_scheme() {
-        let uri = "PUBKY://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123";
+        let uri =
+            "PUBKY://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123";
         assert!(TagPath::parse(uri).is_some());
     }
 
@@ -126,13 +131,15 @@ mod tests {
 
     #[test]
     fn test_parse_slash_in_app_returns_none() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/my/app/tags/ABC";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/my/app/tags/ABC";
         assert!(TagPath::parse(uri).is_none());
     }
 
     #[test]
     fn test_parse_slash_in_tag_returns_none() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC/DEF";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC/DEF";
         assert!(TagPath::parse(uri).is_none());
     }
 
@@ -150,7 +157,8 @@ mod tests {
 
     #[test]
     fn test_parse_empty_tag_after_query_returns_none() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/?foo=bar";
+        let uri =
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/?foo=bar";
         assert!(TagPath::parse(uri).is_none());
     }
 }

@@ -30,9 +30,9 @@ pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{
     base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-    follow_uri_builder, last_read_uri_builder, mute_uri_builder, post_uri_builder,
-    tag_uri_builder, user_uri_builder, ExtendedParsedUri, ParsedUri, PubkyPath, Resource,
-    is_pubky_scheme, try_parse_pubky_path,
+    follow_uri_builder, is_pubky_scheme, last_read_uri_builder, mute_uri_builder, post_uri_builder,
+    tag_uri_builder, try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri,
+    PubkyPath, Resource,
 };
 
 // Our WASM module
