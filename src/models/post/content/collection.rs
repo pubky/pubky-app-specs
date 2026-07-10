@@ -114,7 +114,8 @@ fn validate_collection_envelope(envelope: &PubkyAppCollectionContent) -> Result<
         })?;
         if !VALIDATION_LIMITS
             .post_allowed_attachment_protocols
-            .contains(&parsed.scheme())
+            .iter()
+            .any(|&protocol| parsed.scheme().eq_ignore_ascii_case(protocol))
         {
             let allowed = VALIDATION_LIMITS
                 .post_allowed_attachment_protocols

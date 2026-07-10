@@ -19,7 +19,6 @@ pub enum CompatParsedUri {
         user_id: PubkyId,
         app: String,
         resource: Resource,
-        tag_id: String,
     },
 }
 
@@ -50,7 +49,38 @@ impl CompatParsedUri {
     pub fn tag_id(&self) -> Option<&str> {
         match self {
             CompatParsedUri::PubkyApp { .. } => None,
-            CompatParsedUri::UniversalTag { tag_id, .. } => Some(tag_id.as_str()),
+            CompatParsedUri::UniversalTag { resource, .. } => match resource {
+                Resource::Tag(id) => Some(id.as_str()),
+                _ => None,
+            },
+        }
+    }
+
+    /// Converts back to a canonical URI string.
+    ///
+    /// For [`CompatParsedUri::PubkyApp`], delegates to [`ParsedUri::try_to_uri_str`].
+    /// For [`CompatParsedUri::UniversalTag`], reconstructs the path from components.
+    /// Query strings, fragments, and scheme casing are not preserved.
+    pub fn try_to_uri_str(&self) -> Result<String, String> {
+        match self {
+            CompatParsedUri::PubkyApp { user_id, resource } => ParsedUri {
+                user_id: user_id.clone(),
+                resource: resource.clone(),
+            }
+            .try_to_uri_str(),
+            CompatParsedUri::UniversalTag { user_id, app, resource } => {
+                let Resource::Tag(tag_id) = resource else {
+                    return Err(format!(
+                        "Universal tag URI must have Tag resource, got {resource}"
+                    ));
+                };
+                Ok(TagPath {
+                    user_id: user_id.clone(),
+                    app: app.clone(),
+                    tag_id: tag_id.clone(),
+                }
+                .to_uri_str())
+            }
         }
     }
 }
@@ -76,8 +106,7 @@ impl TryFrom<&str> for CompatParsedUri {
             return Ok(CompatParsedUri::UniversalTag {
                 user_id: parsed.user_id,
                 app: parsed.app,
-                resource: Resource::Tag(parsed.tag_id.clone()),
-                tag_id: parsed.tag_id,
+                resource: Resource::Tag(parsed.tag_id),
             });
         }
 
@@ -192,5 +221,36 @@ mod tests {
         assert!(matches!(parsed, CompatParsedUri::UniversalTag { .. }));
         assert_eq!(parsed.resource(), &Resource::Tag("ABC123".to_string()));
         assert_eq!(parsed.tag_id(), Some("ABC123"));
+    }
+
+    #[test]
+    fn test_pubky_app_uri_roundtrip() {
+        let uri = format!("pubky://{USER_ID}/pub/pubky.app/posts/0032SSN7Q4EVG");
+        let parsed = CompatParsedUri::try_from(uri.as_str()).expect("post URI should parse");
+        assert_eq!(
+            parsed.try_to_uri_str().expect("roundtrip should succeed"),
+            uri
+        );
+    }
+
+    #[test]
+    fn test_universal_tag_uri_roundtrip() {
+        let uri = format!("pubky://{USER_ID}/pub/mapky/tags/ABC123");
+        let parsed = CompatParsedUri::try_from(uri.as_str()).expect("mapky tag URI should parse");
+        assert_eq!(
+            parsed.try_to_uri_str().expect("roundtrip should succeed"),
+            uri
+        );
+    }
+
+    #[test]
+    fn test_universal_tag_uri_roundtrip_normalizes_input() {
+        let input = format!("PUBKY://{USER_ID}/pub/mapky/tags/ABC123?foo=bar#section");
+        let expected = format!("pubky://{USER_ID}/pub/mapky/tags/ABC123");
+        let parsed = CompatParsedUri::try_from(input.as_str()).expect("URI should parse");
+        assert_eq!(
+            parsed.try_to_uri_str().expect("roundtrip should succeed"),
+            expected
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crate::{PubkyId, APP_PATH};
+use crate::{PubkyId, APP_PATH, PROTOCOL, PUBLIC_PATH};
 
 use super::super::path::try_parse_pubky_path;
 
@@ -7,8 +7,6 @@ pub(crate) struct TagPath {
     pub user_id: PubkyId,
     pub app: String,
     pub tag_id: String,
-    #[allow(dead_code)]
-    pub uri: String,
 }
 
 impl TagPath {
@@ -32,8 +30,22 @@ impl TagPath {
             user_id: path.user_id,
             app: path.app,
             tag_id: tag_id.clone(),
-            uri: uri.to_string(),
         })
+    }
+
+    /// Reconstructs the canonical URI from parsed components.
+    ///
+    /// Query strings, fragments, and scheme casing from the original input are
+    /// not preserved — only the semantic path is encoded.
+    pub fn to_uri_str(&self) -> String {
+        let path = [
+            PUBLIC_PATH,
+            self.app.as_str(),
+            "/tags/",
+            self.tag_id.as_str(),
+        ]
+        .concat();
+        [PROTOCOL, self.user_id.as_ref(), &path].concat()
     }
 }
 
@@ -49,7 +61,7 @@ mod tests {
         let parsed = TagPath::parse(BASE_URI).expect("mapky tag URI should parse");
         assert_eq!(parsed.app, "mapky");
         assert_eq!(parsed.tag_id, "ABC123");
-        assert_eq!(parsed.uri, BASE_URI);
+        assert_eq!(parsed.to_uri_str(), BASE_URI);
     }
 
     #[test]
@@ -58,6 +70,29 @@ mod tests {
         let parsed = TagPath::parse(uri).expect("eventky tag URI should parse");
         assert_eq!(parsed.app, "eventky.app");
         assert_eq!(parsed.tag_id, "XYZ");
+    }
+
+    #[test]
+    fn test_parse_uppercase_scheme_normalizes_on_to_uri_str() {
+        let uri = "PUBKY://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123";
+        let parsed = TagPath::parse(uri).expect("uppercase scheme should parse");
+        assert_eq!(parsed.to_uri_str(), BASE_URI);
+    }
+
+    #[test]
+    fn test_parse_query_string_stripped_from_to_uri_str() {
+        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123?foo=bar";
+        let parsed = TagPath::parse(uri).expect("URI with query string should parse");
+        assert_eq!(parsed.tag_id, "ABC123");
+        assert_eq!(parsed.to_uri_str(), BASE_URI);
+    }
+
+    #[test]
+    fn test_parse_fragment_stripped_from_to_uri_str() {
+        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123#section";
+        let parsed = TagPath::parse(uri).expect("URI with fragment should parse");
+        assert_eq!(parsed.tag_id, "ABC123");
+        assert_eq!(parsed.to_uri_str(), BASE_URI);
     }
 
     #[test]
@@ -111,20 +146,6 @@ mod tests {
     fn test_parse_empty_tag_returns_none() {
         let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/";
         assert!(TagPath::parse(uri).is_none());
-    }
-
-    #[test]
-    fn test_parse_query_string_stripped() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123?foo=bar";
-        let parsed = TagPath::parse(uri).expect("URI with query string should parse");
-        assert_eq!(parsed.tag_id, "ABC123");
-    }
-
-    #[test]
-    fn test_parse_fragment_stripped() {
-        let uri = "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/mapky/tags/ABC123#section";
-        let parsed = TagPath::parse(uri).expect("URI with fragment should parse");
-        assert_eq!(parsed.tag_id, "ABC123");
     }
 
     #[test]
