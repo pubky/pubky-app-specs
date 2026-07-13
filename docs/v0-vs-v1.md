@@ -1,0 +1,413 @@
+# v0 vs v1, model by model
+
+> Companion to `rfc-v1-social-specs.md`: the same design, expanded. This document walks every
+> model and explains each change: what it was in v0 (`pubky-app-specs` 0.6.0, verified against
+> the July 2026 main), what it becomes in v1 (`pubky-social-specs` 1.0.0, epoch `social/v1`),
+> and why the change is an improvement: which problem or requirement it tackles.
+
+---
+
+## 0. Cross-cutting changes (apply to every model)
+
+These are listed once here; the per-model sections below only add what is specific to them.
+
+- **Namespace and epoch: `pub/pubky.app/<res>` becomes `{pub|priv}/social/v1/<res>`.**
+  Why: v0 hard-codes one app's domain as the location of SHARED social data and the parser
+  rejects every other app's path, contradicting multi-app interop, the project's first-class
+  goal. And v0 has no version signal at all, while the path is the only channel that survives
+  the events feed, LIST, and anonymous GET. Epochs in the path also make old and new data
+  physically coexist in disjoint subtrees, which is what makes non-destructive client-side
+  migration possible at all. A third, practical reason the new segment is a bare word: dotted
+  directory names are a filesystem hazard. Back up or export a homeserver tree to disk (pubky-app's
+  data-export ZIP preserves paths) and you get a folder literally named `pubky.app`, which macOS
+  treats as an application bundle: contents hidden behind an app icon, double-click tries to
+  launch it. `social` carries no extension, and no directory in the social tree ever will; only
+  leaf files carry extensions.
+- **`.json` on every JSON leaf.** Why: the homeserver derives the served Content-Type from
+  magic bytes and then the path extension; extensionless JSON (everything in v0 except
+  `profile.json`) serves as `application/octet-stream`/plaintext. The extension fixes serving
+  and downloads for free, using machinery the server already has.
+- **A privacy tier.** Why: v0 stores mutes, bookmarks, saved feeds, and the client's
+  settings world-readable and on the public events feed although their verified reader set is
+  exactly one, the owner's own client. `/priv/` (owner-only, excluded from public events,
+  shipped on pubky-core main) is their correct home. The rule that decides placement is the
+  ACTUAL reader set, not aspiration.
+- **Type rename `PubkyApp*` to `PubkySocial*`, wire-invariant.** Why: the crate name and type
+  prefixes teach every integrator that one app owns shared data. Serde field names and enum
+  strings stay byte-identical: this break costs a compile, not a migration.
+- **Forward-compat contract.** Every wire enum gains `#[serde(other)] Unknown`; no model
+  may ever use `deny_unknown_fields`; every future field must be optional, defaulted, and
+  skip-if-none. Unknown members are tolerated on read AND preserved on rewrite: every wire model
+  carries an opaque flattened catch-all map, so a rewriting client round-trips members it does
+  not understand (tolerating without preserving would let any older client silently destroy
+  every field added after it shipped). Why: v0 has exactly one `Unknown` catch-all (`PostKind`); adding a value to any
+  feed enum hard-crashes every old client on deserialize. This contract is what turns "break
+  once, then grow additively" from an aspiration into a property.
+- **Canonical-encoding id validation.** An encoded id is valid iff re-encoding its decoded
+  bytes reproduces the input, with closed-form regexes and final-char sets. Why: v0's validators
+  decode Crockford aliases (`O` as `0`, lowercase, a dangling final bit) and z-base32 dangling
+  bits, so one logical id has dozens of accepted spellings, each a DISTINCT homeserver key:
+  identity forks, dedup splits, and broken bytewise ordering. Verified empirically. The ed25519
+  point check also leaves PubkyId validation: v0 ran it native-only, which made Rust and JS
+  disagree by construction.
+- **Pinned text operations.** Trim uses a frozen whitespace table (a DATA asset); tag-label
+  lowercasing is ASCII-only; lengths are code points; all wire i64s must fit in 53 bits. Why:
+  engine trim/lowercase/Unicode tables differ between Rust and JS and across browser versions
+  (verified divergences on U+FEFF, U+0085, full-Unicode case mapping, i64 rounding), and
+  content-addressed ids freeze whatever functions feed them. Changing these later re-ids data,
+  an epoch-class break, so they are pinned now, engine-free.
+- **One URI grammar.** All `pubky://` validation goes through one raw-string
+  canonicalizer (accepts the SDK short form, #120; rejects userinfo, `..`, `%`, query, fragment,
+  whitespace, control, #141); web references are gated by a pinned regex; `url::Url` and WHATWG
+  `new URL()` leave the normative surface entirely. Why: v0's `url::Url` normalizes junk into
+  acceptance and rejects valid short forms, and two independent validation surfaces (parser vs
+  field validators) had already drifted; engine URL parsers cannot be version-pinned across
+  browsers.
+- **The root rule.** A public-rooted object must never reference a priv-root pubky URI;
+  private objects may reference both roots. Why: such a reference dangles for every reader but
+  the owner and leaks the existence of a private path via the 401-vs-404 oracle. This is the one
+  now-or-never piece of the private tier: tightening validation later is epoch-class.
+- **No silent sanitize-rewrites.** v0 silently rewrote `[DELETED]` names to "anonymous",
+  truncated-then-blanked over-long `file.src`, and passed unparseable URLs through
+  `sanitize_url`. v1 makes invalid input a validation error. Why: silent rewrites hide bugs and
+  make two implementations disagree about what was stored.
+
+---
+
+## 1. User (profile)
+
+v0: `pub/pubky.app/profile.json`, `{name, bio?, image?, links?, status?}`.
+v1: `pub/social/v1/profile.json`, same fields.
+
+- **`image` explicitly allows `pubky`, `http`, `https` and uses the one shared image validator,
+  cap 300.** Why: pubky-app avatars ARE pubky URIs today (`pubky://<pk>/pub/.../files/<id>` is what
+  the client writes into `image`, verified end-to-end); an http-only rule, which one design
+  draft proposed, would have invalidated every real avatar. One validator now covers
+  `user.image` and both `cover_image` fields, one rule for one kind of value.
+- **The `[DELETED]` name rule becomes an honest rejection.** v0 silently rewrote a user named
+  `[DELETED]` to "anonymous"; v1 REJECTS the exact literal as a validation error instead (and
+  likewise for `post.content`). Why the rule must exist at all: nexus keys its internal
+  tombstones on that literal and its queries exclude `[DELETED]`-named users (verified), so a
+  user carrying the name would be treated as deleted by the index. Why rejection beats rewrite:
+  no silent mutation, and the reservation can be RETIRED additively once nexus keys tombstones
+  on a real flag (loosening validation is non-breaking). Substring occurrences are fine; only
+  the exact value is reserved.
+- **`links[].url` validated by the pinned web gate instead of `Url::parse` + `sanitize_url`.**
+  Why: cross-implementation determinism (cross-cutting rationale above); v0's `sanitize_url`
+  passed invalid URLs through unchanged.
+- Unchanged: field set, caps (name 3..50, bio 160, links 5 x {100, 300}, status 50), and wire
+  field names. The profile stays public: identity is the one thing that must be readable.
+
+## 2. Post
+
+v0: `pub/pubky.app/posts/{id}`, one flat file, overwritten on edit;
+`{content, kind, parent?, embed?: {kind, uri}, attachments?: [String], lock?}`.
+v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
+`posts/{id}`.
+
+- **Per-edit path versioning.** Storage is one file per edit; the first version reuses the
+  post id; every reference (reply, embed, tag, bookmark, collection item) uses the versionless
+  form. Why: v0 edits overwrite in place, so nothing distinguishes an edit from a new post on
+  the events feed, and there is no history. A counter-based scheme was rejected because the
+  substrate has no compare-and-swap: counters race across the owner's devices. TimestampId
+  editIds mint with no prior read, sort chronologically under bytewise LIST order, and
+  `decode(editId)` doubles as an approximate edit timestamp. Versionless references mean edits
+  never orphan replies or re-key tags. This is now-or-never: a `posts/{id}` file and a
+  `posts/{id}/` directory are mutually exclusive on the homeserver, so the layout cannot be
+  retrofitted.
+- **Dual-root: private posts.** Drafts, personal notes, and private collections live under
+  `/priv/` with identical shapes and ids; publish is a deterministic root migration; unpublish
+  deletes the public copies. Why: drafts and private collections are committed
+  product needs, and the Locks flow independently demonstrates the value of post-shaped private
+  content. Public stays the default root, so this adds capability without changing anyone's
+  existing mental model.
+- **Kinds renamed: `short` to `note`, `long` to `article`.** Why: the old names describe length,
+  not nature; `article` is what the thing actually is, and it now has a typed envelope (model 3)
+  instead of a hand-rolled convention. All seven concrete kinds survive (each has a live
+  creation path in pubky-app); `Link` deliberately stays untyped because the URL lives inside the
+  content text, so there is no per-kind shape decision being missed.
+- **`embed` collapses from `{kind, uri}` to a plain URI string.** Why: the embedded target's
+  kind is derivable by resolving the target; storing it duplicates state that can go stale. (The
+  often-cited "casing bug" was a wasm getter wart, not a wire bug; it dies with the wasm
+  surface.)
+- **`attachments` becomes `Vec<{uri, alt?, name?}>`, always present, default `[]` (#48).** Why: v0's
+  `Option<Vec<String>>` made every consumer branch on null-vs-empty; and a bare string array can
+  never grow per-item metadata without a breaking change. The object form makes alt text (a
+  committed accessibility need) and `name` (the display filename, relocated from the deleted v0
+  File object by the media collapse) ship now, and every future per-attachment field (hash,
+  blurhash, dimensions, `content_type`/`size`) additive. Exactly two optional fields ship;
+  nothing speculative.
+- **`lock` is kept with corrected semantics.** The value is the lock FILE URI
+  (`pubky://<creator>/pub/locks.app/<lock_id>.json`), pubky-only; presence means "locked
+  content" regardless of kind. Why: this matches the resolved Locks design (pubky-app #2029);
+  earlier drafts (including v0 doc comments) mis-described it as a lock-server URI. The teaser
+  envelope inside a locked post's `content` stays deliberately client-owned, per the Locks
+  team's own recorded decision.
+- **Reference fields get one shared cap (1024) and canonicalization.** Why: v0 was a mix
+  (attachment URI 200, src 1024, parent/embed/lock effectively uncapped or 200); one
+  `reference_uri_max_length` replaces four inconsistent rules.
+- **The `[DELETED]` content sentinel is removed; absence is the tombstone.** Why: a
+  magic content string must not survive the one clean break; deletion is now defined honestly as
+  "delete every version in every epoch and both roots, retry to completion", with nexus
+  synthesizing its own tombstones from DELETE events.
+
+## 3. ArticleContent (new model, 4.4a)
+
+v0: none. pubky-app hand-rolls `JSON.stringify({title, body})` into `long` posts, unspecified,
+with the cover image smuggled as `attachments[0]` (both verified in the client).
+v1: `PubkySocialArticleContent {title, body, cover_image?}`, a typed envelope in `content` when
+`kind == article`.
+
+- **The envelope exists at all.** Why: an unspec'd JSON convention inside a spec'd field is
+  interop debt; any other client rendering articles must reverse-engineer pubky-app. Per-kind
+  content shapes are now-or-never (changing what `content` means for a kind is a break), so this
+  is exactly what the one break budget is for.
+- **`cover_image` moves INTO the envelope.** Why: `attachments[0]`-as-cover is positional
+  convention, invisible in the type system; the field is explicit, validated by the shared image
+  validator, and composes with real attachments. Migration maps the old convention in.
+- **Articles may carry `parent`, `embed`, and `attachments`.** Why: an article can legitimately
+  be a reply or a quote and carry media; and a forbid rule would have made any v0 long post
+  holding more than the single mapped cover attachment FAIL migration. Composability plus
+  migration totality.
+- **Caps: title 100 code points, body 50000 (renamed from `post_long_content_max_length`), raw
+  envelope 52000.** Why: the title cap formalizes what pubky-app's UI already enforces; the raw cap
+  is a cheap pre-parse bound. pubky-app's brittle "body budget = long cap minus 100 minus 22 bytes
+  of JSON skeleton" arithmetic dies because validation is field-level now.
+
+## 4. CollectionContent
+
+v0: `PubkyAppCollectionContent {name, description?, items[], cover_image?}` in `content` when
+`kind == collection` (shipped shortly before v1).
+v1: same shape, three rule changes.
+
+- **`items` accept any reference-tier pubky URI (any resource, any app).** Why: v0's item check
+  hard-restricted items to `posts/` under `pubky.app`, contradicting the interop goal; a curated
+  list may legitimately include files, profiles, or another app's resources. Items stay
+  pubky-only (a web link belongs in a post) and stay plain strings (per-item annotation is
+  speculative, recorded as an accepted low-probability future break).
+- **`cover_image` uses the shared image validator (cap 300).** Why: one rule for one kind of
+  value, aligned with Article and `user.image`.
+- **Private collections come free.** A collection post under `/priv/` is a private
+  curation list, a requested future feature that costs zero extra spec surface because
+  collections are posts.
+- Unchanged: the v0 guards (collections carry no parent, embed, or attachments) because they are
+  live in v0 and cost migration nothing.
+
+## 5. Tag
+
+v0: `pub/pubky.app/tags/{id}`, `{uri, label, created_at}`, id = `HashId("{uri}:{label}")` where
+the uri was normalized by `Url::parse(...).to_string()` and the label by full-Unicode lowercase.
+v1: `pub/social/v1/tags/{id}.json`, same fields.
+
+- **The hash input is pinned: canonicalized target + frozen-trim + ASCII-folded label.** Why:
+  v0's normalization was engine-dependent twice over (`url` crate re-serialization and ICU case
+  tables), and content-addressed ids freeze their input functions forever; an engine-skew fork
+  in a tag id never heals. The ASCII-only fold trades non-Latin case-insensitive dedup (bounded
+  regression, documented) for permanent cross-implementation determinism.
+- **The injectivity invariant is stated:** `"{uri}:{label}"` is unambiguous only because labels
+  reject `:`; that restriction may never be lifted while the id format stands. Why: implicit
+  invariants get broken by well-meaning future edits.
+- **`uri` gains the shared 1024 cap** (was uncapped) **and hash inputs always use the
+  canonicalizer's output** (v0's bookmark hashed the RAW string while tag hashed a normalized
+  one, two different identity rules for the same kind of value).
+- **Migration non-invariance is documented:** a tag id embedding a social target changes
+  across epochs by construction; nexus dedups on `(author, normalized target, label)` with an
+  id-SET per edge so cross-epoch un-tagging works. Why: without this, dual-read double-counts
+  every tag and a "like" placed before migration can never be removed after it.
+- Tags stay public-only in v1; tagging private objects is deferred (dual-rooting a resource
+  later is additive).
+
+## 6. Bookmark
+
+v0: `pub/pubky.app/bookmarks/{HashId(raw uri)}`, content `{uri, created_at}`: world-readable,
+and the filename is one-way, so listing your bookmarks costs one GET per bookmark.
+v1: `priv/social/v1/bookmarks/{filename}.json`.
+
+- **Moves to `/priv/`.** Why: what you saved is personal state with zero cross-user readers
+  (verified: even pubky-app reads bookmark state via nexus, which only surfaces it to the owner);
+  world-readable bookmarks are a privacy leak.
+- **The target moves into the filename, reversibly:** `base64url_nopad(canonical target)` for
+  targets up to 187 bytes. Why: LIST returns keys only, so a reversible filename makes "list all
+  my bookmarks" ZERO GETs (v0's defining defect, #47's sibling). 187 bytes is the exact
+  substrate maximum (250 chars + `.json` = 255), and at that cap base64url is the ONLY standard
+  encoding that fits at all. base64url is also `/`-free, `%`-free, JS-decodable natively, and
+  already in the SDK dependency stack.
+- **An overflow form for long targets:** `~ + HashId(target)` with the target kept in content,
+  up to 1024 bytes. Why: real bookmarks exceed 187 bytes (maps and shop URLs); without an
+  overflow they could not be represented at all under the reversible form. `~` is outside the
+  base64url alphabet, so the two forms are unambiguous.
+- **Content shrinks to `{created_at}`** (plus `target` only in overflow). Why: the target lives
+  in the filename; duplicating it invites mismatch. Recency SORT still costs GETs (created_at is
+  in content), stated honestly.
+- **The hash/encoding input is the canonicalizer's output, never the raw spelling.** Why: v0
+  hashed the raw string, so two spellings of one URL made two bookmarks.
+- **Read-side rules are pinned:** decode-then-re-encode must reproduce the filename
+  byte-for-byte, UTF-8 decode is fatal, failures are skipped entries. Why: JS base64 decoding is
+  catastrophically lenient (verified: it accepts padding, aliases, and garbage the Rust crate
+  rejects), and a hostile filename must not fork implementations.
+
+## 7. Follow
+
+v0: `pub/pubky.app/follows/{followeePk}`, `{created_at}`.
+v1: `pub/social/v1/follows/{followeePk}.json`. Shape unchanged.
+
+- Only the cross-cutting changes apply (path, `.json`, canonical PubkyId spelling). Follows stay
+  public: they are the social graph, nexus's core input. The filename-is-the-target pattern
+  (one LIST answers "who do I follow") was already right in v0 and is kept.
+
+## 8. Mute
+
+v0: `pub/pubky.app/mutes/{muteePk}`, `{created_at}`, world-readable.
+v1: `priv/social/v1/mutes/{muteePk}.json`. Shape unchanged.
+
+- **Moves to `/priv/`.** Why: who you muted is among the most sensitive social data there is,
+  and its verified reader set is the owner alone: nexus main has ZERO mute consumers (the
+  watcher no-ops mute events), and pubky-app already reads mutes by LISTing its own directory. The
+  move costs nexus nothing and the client a path change.
+
+## 9. LastRead
+
+v0: `pub/pubky.app/last_read` (no extension), `{timestamp}` in MILLISECONDS, world-readable.
+v1: `priv/social/v1/last_read.json`, microseconds.
+
+- **Moves to `/priv/`.** Why: pure reading-activity metadata, no cross-user reader.
+- **Milliseconds become microseconds.** Why: it was the lone unit outlier in a spec where every
+  other timestamp is microseconds; a unit change is only fixable at a break, so this is the
+  window. Migration multiplies by 1000, the only unit change in the shared transform table
+  (the pubky-app-owned settings import performs the same ms-to-µs conversion on its side).
+
+## 10. File (media), the v0 File + Blob pair collapsed
+
+v0: TWO objects per upload: `files/{id}` metadata (`{name, created_at, src, content_type,
+size}`, with a HARD 21-entry MIME whitelist gate and a silent truncate-then-blank sanitize on
+`src`) pointing at `blobs/{HashId(bytes)}`, extensionless raw bytes.
+v1: ONE object: `{pub|priv}/social/v1/files/{hash}.{ext}`, the raw bytes, content-addressed.
+The metadata sidecar is deleted.
+
+- **The collapse itself.** Why: both premises of the v0 split died. `name` now has a better home,
+  the attachment object's optional `name` field (per-reference, so two posts can attach the same
+  bytes under different names, which one-name-per-File could not express); authoring time is
+  carried by the referencing post's own id; `size` and the served type come free from the bytes
+  and headers (nexus downloads the bytes anyway to build CDN variants); and the v1 nexus adapter
+  is new code regardless, so "nexus is event-driven off the File PUT" stopped being an argument.
+  Deleted with it: the `src` indirection, the two-PUT upload dance, the several-metadata-objects-
+  per-blob extension ambiguity, and the word "blob" (a backup now shows a `files/` folder holding
+  openable `{hash}.jpg` files). Honest costs, accepted: renaming an upload means editing the
+  referencing post; the same bytes declared under two MIMEs duplicate storage instead of sharing
+  one blob (rare, documented fork); an uploaded-but-never-referenced file carries no metadata.
+- **A canonical, path-only extension from a frozen MIME-to-ext map.** Why: the homeserver ignores
+  the PUT Content-Type and derives the stored type from magic bytes, then the path extension
+  (verified, `file_metadata.rs`); sniff-miss text types (svg, csv, txt, json, html, xml) served
+  wrong in v0. The declared type is consumed exactly once, at upload, to derive `{ext}` via a
+  pinned essence regex + single-valued map; it is never stored. The ext is NEVER part of the
+  hash, so the content address and dedup are untouched; `.bin` is the total fallback.
+- **The MIME whitelist gate is removed.** Why: a closed list on world-readable content is a
+  forward-compat trap (it already rejected avif, heic, webm audio, opus, wasm); and the Rust
+  `mime` crate could not stay the judge because its verdicts are not reproducible in JS and it
+  accepts the malformed `"image/"` (verified). The old list survives as an advisory hint.
+- **The parser strips exactly one known-map extension before id validation.** Why: without the
+  strip, recompute-and-compare id validation would reject every single media file.
+- **Dual-root.** Why: a private draft whose images sat in public `files/` would leak (media
+  directories are anonymously LISTable). Publish copies bytes across roots identically (the hash,
+  and therefore the id, is root-independent).
+
+## 11. Feed
+
+v0: `pub/pubky.app/feeds/{HashId(serde_json(config))}`, `{feed: config, name, created_at}`,
+public, enums crash on unknown values.
+v1: `{priv|pub}/social/v1/feeds/{id}.json`.
+
+- **Private by default, published by choice (dual-root).** Why: a saved feed is a personal
+  config whose verified reader set is the owner (pubky-app only ever LISTs its own feeds dir; no
+  share or subscribe feature exists); public-by-default was aspiration, not fact. Publishing is
+  a deliberate act: copy the same bytes to `/pub/`, unpublish deletes the copy.
+- **The id stays content-addressed but the hash input is a pinned canonical string, never serde
+  output.** Why the content-addressing: identical configs self-overwrite
+  (natural dedup), migration re-derives ids purely, and two users publishing the same config
+  share an id, so public-feed identity is readable from `/events/` paths alone, which makes a
+  future cross-homeserver popularity ranking purely additive indexer work. Why the pinned
+  string: v0 hashed `serde_json::to_string(config)`, which silently re-ids every feed on any
+  struct reshuffle and is not byte-reproducible in JS. `name` and `created_at` stay outside the
+  hash: personal labels on a shared identity. Tags sort inside the input so `[a,b]` and `[b,a]`
+  are one filter; the format is injective because `:` and `,` are invalid in labels.
+- **All three enums gain `Unknown`; an unknown `content` filter degrades to "no filter".** Why:
+  the highest value-per-byte fix in v1. In v0, the day a new reach/layout/sort value ships,
+  every old client hard-crashes on deserialize; this is the one guarantee only a version
+  boundary can make.
+- **`name` gains a cap (100).** Why: it was the only unbounded display name.
+- **Edit semantics stated honestly:** a config change derives a new id (write new, delete old,
+  re-publish if desired); pubky-app's v0 flow already works exactly this way, including the
+  known orphan-file behavior, now documented instead of accidental.
+
+## 12. Settings (new model, 4.12)
+
+v0: none in the spec. pubky-app hand-rolls `pub/pubky.app/settings.json`: WORLD-READABLE, exposing
+`require_pin`, `sign_out_inactive`, and the rest of the user's privacy posture to anyone, read
+by nobody but the owner's client (verified: the only unspec'd homeserver artifact in the app).
+v1: `PubkySocialSettings` at `priv/social/v1/settings.json`.
+
+- **It exists, and it is private.** Why: the strongest reader-set case in the audit; a security
+  posture file must not be public. Spec'd because its content (notification, content-filter,
+  and language preferences) is client-portable social state any client benefits from sharing.
+- **Every section is optional.** Why: a client writes only what it uses; other clients' unknown
+  sections and fields survive a rewrite via the preservation rule (cross-cutting above), not
+  merely deserialization tolerance, which alone would drop them on the next whole-file write.
+- **Whole-file last-write-wins on `updated_at` (now microseconds).** Why: it formalizes exactly
+  what pubky-app already does at bootstrap; anything cleverer (field-wise merge) is machinery
+  without a demonstrated need.
+- **The per-file `version` field is dropped.** Why: verified dead, pubky-app checks it but never
+  bumps it; schema evolution is governed by the path epoch and crate semver like every other
+  model, so a second, parallel versioning channel is a contradiction waiting to happen.
+
+## 13. Parser and `Resource` (the read side of every model)
+
+v0: `url::Url`-based, hard-rejects any app path that is not `pubky.app`, silently accepts
+userinfo/`..`/query/fragment/extra segments, never validates ids, never panics, but errors on
+all foreign data.
+v1: one closed grammar (normative form: Appendix A of `rfc-v1-social-specs.md`).
+
+- **`Foreign` and `UnsupportedVersion` are first-class handled categories, never errors.** Why:
+  v0's defining interop failure was erroring on other apps' data; an indexer iterating the
+  events feed must classify and skip, not crash or log-spam. A future `social/v2` object reads
+  as "upgrade me", not garbage.
+- **Failed id or format validation yields `Unknown`, never an error; every access is
+  bounds-safe.** Why: the parser's consumers run unattended over hostile input forever; the two
+  hard errors that remain (invalid host, unknown root) exist only because no `ParsedUri` can be
+  constructed, and callers treat them as skips.
+- **Wrong-root parses to `Unknown` for single-root resources; `visibility` carries the root for
+  the dual-root three.** Why: "private object at a public path" becomes unrepresentable at the
+  type level, the one structural guard the homeserver cannot give.
+- **Reserved names: `^v[0-9]+$` epoch segments, `_`-prefixed private filenames, the `ext`
+  field.** Why: reserving names is free; colliding with them later is not.
+
+## 14. IDs (the identity layer under every model)
+
+- **TimestampId: unchanged format, monotonic mint guard in BOTH implementations.** Why:
+  the JS runtime mints at millisecond resolution, so same-ms writes collide on path, which
+  under path-versioning is silent data loss; the guard is three lines. The JS codec uses BigInt,
+  byte-for-byte equal to Rust (verified including `i64::MAX`).
+- **HashId: unchanged format (blake3, first 16 bytes, Crockford, 26 chars), kept at 128 bits.**
+  Why: under owner-only-write, pubkey-namespaced paths, a collision cannot substitute content at
+  someone else's path, and per-user counts are nowhere near the birthday bound; widening buys
+  nothing and costs every path 13 chars.
+- **Canonical spellings enforced everywhere** (cross-cutting above), and the stale "z-base32"
+  doc comments on Crockford code die.
+
+---
+
+## The deltas at a glance
+
+| Model | v0 path | v1 path | Headline change |
+|---|---|---|---|
+| User | `pub/pubky.app/profile.json` | `pub/social/v1/profile.json` | pubky avatars legal; `[DELETED]` sanitize gone |
+| Post | `posts/{id}` flat file | `{root}/.../posts/{id}/{editId}.json` | edit versioning; dual-root drafts; kinds renamed; attachments become objects |
+| Article | (hand-rolled JSON) | typed envelope | formalized; cover in envelope |
+| Collection | envelope, posts-only items | envelope, reference-tier items | interop items; private collections free |
+| Tag | `tags/{id}` | `tags/{id}.json` | engine-free pinned hash input |
+| Bookmark | `bookmarks/{HashId}` public, GET-per-file | `priv/.../bookmarks/{b64u\|~hash}.json` | private, reversible filename, overflow form |
+| Follow | `follows/{pk}` | `follows/{pk}.json` | unchanged shape |
+| Mute | `mutes/{pk}` public | `priv/.../mutes/{pk}.json` | private |
+| LastRead | `last_read` ms, public | `priv/.../last_read.json` µs | private; unit fixed |
+| File (media) | `files/{id}` meta + `blobs/{hash}` bytes | `{root}/.../files/{hash}.{ext}` | ONE object (collapse); canonical extension; dual-root |
+| Feed | `feeds/{HashId(serde_json)}` public | `{priv\|pub}/.../feeds/{id}.json` | private default + publish; pinned hash string; enums get Unknown |
+| Settings | (unspec'd, public) | `priv/.../settings.json` | spec'd, private, version field dropped |
