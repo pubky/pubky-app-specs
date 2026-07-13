@@ -239,6 +239,22 @@ field("Layout", feed.toJson().feed.layout);
 field("Sort", feed.toJson().feed.sort);
 console.log();
 
+// WoT feed with domain tags
+console.log(`  ${c.yellow}▸ WoT Feed with Domain Tags${c.reset}`);
+const { feed: wotFeed, meta: wotFeedMeta } = specsBuilder.createFeed(
+  ["rust"],
+  "wot",
+  "columns",
+  "recent",
+  "image",
+  "Rust WoT",
+  ["synonym"]
+);
+field("ID", wotFeedMeta.id);
+field("Reach", wotFeed.toJson().feed.reach);
+field("Domain Tags", wotFeed.toJson().feed.domain_tags.join(", "));
+console.log();
+
 // LastRead
 console.log(`  ${c.yellow}▸ Last Read Marker${c.reset}`);
 const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead();
