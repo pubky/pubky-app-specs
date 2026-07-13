@@ -291,7 +291,8 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 | **Field**   | **Type** | **Description**                    | **Validation Rules**                                      |
 | ----------- | -------- | ---------------------------------- | --------------------------------------------------------- |
 | `tags`      | Array    | Tags for filtering.                | Optional. Max 5 tags. Each tag follows tag label rules.     |
-| `reach`     | String   | Feed visibility scope.             | Required. One of: `following`, `followers`, `friends`, `all`. |
+| `domain_tags` | Array  | Domain tags for filtering.         | Optional. Max 5 tags. Each tag follows tag label rules.   |
+| `reach`     | String   | Feed visibility scope.             | Required. One of: `following`, `followers`, `friends`, `all`, `wot`, `me`. |
 | `layout`    | String   | Feed layout style.                 | Required. One of: `columns`, `wide`, `visual`, `list`.    |
 | `sort`      | String   | Sort order.                        | Required. One of: `recent`, `popularity`.                   |
 | `content`   | String   | Post kind to filter by.            | Optional. A valid `PubkyAppPostKind` value.               |
@@ -299,7 +300,7 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 **Validation Notes:**
 
 - The `feed_id` is a **Hash ID** derived from the serialized `feed` object.
-- Tags are trimmed, lowercased, and empty entries are removed on sanitize.
+- Tags and domain tags are trimmed, lowercased, and empty entries are removed on sanitize.
 
 **Example: Valid Feed**
 
@@ -307,7 +308,8 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 {
   "feed": {
     "tags": ["crab", "rust"],
-    "reach": "following",
+    "domain_tags": ["synonym"],
+    "reach": "wot",
     "layout": "columns",
     "sort": "recent",
     "content": "video"

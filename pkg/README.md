@@ -69,9 +69,11 @@ const { bookmark, meta } = specs.createBookmark(uri);
 const { tag, meta } = specs.createTag(uri, label);
 const { follow, meta } = specs.createFollow(pubkyId);
 const { mute, meta } = specs.createMute(pubkyId);
-const { feed, meta } = specs.createFeed(tags, reach, layout, sort, content, name);
+const { feed, meta } = specs.createFeed(tags, reach, layout, sort, content, name, domainTags);
 const { last_read, meta } = specs.createLastRead();
 ```
+
+`domainTags` is optional — omit it or pass `null`/`undefined` when unused. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
 For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/example.js).
 

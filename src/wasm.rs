@@ -198,12 +198,20 @@ impl PubkySpecsBuilder {
         sort: String,
         content: Option<String>,
         name: String,
+        domain_tags: JsValue,
     ) -> Result<FeedResult, String> {
         let tags_vec: Option<Vec<String>> = if tags.is_null() || tags.is_undefined() {
             None
         } else {
             from_value(tags).map_err(|e| e.to_string())?
         };
+
+        let domain_tags_vec: Option<Vec<String>> =
+            if domain_tags.is_null() || domain_tags.is_undefined() {
+                None
+            } else {
+                from_value(domain_tags).map_err(|e| e.to_string())?
+            };
 
         // Use `FromStr` to parse enums
         let reach = PubkyAppFeedReach::from_str(&reach)?;
@@ -215,7 +223,15 @@ impl PubkySpecsBuilder {
         };
 
         // Create the feed
-        let feed = PubkyAppFeed::new(tags_vec, reach, layout, sort, content, name);
+        let feed = PubkyAppFeed::new(
+            tags_vec,
+            domain_tags_vec,
+            reach,
+            layout,
+            sort,
+            content,
+            name,
+        );
 
         let feed_id = feed.create_id();
         feed.validate(Some(&feed_id))?;

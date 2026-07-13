@@ -550,6 +550,44 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(feedJson.created_at, "Feed should have created_at timestamp");
       assert.ok(typeof feedJson.created_at === "number", "created_at should be a number");
     });
+
+    it("should create feed with wot reach and domain_tags", () => {
+      const { feed } = specsBuilder.createFeed(
+        ["rust"],
+        "wot",
+        "columns",
+        "recent",
+        "image",
+        "WoT Feed",
+        ["synonym"]
+      );
+
+      const feedJson = feed.toJson();
+      assert.strictEqual(feedJson.feed.reach, "wot", "Feed reach should be wot");
+      assert.deepStrictEqual(
+        feedJson.feed.domain_tags,
+        ["synonym"],
+        "Feed domain_tags should match"
+      );
+    });
+
+    it("should create feed with me reach without domain_tags", () => {
+      const { feed } = specsBuilder.createFeed(
+        null,
+        "me",
+        "list",
+        "popularity",
+        null,
+        "My Posts"
+      );
+
+      const feedJson = feed.toJson();
+      assert.strictEqual(feedJson.feed.reach, "me", "Feed reach should be me");
+      assert.ok(
+        feedJson.feed.domain_tags == null,
+        "Feed domain_tags should be absent or null when not provided"
+      );
+    });
   });
 
   describe("Valid MIME Types", () => {
