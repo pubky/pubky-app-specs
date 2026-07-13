@@ -59,6 +59,7 @@ pub enum PubkyAppFeedSort {
 pub struct PubkyAppFeedConfig {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub tags: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub domain_tags: Option<Vec<String>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -478,10 +479,7 @@ mod tests {
 
         let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
         assert_eq!(feed.feed.reach, PubkyAppFeedReach::Wot);
-        assert_eq!(
-            feed.feed.domain_tags,
-            Some(vec!["synonym".to_string()])
-        );
+        assert_eq!(feed.feed.domain_tags, Some(vec!["synonym".to_string()]));
     }
 
     #[test]
@@ -496,10 +494,7 @@ mod tests {
             "Test Feed".to_string(),
         );
 
-        assert_eq!(
-            feed.feed.domain_tags,
-            Some(vec!["synonym".to_string()])
-        );
+        assert_eq!(feed.feed.domain_tags, Some(vec!["synonym".to_string()]));
     }
 
     #[test]
