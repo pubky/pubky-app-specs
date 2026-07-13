@@ -2,68 +2,11 @@ use crate::{
     traits::{HasIdPath, HasPath},
     PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
     PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
-    PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use std::fmt;
-use url::Url;
 
-#[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize)]
-pub enum Resource {
-    User,
-    Post(String),
-    Follow(PubkyId),
-    Mute(PubkyId),
-    Bookmark(String),
-    Tag(String),
-    File(String),
-    Blob(String),
-    Feed(String),
-    LastRead,
-    #[default]
-    Unknown,
-}
-
-impl fmt::Display for Resource {
-    /// Returns the resource name without any identifier.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Use the associated constant for each resource type, trimming any trailing '/'
-        let name = match self {
-            Resource::User => PubkyAppUser::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::LastRead => PubkyAppLastRead::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Post(_) => PubkyAppPost::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Follow(_) => PubkyAppFollow::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Mute(_) => PubkyAppMute::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Bookmark(_) => PubkyAppBookmark::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Tag(_) => PubkyAppTag::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::File(_) => PubkyAppFile::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Blob(_) => PubkyAppBlob::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Feed(_) => PubkyAppFeed::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Unknown => "unknown",
-        };
-        write!(f, "{}", name)
-    }
-}
-
-impl Resource {
-    /// Returns the identifier as a `Some(String)` if the resource variant holds one,
-    /// or `None` if there is no identifier.
-    pub fn id(&self) -> Option<String> {
-        match self {
-            Resource::Post(id) => Some(id.clone()),
-            Resource::Follow(id) => Some(id.to_string()),
-            Resource::Mute(id) => Some(id.to_string()),
-            Resource::Bookmark(id) => Some(id.clone()),
-            Resource::Tag(id) => Some(id.clone()),
-            Resource::File(id) => Some(id.clone()),
-            Resource::Blob(id) => Some(id.clone()),
-            Resource::Feed(id) => Some(id.clone()),
-            // The following variants do not carry an id.
-            Resource::User | Resource::LastRead | Resource::Unknown => None,
-        }
-    }
-}
+use super::Resource;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedUri {
@@ -75,8 +18,6 @@ impl ParsedUri {
     /// Converts the [ParsedUri] back into its URI string representation.
     /// Returns an error if the resource is Unknown.
     pub fn try_to_uri_str(&self) -> Result<String, String> {
-        use crate::traits::{HasIdPath, HasPath};
-
         let path = match &self.resource {
             Resource::User => PubkyAppUser::create_path(),
             Resource::LastRead => PubkyAppLastRead::create_path(),
@@ -98,76 +39,51 @@ impl ParsedUri {
 impl TryFrom<&str> for ParsedUri {
     type Error = String;
     fn try_from(uri: &str) -> Result<Self, Self::Error> {
-        // 0. Validate and sanitize the URL.
-        let parsed_url = Url::parse(uri).map_err(|e| format!("Invalid URL: {}", e))?;
+        let path = super::path::try_parse_pubky_path(uri)?;
 
-        // 1. Validate the scheme (using PROTOCOL without the "://")
-        if parsed_url.scheme() != PROTOCOL.trim_end_matches("://") {
-            return Err(format!(
-                "Invalid URI, must start with '{}': {}",
-                PROTOCOL, uri
-            ));
-        }
-
-        // 2. Extract the user_id from the host.
-        let user_id_str = parsed_url
-            .host_str()
-            .ok_or_else(|| format!("Missing user ID in URI: {}", uri))?;
-        let user_id = PubkyId::try_from(user_id_str)?;
-
-        // 3. Get the path segments.
-        // Expected URI structure:
-        // pubky://<user_id>/<public>/<app>/<resource>[/<id>]
-        let segments: Vec<&str> = parsed_url
-            .path_segments()
-            .ok_or_else(|| format!("Cannot parse path segments from URI: {}", uri))?
-            .collect();
-        if segments.len() < 2 {
-            return Err(format!("Not enough path segments in URI: {}", uri));
-        }
-        if segments[0] != PUBLIC_PATH.trim_matches('/') {
-            return Err(format!(
-                "Expected public path '{}' but got '{}' in URI: {}",
-                PUBLIC_PATH, segments[0], uri
-            ));
-        }
-        if segments[1] != APP_PATH.trim_matches('/') {
+        if path.app != APP_PATH.trim_matches('/') {
             return Err(format!(
                 "Expected app path '{}' but got '{}' in URI: {}",
-                APP_PATH, segments[1], uri
+                APP_PATH.trim_matches('/'),
+                path.app,
+                uri
             ));
         }
 
-        // 4. Determine the resource from the remaining segments.
-        let resource = match segments[2..] {
-            // No extra segments.
-            [] => Resource::Unknown,
-            // A single segment: must exactly match an identifier-less route.
-            [segment] => match segment {
-                PubkyAppUser::PATH_SEGMENT => Resource::User,
-                PubkyAppLastRead::PATH_SEGMENT => Resource::LastRead,
-                _ => Resource::Unknown,
-            },
-            // Two or more segments and the id is not empty.
-            [res_type, id, ..] if !id.is_empty() => {
-                let resource_type = format!("{}/", res_type);
-                match resource_type.as_str() {
-                    PubkyAppPost::PATH_SEGMENT => Resource::Post(id.to_string()),
-                    PubkyAppFollow::PATH_SEGMENT => PubkyId::try_from(id).map(Resource::Follow)?,
-                    PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(id).map(Resource::Mute)?,
-                    PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.to_string()),
-                    PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.to_string()),
-                    PubkyAppFile::PATH_SEGMENT => Resource::File(id.to_string()),
-                    PubkyAppBlob::PATH_SEGMENT => Resource::Blob(id.to_string()),
-                    PubkyAppFeed::PATH_SEGMENT => Resource::Feed(id.to_string()),
-                    _ => Resource::Unknown,
-                }
-            }
-            // If the identifier is empty or doesn't match the expected pattern.
-            _ => Resource::Unknown,
-        };
+        let resource = resource_from_segments(&path.segments)?;
 
-        Ok(ParsedUri { user_id, resource })
+        Ok(ParsedUri {
+            user_id: path.user_id,
+            resource,
+        })
+    }
+}
+
+fn resource_from_segments(segments: &[String]) -> Result<Resource, String> {
+    match segments {
+        [] => Ok(Resource::Unknown),
+        [segment] => Ok(match segment.as_str() {
+            s if s == PubkyAppUser::PATH_SEGMENT.trim_end_matches('/') => Resource::User,
+            s if s == PubkyAppLastRead::PATH_SEGMENT.trim_end_matches('/') => Resource::LastRead,
+            _ => Resource::Unknown,
+        }),
+        [res_type, id, ..] if !id.is_empty() => {
+            let resource_type = format!("{res_type}/");
+            Ok(match resource_type.as_str() {
+                PubkyAppPost::PATH_SEGMENT => Resource::Post(id.clone()),
+                PubkyAppFollow::PATH_SEGMENT => {
+                    PubkyId::try_from(id.as_str()).map(Resource::Follow)?
+                }
+                PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(id.as_str()).map(Resource::Mute)?,
+                PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.clone()),
+                PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.clone()),
+                PubkyAppFile::PATH_SEGMENT => Resource::File(id.clone()),
+                PubkyAppBlob::PATH_SEGMENT => Resource::Blob(id.clone()),
+                PubkyAppFeed::PATH_SEGMENT => Resource::Feed(id.clone()),
+                _ => Resource::Unknown,
+            })
+        }
+        _ => Ok(Resource::Unknown),
     }
 }
 
@@ -181,7 +97,11 @@ impl TryFrom<String> for ParsedUri {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::*;
+    use crate::{
+        blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
+        follow_uri_builder, last_read_uri_builder, mute_uri_builder, post_uri_builder,
+        tag_uri_builder, user_uri_builder,
+    };
 
     use super::*;
 
