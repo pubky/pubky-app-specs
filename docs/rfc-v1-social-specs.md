@@ -228,6 +228,7 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   intrinsic-time ranking, multi-epoch tombstones, bookmark-feature retirement, mixed-epoch resync.
 - [ ] **pubky-app:** v1 adoption (new caps, kind strings, own-tree legacy read union so
   un-migrated users lose nothing, publish UI, media type threading, deletion engine).
+  - [ ] **moderation:** mixed epoch support by both nexus and homeserver syncronization services as well as by checkstep-request services
 
 **Gates:**
 - [ ] **IN-PRIV** verify the target homeserver runs the `/priv/` tier and permits the write
