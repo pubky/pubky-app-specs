@@ -84,14 +84,13 @@ v1: `pub/social/v1/profile.json`, same fields.
   the client writes into `image`, verified end-to-end); an http-only rule, which one design
   draft proposed, would have invalidated every real avatar. One validator now covers
   `user.image` and both `cover_image` fields, one rule for one kind of value.
-- **The `[DELETED]` name rule becomes an honest rejection.** v0 silently rewrote a user named
-  `[DELETED]` to "anonymous"; v1 REJECTS the exact literal as a validation error instead (and
-  likewise for `post.content`). Why the rule must exist at all: nexus keys its internal
-  tombstones on that literal and its queries exclude `[DELETED]`-named users (verified), so a
-  user carrying the name would be treated as deleted by the index. Why rejection beats rewrite:
-  no silent mutation, and the reservation can be RETIRED additively once nexus keys tombstones
-  on a real flag (loosening validation is non-breaking). Substring occurrences are fine; only
-  the exact value is reserved.
+- **The `[DELETED]` magic string dies entirely.** v0 silently rewrote a user named `[DELETED]`
+  to "anonymous" because the indexer keys its deletion handling on that literal (verified), so a
+  user carrying the name would be treated as deleted. v1 removes the rewrite with NO replacement
+  rule: `[DELETED]` is an ordinary legal name. The load-bearing requirement moves to the indexer
+  contract instead: **nexus must key deletion on a real flag** (`deleted` on the indexed row)
+  before indexing v1 data, and display of deleted accounts becomes pure client presentation. A
+  magic string survives nowhere in the v1 wire rules.
 - **`links[].url` validated by the pinned web gate instead of `Url::parse` + `sanitize_url`.**
   Why: cross-implementation determinism (cross-cutting rationale above); v0's `sanitize_url`
   passed invalid URLs through unchanged.
@@ -149,7 +148,8 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
 - **The `[DELETED]` content sentinel is removed; absence is the tombstone.** Why: a
   magic content string must not survive the one clean break; deletion is now defined honestly as
   "delete every version in every epoch and both roots, retry to completion", with nexus
-  synthesizing its own tombstones from DELETE events.
+  synthesizing its own tombstones from DELETE events and real deletion state, never from content
+  strings (the same required flag upgrade as the user model).
 
 ## 3. ArticleContent (new model, 4.4a)
 

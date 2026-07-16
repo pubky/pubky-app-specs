@@ -70,14 +70,17 @@ the path grammar.
 v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
 - `image` accepts pubky/http/https via one shared image validator (cap 300). pubky-app avatars are
   pubky file URIs; an http-only rule would reject every real avatar.
-- The `[DELETED]` -> "anonymous" name rewrite is removed; the exact literal `[DELETED]` is now a
-  rejected reserved value (the indexer keys tombstones on it, so a user literally named `[DELETED]`
-  must not be storable).
+- The `[DELETED]` magic string dies entirely: v0's silent `[DELETED]` -> "anonymous" rewrite is
+  removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required nexus
+  upgrade (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
+  on a real flag (`deleted` on the indexed row / UserView) before indexing any v1 data. How a
+  deleted account is displayed then becomes pure client presentation.
 - Fields and caps otherwise unchanged; profile stays public (identity must be readable).
 
 ## B2. Post
 v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
-`{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as `posts/{id}`.
+`{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as `posts/{id}`;
+`{id}` and `{editId}` are both canonical TimestampIds (Appendix A3, A4).
 - **Per-edit path versioning.** Each edit is a new file; the first version reuses the post id;
   references use the versionless form so edits never orphan replies or re-key tags. A counter was
   rejected (races across devices on a substrate with no compare-and-swap). Now-or-never: a
@@ -89,7 +92,8 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
 - **`lock`** kept: the value is the lock-FILE URI (`pub/locks.app/<lock_id>.json`), and presence
   means "locked content" regardless of kind (matches the Locks feature's resolved design).
 - **Dual-root:** posts may live under `/priv/` (drafts, private notes, private collections).
-- The `[DELETED]` content sentinel becomes a rejected reserved value; absence is the tombstone.
+- The `[DELETED]` content sentinel dies with no replacement (same flag rule as B1); absence is
+  the tombstone, synthesized by the indexer from real deletion state, never from content strings.
 
 ## B3. ArticleContent (new)
 v0: pubky-app hand-rolls `{title, body}` JSON inside `long` posts, unspecified, cover smuggled as
@@ -112,11 +116,13 @@ because the label rejects `:`.
 v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-file) -> v1
 `priv/social/v1/bookmarks/{filename}.json`.
 - **Private** (reader set is the owner).
-- **Target in the filename, reversibly:** `base64url(canonical target)` up to 187 bytes (the exact
-  substrate maximum), plus a `~ + HashId` overflow form (target in content) for longer targets.
-  Listing bookmarks costs zero GETs for primary-form entries (the overwhelming majority); each
-  overflow entry costs one GET to recover its target. base64url is the only standard encoding that fits the
-  255-char segment at that cap and is `/`-, `%`-free and JS-decodable.
+- **Target in the filename, reversibly.** Primary form: `base64url(canonical target)` for
+  targets up to 187 bytes. The math: 187 bytes encode to 250 base64url characters, and 250 +
+  `.json` (5) = 255, the homeserver's per-segment maximum, so 187 is the largest cap ANY
+  reversible encoding allows (base64url is the densest standard encoding that is also `/`- and
+  `%`-free and natively JS-decodable). Longer targets use the overflow form `~ + HashId(target)`
+  with the target kept in content. Listing costs zero GETs for primary-form entries (the
+  overwhelming majority); each overflow entry costs one GET to recover its target.
 - Content shrinks to `{created_at}` (plus `target` only in overflow).
 
 ## B7. Follow
@@ -184,7 +190,10 @@ functions.
   epoch, transforms compose in memory writing only the latest, resume is by destination existence,
   ids/hashes are re-derived not minted.
 - **Deletion** is user-initiated only: deleting a public object (post, file) removes every copy
-  across epochs and both roots (else a surviving legacy copy resurrects on a from-scratch reindex);
+  across epochs and both roots. Cross-epoch copies exist because migration copies and never
+  deletes: a migrated post lives at BOTH `pub/pubky.app/posts/{id}` and
+  `pub/social/v1/posts/{id}/...`, and a delete that missed the legacy copy would resurrect the
+  post on a from-scratch reindex;
   private-tier deletes touch only the `/priv/` file. Absence is the tombstone: on a dumb blob
   store the owner's files are the only durable state, so restoring an old backup republishes its
   contents, accepted by design. Durable per-object tombstone files were considered and rejected
