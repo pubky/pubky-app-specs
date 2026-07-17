@@ -57,7 +57,16 @@ the path grammar.
 - **`.json` on every JSON leaf.** The homeserver derives the served type from magic bytes then the
   path extension; extensionless JSON serves as octet-stream/plaintext.
 - **A privacy tier `/priv/` (owner-only, excluded from `/events/`).** For state whose only reader
-  is the owner's own client. The placement test is the actual reader set, not aspiration.
+  is the owner's own client. The placement test is the actual reader set, not aspiration. The
+  content family (posts, files, feeds) is dual-root: publish is a deterministic root migration,
+  and THE ROOT RULE is now-or-never: a public-rooted object must never reference a priv-root
+  pubky URI (such a reference dangles for every reader but the owner and leaks path existence
+  through the 401-vs-404 oracle); private objects may reference both roots.
+- **Reference tiers (field values), distinct from the path grammar.** Appendix A governs PATHS
+  (where objects live); reference FIELD VALUES (parent, embed, targets, images) are validated by
+  per-field scheme tiers: pubky-only, pubky+web, or the universal tier (any scheme-shaped URI
+  via a pinned opaque gate: lowercased scheme, rest verbatim). Each model section names its
+  fields' tiers.
 - **Forward-compat contract (permanent).** All wire enums are plain string enums (unit
   variants, `rename_all` lowercase/snake_case), so `#[serde(other)] Unknown` plus
   `#[non_exhaustive]` is well-defined; no model uses `deny_unknown_fields`; every future field is
@@ -89,7 +98,9 @@ v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
   removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required nexus
   upgrade (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
   on a real flag (`deleted` on the indexed row / UserView) before indexing any v1 data. How a
-  deleted account is displayed then becomes pure client presentation.
+  deleted account is displayed then becomes pure client presentation (the indexer may
+  transitionally keep emitting the old literal at its view layer for old clients; storage and
+  query logic never key on it).
 - Fields and caps otherwise unchanged; profile stays public (identity must be readable).
 
 ## B2. Post
@@ -103,9 +114,9 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
 - **Kinds renamed** `short`->`note`, `long`->`article` (nature, not length); all seven kinds kept.
 - **`embed`** flattened from `{uri, kind}` to a plain URI string (kind is derivable from the
   target), and it accepts ANY external URI, the same universal tier as tags: http/https through
-  the strict web gate, and any other scheme-shaped identifier (`nostr:`, `geo:`, `ipfs:`,
-  `did:`, OSM object URLs) through a pinned opaque gate (lowercased scheme + rest verbatim, no
-  engine parsing). The indexer attaches the post to the same External Resource nodes it builds
+  the strict web gate (an OSM object URL is an ordinary https reference), and any other
+  scheme-shaped identifier (`nostr:`, `geo:`, `ipfs:`, `did:`) through a pinned opaque gate
+  (lowercased scheme + rest verbatim, no engine parsing). The indexer attaches the post to the same External Resource nodes it builds
   for external tag targets. `parent` stays pubky-only (a reply is a social-graph edge with
   thread semantics that exist only between posts). This also keeps migration total: v0's
   `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
@@ -156,8 +167,10 @@ statement (preservation protects read-modify-write, not write-without-read).
 ## B6. Bookmark
 v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-file) -> v1
 `priv/social/v1/bookmarks/{filename}.json`.
-- **Private** (reader set is the owner).
-- **Target in the filename, reversibly.** Primary form: `base64url(canonical target)` for
+- **Private** (reader set is the owner). Targets take the universal tier: any public pubky
+  resource or any external URI, same domain as tags.
+- **Target in the filename, reversibly.** Primary form: unpadded `base64url(canonical target)`
+  (no `=`; the parser's form check accepts alphabet characters only) for
   targets up to 187 bytes. The math: 187 bytes encode to 250 base64url characters, and 250 +
   `.json` (5) = 255, the homeserver's per-segment maximum, so 187 is the largest cap ANY
   reversible encoding allows (base64url is the densest standard encoding that is also `/`- and
@@ -255,8 +268,10 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 - [ ] **S3** forward-compat contract (`Unknown` on every wire enum).
 - [ ] **S4** validation core: limits table, canonical id validators, frozen text ops, mint guard.
 - [ ] **S5** path epoch + canonicalizers + parser (atomic).
-- [ ] **S6a** post wire shapes (kinds, embed, attachments, Article envelope, reserved literal).
-- [ ] **S6b** post storage, roots, lifecycle (versioned builders, root rule, publish/unpublish/delete).
+- [ ] **S6a** post wire shapes on the generic envelope (`PostEnvelope<K>` + kind trait + social
+  alias; kinds, embed, attachments, Article envelope).
+- [ ] **S6b** post storage, roots, lifecycle on the envelope, namespace-parameterized (versioned
+  builders, root rule, publish/unpublish/delete).
 - [ ] **S7** tag + collection (canonical id inputs, reference-tier items).
 - [ ] **S8** media collapse (single bytes object, MIME map, parser ext-strip).
 - [ ] **S9** feed dual-root + user gates.
@@ -274,7 +289,8 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 - [ ] **M3** pubky.app `/migrate` route (caps, upgrade flow, live counts, settings import).
 
 **Cross-repo:**
-- [ ] **pubky-nexus:** per-epoch classify/adapt/normalize, permanent v0 parser, tag id-sets,
+- [ ] **pubky-nexus:** per-epoch classify/adapt/normalize, permanent v0 parser, the deletion
+  flag (deletion keyed on real state, never name/content literals; gates v1 indexing), tag id-sets,
   intrinsic-time ranking, multi-epoch tombstones, bookmark-feature retirement, mixed-epoch resync.
 - [ ] **pubky-app:** v1 adoption (new caps, kind strings, own-tree legacy read union so
   un-migrated users lose nothing, publish UI, media type threading, deletion engine).
@@ -307,7 +323,9 @@ in favor of strictly non-destructive migration (Part C).
 # Appendix A: the v1 URI grammar (normative)
 
 The reference crate's parser and its committed conformance vectors are the executable
-definition; this is the same grammar in human-readable form.
+definition; this is the same grammar in human-readable form. Scope: this appendix governs PATHS
+(where objects live and how path URIs classify); reference FIELD VALUES inside objects go
+through the per-field scheme tiers described in Part B, not this grammar.
 
 ## A1. URI forms and canonicalization
 

@@ -67,6 +67,13 @@ These are listed once here; the per-model sections below only add what is specif
   private objects may reference both roots. Why: such a reference dangles for every reader but
   the owner and leaks the existence of a private path via the 401-vs-404 oracle. This is the one
   now-or-never piece of the private tier: tightening validation later is epoch-class.
+- **Folder ownership (the composition law).** The specification that defines an object
+  determines its storage namespace, never the application that writes it; apps compose spec
+  packages (each bringing capability scopes and path builders). App namespaces SHOULD carry an
+  epoch (`pub/<app>/v1/...`): unenforceable for foreign namespaces, but the parser already
+  extracts a version from conforming Foreign paths, so the convention buys version-routing for
+  free. `social/vN` itself is governed by the spec repo: a resource type exists exactly when the
+  released crate parses it.
 - **No silent sanitize-rewrites.** v0 silently rewrote `[DELETED]` names to "anonymous",
   truncated-then-blanked over-long `file.src`, and passed unparseable URLs through
   `sanitize_url`. v1 makes invalid input a validation error. Why: silent rewrites hide bugs and
@@ -163,7 +170,7 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
   synthesizing its own tombstones from DELETE events and real deletion state, never from content
   strings (the same required flag upgrade as the user model).
 
-## 3. ArticleContent (new model, 4.4a)
+## 3. ArticleContent (new model)
 
 v0: none. pubky-app hand-rolls `JSON.stringify({title, body})` into `long` posts, unspecified,
 with the cover image smuggled as `attachments[0]` (both verified in the client).
@@ -226,6 +233,12 @@ v1: `pub/social/v1/tags/{id}.json`, same fields.
   across epochs by construction; nexus dedups on `(author, normalized target, label)` with an
   id-SET per edge so cross-epoch un-tagging works. Why: without this, dual-read double-counts
   every tag and a "like" placed before migration can never be removed after it.
+- **One write location, any target.** Every app writes tags at the author's
+  `pub/social/v1/tags/` (folder ownership above); the target may be any public pubky resource or
+  ANY external URI (the universal tier: http/https via the strict web gate, other schemes like
+  `nostr:`/`geo:`/`ipfs:` via the pinned opaque gate). One logical tag has exactly one address,
+  so re-tags self-overwrite and the indexer drops the writing-app dimension for v1 data; tag
+  files under other app namespaces survive as a legacy READ rule only.
 - Tags stay public-only in v1; tagging private objects is deferred (dual-rooting a resource
   later is additive).
 
@@ -235,6 +248,8 @@ v0: `pub/pubky.app/bookmarks/{HashId(raw uri)}`, content `{uri, created_at}`: wo
 and the filename is one-way, so listing your bookmarks costs one GET per bookmark.
 v1: `priv/social/v1/bookmarks/{filename}.json`.
 
+- **Targets take the universal tier** (any public pubky resource or any external URI), same
+  domain as tags; over-cap and exotic targets all representable (overflow form below).
 - **Moves to `/priv/`.** Why: what you saved is personal state with zero cross-user readers
   (verified: even pubky-app reads bookmark state via nexus, which only surfaces it to the owner);
   world-readable bookmarks are a privacy leak.
@@ -249,8 +264,9 @@ v1: `priv/social/v1/bookmarks/{filename}.json`.
   overflow they could not be represented at all under the reversible form. `~` is outside the
   base64url alphabet, so the two forms are unambiguous.
 - **Content shrinks to `{created_at}`** (plus `target` only in overflow). Why: the target lives
-  in the filename; duplicating it invites mismatch. Recency SORT still costs GETs (created_at is
-  in content), stated honestly.
+  in the filename; duplicating it invites mismatch. Stated honestly: recency SORT still costs
+  GETs (created_at is in content), and each OVERFLOW entry costs one GET to recover its target;
+  primary-form listing is zero GETs.
 - **The hash/encoding input is the canonicalizer's output, never the raw spelling.** Why: v0
   hashed the raw string, so two spellings of one URL made two bookmarks.
 - **Read-side rules are pinned:** decode-then-re-encode must reproduce the filename
@@ -351,7 +367,7 @@ v1: `{priv|pub}/social/v1/feeds/{id}.json`.
   re-publish if desired); pubky-app's v0 flow already works exactly this way, including the
   known orphan-file behavior, now documented instead of accidental.
 
-## 12. Settings (new model, 4.12)
+## 12. Settings (new model)
 
 v0: none in the spec. pubky-app hand-rolls `pub/pubky.app/settings.json`: WORLD-READABLE, exposing
 `require_pin`, `sign_out_inactive`, and the rest of the user's privacy posture to anyone, read
@@ -384,7 +400,8 @@ v1: one closed grammar (normative form: Appendix A of `rfc-v1-social-specs.md`).
   as "upgrade me", not garbage.
 - **Failed id or format validation yields `Unknown`, never an error; every access is
   bounds-safe.** Why: the parser's consumers run unattended over hostile input forever; the two
-  hard errors that remain (invalid host, unknown root) exist only because no `ParsedUri` can be
+  hard errors that remain (an uncanonicalizable URI: bad scheme case, bad host, userinfo,
+  dot-dot, or an unknown root) exist only because no `ParsedUri` can be
   constructed, and callers treat them as skips.
 - **Wrong-root parses to `Unknown` for single-root resources; `visibility` carries the root for
   the dual-root three.** Why: "private object at a public path" becomes unrepresentable at the
