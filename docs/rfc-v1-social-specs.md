@@ -31,6 +31,14 @@ the path grammar.
   (`pubky.app` wrongly signals one app owns shared data), versioned (the path is the only channel
   that survives events + LIST + anonymous GET), and a bare word with no dot (a dotted directory
   name like `pubky.app/` reads as an application bundle on macOS when a tree is exported to disk).
+- **Folder ownership (the composition law).** The specification that defines an object
+  determines its storage namespace, never the application that writes it. An app writing social
+  objects writes them under `social/vN`; its own objects live under its own namespace. Apps
+  therefore compose spec packages, each bringing its capability scopes and path builders (request
+  `/pub/social/v1/:rw` alongside your app scopes; use each package's builders for its paths).
+  Consequence: tags are social objects, so the one canonical v1 write location is
+  `pub/social/v1/tags/`; indexers reading `tags/` directories inside other app namespaces is a
+  legacy read rule, not a v1 write model.
 - **Namespace governance.** `social/vN` is owned by this repo: a resource type exists exactly
   when the released crate parses it, and additions land as ordinary crate-minor PRs here (parser
   arm + model + data assets + vectors in one change). Reserved: epoch segments `v[0-9]+`, the `_`
