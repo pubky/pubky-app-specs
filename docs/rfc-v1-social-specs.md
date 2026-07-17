@@ -88,7 +88,11 @@ the path grammar.
   unknown members are carried verbatim into object views, so any client can read an extension
   through the shared index before the indexer understands it, but they are never validated,
   queried, or indexed; queryability requires an adopted projection. The extension ladder:
-  readable (carried) -> queryable (projection) -> validated (spec field).
+  readable (carried) -> queryable (projection) -> validated (spec field). Deliberate extensions
+  SHOULD nest under the reserved `ext` member (`"ext": {"badge": {...}}`), one greppable home
+  whose meaning is pinned once: everything under `ext` is third-party data the base spec never
+  validates; treat it as hostile input (escape before rendering, validate against the
+  extension's own rules before interpreting).
 - **Canonical-encoding id rule.** An id is valid iff re-encoding its decoded bytes reproduces the
   input (closed-form final-char check). v0 accepted dozens of alias spellings per id (lowercase,
   `O`->`0`, dangling bits), each a distinct homeserver key; that leniency is removed.

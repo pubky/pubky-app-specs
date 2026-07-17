@@ -46,7 +46,8 @@ These are listed once here; the per-model sections below only add what is specif
   needs: TOTAL object size is capped (posts 512 KiB, other resources 64 KiB, on stored bytes),
   rewrites fetch from the homeserver rather than indexer views, and the indexer carries unknown
   members verbatim in its views (readable by any client) while indexing only adopted
-  projections.
+  projections. Deliberate extensions SHOULD nest under the reserved `ext` member, defined once
+  as unvalidated third-party data: hostile input until an extension's own rules validate it.
 - **Canonical-encoding id validation.** An encoded id is valid iff re-encoding its decoded
   bytes reproduces the input, with closed-form regexes and final-char sets. Why: v0's validators
   decode Crockford aliases (`O` as `0`, lowercase, a dangling final bit) and z-base32 dangling
