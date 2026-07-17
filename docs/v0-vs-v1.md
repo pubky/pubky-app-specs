@@ -40,7 +40,10 @@ These are listed once here; the per-model sections below only add what is specif
   skip-if-none. Unknown members are tolerated on read AND preserved on rewrite: every wire model
   carries an opaque flattened catch-all map, so a rewriting client round-trips members it does
   not understand (tolerating without preserving would let any older client silently destroy
-  every field added after it shipped). Why: v0 has exactly one `Unknown` catch-all (`PostKind`); adding a value to any
+  every field added after it shipped). The bound extensibility needs: TOTAL object size is
+  capped (posts 512 KiB, other resources 64 KiB, on stored bytes), rewrites fetch from the
+  homeserver rather than indexer views, and the indexer carries unknown members verbatim in its
+  views (readable by any client) while indexing only adopted projections. Why: v0 has exactly one `Unknown` catch-all (`PostKind`); adding a value to any
   feed enum hard-crashes every old client on deserialize. This contract is what turns "break
   once, then grow additively" from an aspiration into a property.
 - **Canonical-encoding id validation.** An encoded id is valid iff re-encoding its decoded

@@ -79,7 +79,16 @@ the path grammar.
   any older client drop every field added after it shipped). Conformance vectors cover both the
   unknown-value and the preservation behavior. Preservation fixes typed-rewrite data loss, not
   concurrency: concurrent writers still clobber whole-file under last-write-wins where that is
-  the documented rule.
+  the documented rule. Two companion rules keep extensibility bounded and coherent: TOTAL object
+  size is capped (posts 512 KiB, every other JSON resource 64 KiB, measured on stored bytes,
+  checked before parsing on read and after building on write), because per-field validation
+  stopped bounding size the moment unknown members became legal, and a total cap cannot be added
+  later without a break; and a conforming rewrite fetches the current object from the
+  HOMESERVER, never from an indexer view (views can be stale or partial). The indexer side:
+  unknown members are carried verbatim into object views, so any client can read an extension
+  through the shared index before the indexer understands it, but they are never validated,
+  queried, or indexed; queryability requires an adopted projection. The extension ladder:
+  readable (carried) -> queryable (projection) -> validated (spec field).
 - **Canonical-encoding id rule.** An id is valid iff re-encoding its decoded bytes reproduces the
   input (closed-form final-char check). v0 accepted dozens of alias spellings per id (lowercase,
   `O`->`0`, dangling bits), each a distinct homeserver key; that leniency is removed.
