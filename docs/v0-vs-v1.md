@@ -43,10 +43,12 @@ These are listed once here; the per-model sections below only add what is specif
   every field added after it shipped). Why: v0 has exactly one `Unknown` catch-all (`PostKind`); adding a value to any
   feed enum hard-crashes every old client on deserialize. This contract is what turns "break
   once, then grow additively" from an aspiration into a property. The bound extensibility
-  needs: TOTAL object size is capped (posts 512 KiB, other resources 64 KiB, on stored bytes),
-  rewrites fetch from the homeserver rather than indexer views, and the indexer carries unknown
-  members verbatim in its views (readable by any client) while indexing only adopted
-  projections. Deliberate extensions SHOULD nest under the reserved `ext` member, defined once
+  needs: TOTAL object size is capped (posts 512 KiB, every other JSON resource 64 KiB; media
+  bytes keep their own media-size bound), checked before parsing on read and after building on
+  write; rewrites fetch from the homeserver rather than indexer views; a rewrite that cannot fit
+  the cap while preserving unknown members fails and surfaces rather than silently dropping
+  them; and the indexer carries unknown members verbatim in its views (readable by any client)
+  while indexing only adopted projections. Deliberate extensions SHOULD nest under the reserved `ext` member, defined once
   as unvalidated third-party data: hostile input until an extension's own rules validate it.
 - **Canonical-encoding id validation.** An encoded id is valid iff re-encoding its decoded
   bytes reproduces the input, with closed-form regexes and final-char sets. Why: v0's validators
@@ -243,7 +245,10 @@ v1: `pub/social/v1/tags/{id}.json`, same fields.
   ANY external URI (the universal tier: http/https via the strict web gate, other schemes like
   `nostr:`/`geo:`/`ipfs:` via the pinned opaque gate). One logical tag has exactly one address,
   so re-tags self-overwrite and the indexer drops the writing-app dimension for v1 data; tag
-  files under other app namespaces survive as a legacy READ rule only.
+  files under other app namespaces survive as a legacy READ rule only. Because addresses
+  converge, a tag writer SHOULD GET the address first and preserve unknown members if a file
+  exists: a blind PUT would destroy another app's enrichment (e.g. `ext.badge`) of the same
+  statement.
 - Tags stay public-only in v1; tagging private objects is deferred (dual-rooting a resource
   later is additive).
 

@@ -84,7 +84,11 @@ the path grammar.
   checked before parsing on read and after building on write), because per-field validation
   stopped bounding size the moment unknown members became legal, and a total cap cannot be added
   later without a break; and a conforming rewrite fetches the current object from the
-  HOMESERVER, never from an indexer view (views can be stale or partial). The indexer side:
+  HOMESERVER, never from an indexer view (views can be stale or partial). The caps cover JSON resources only
+  (media bytes keep their own media-size bound), and the wedge case is pinned: if a rewrite
+  cannot fit the cap while preserving unknown members, the writer fails the write and surfaces
+  it, never silently drops members; the user may explicitly discard extensions. The indexer
+  side:
   unknown members are carried verbatim into object views, so any client can read an extension
   through the shared index before the indexer understands it, but they are never validated,
   queried, or indexed; queryability requires an adopted projection. The extension ladder:
@@ -181,7 +185,10 @@ statement (preservation protects read-modify-write, not write-without-read).
 v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-file) -> v1
 `priv/social/v1/bookmarks/{filename}.json`.
 - **Private** (reader set is the owner). Targets take the universal tier: any public pubky
-  resource or any external URI, same domain as tags.
+  resource or any external URI, same domain as tags. Honest cost, for review: going private
+  retires the indexer's bookmark-derived public features, including collection-follows
+  (following a collection was modeled as a bookmark on it); an explicit follow/subscribe
+  resource is the deferred replacement candidate.
 - **Target in the filename, reversibly.** Primary form: unpadded `base64url(canonical target)`
   (no `=`; the parser's form check accepts alphabet characters only) for
   targets up to 187 bytes. The math: 187 bytes encode to 250 base64url characters, and 250 +
@@ -307,7 +314,7 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   intrinsic-time ranking, multi-epoch tombstones, bookmark-feature retirement, mixed-epoch resync.
 - [ ] **pubky-app:** v1 adoption (new caps, kind strings, own-tree legacy read union so
   un-migrated users lose nothing, publish UI, media type threading, deletion engine).
-  - [ ] **moderation:** mixed epoch support by both nexus and homeserver syncronization services as well as by checkstep-request services
+  - [ ] **moderation:** mixed epoch support by both nexus and homeserver synchronization services as well as by checkstep-request services
 
 **Gates:**
 - [ ] **IN-PRIV** verify the target homeserver runs the `/priv/` tier and permits the write
