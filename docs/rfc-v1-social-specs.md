@@ -125,7 +125,12 @@ list may include foreign resources). Private collections come free from the dual
 `tags/{id}.json`. Id hashed over the canonicalized target plus a frozen-trimmed, ASCII-folded
 label (v0 used engine `to_lowercase` and `url::Url` normalization, neither reproducible across
 implementations; content-addressed ids must freeze their input functions). Injectivity holds only
-because the label rejects `:`.
+because the label rejects `:`. One write location, any target: every app writes tags at the
+author's `pub/social/v1/tags/`, and the target may be any public resource (social objects, other
+apps' objects, external URIs). A logical tag therefore has exactly one possible address:
+re-tagging self-overwrites idempotently, apps on the same account converge on the same file, and
+the indexer reads one namespace with no writing-app dimension (reading `tags/` directories in
+other app namespaces survives only as a legacy rule).
 
 ## B6. Bookmark
 v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-file) -> v1
