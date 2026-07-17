@@ -102,11 +102,13 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   `posts/{id}` file and a `posts/{id}/` directory are mutually exclusive on the homeserver.
 - **Kinds renamed** `short`->`note`, `long`->`article` (nature, not length); all seven kinds kept.
 - **`embed`** flattened from `{uri, kind}` to a plain URI string (kind is derivable from the
-  target), and it accepts external http/https targets: quoting a map location or an article is
-  first-class, and the indexer attaches the post to the same External Resource nodes it builds
+  target), and it accepts ANY external URI, the same universal tier as tags: http/https through
+  the strict web gate, and any other scheme-shaped identifier (`nostr:`, `geo:`, `ipfs:`,
+  `did:`, OSM object URLs) through a pinned opaque gate (lowercased scheme + rest verbatim, no
+  engine parsing). The indexer attaches the post to the same External Resource nodes it builds
   for external tag targets. `parent` stays pubky-only (a reply is a social-graph edge with
-  thread semantics that exist only between posts). This also keeps migration total: v0 accepted
-  arbitrary embed URLs, so real v0 posts can carry them.
+  thread semantics that exist only between posts). This also keeps migration total: v0's
+  `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
 - **`attachments`** become `Vec<{uri, alt?, name?}>`, always `[]` never null. Objects, not strings,
   so per-item metadata (alt text now; hash/blurhash later) is additive; ships two committed fields.
 - **`lock`** kept: the value is the lock-FILE URI (`pub/locks.app/<lock_id>.json`), and presence
@@ -131,8 +133,10 @@ list may include foreign resources). Private collections come free from the dual
 label (v0 used engine `to_lowercase` and `url::Url` normalization, neither reproducible across
 implementations; content-addressed ids must freeze their input functions). Injectivity holds only
 because the label rejects `:`. One write location, any target: every app writes tags at the
-author's `pub/social/v1/tags/`, and the target may be any public resource (social objects, other
-apps' objects, external URIs). A logical tag therefore has exactly one possible address:
+author's `pub/social/v1/tags/`, and the target may be any public resource: social objects, other
+apps' objects, or ANY external URI (http/https via the strict web gate; other schemes, `nostr:`,
+`geo:`, `ipfs:`, `did:`, via a pinned opaque gate that lowercases the scheme and keeps the rest
+verbatim). v0 accepted these via `Url::parse`, so this also keeps migration total. A logical tag therefore has exactly one possible address:
 re-tagging self-overwrites idempotently, apps on the same account converge on the same file, and
 the indexer reads one namespace with no writing-app dimension (reading `tags/` directories in
 other app namespaces survives only as a legacy rule; migrating those files is the owning app's
