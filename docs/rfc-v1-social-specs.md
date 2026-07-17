@@ -44,8 +44,8 @@ the path grammar.
   app the same migration mechanics this spec built for itself: old and new data coexist in
   disjoint subtrees, and the path is the only version signal that survives the events feed,
   LIST, and anonymous GET. The parser already anticipates this: `Foreign` classification
-  extracts the version whenever the segment after the namespace matches `v[0-9]+`, so indexers
-  version-route conforming app data with zero extra work.
+  surfaces the segment after the namespace verbatim; for apps following the convention that
+  segment IS the version, so indexers version-route conforming app data with a single match.
 - **Namespace governance.** `social/vN` is owned by this repo: a resource type exists exactly
   when the released crate parses it, and additions land as ordinary crate-minor PRs here (parser
   arm + model + data assets + vectors in one change). Reserved: epoch segments `v[0-9]+`, the `_`

@@ -71,8 +71,8 @@ These are listed once here; the per-model sections below only add what is specif
   determines its storage namespace, never the application that writes it; apps compose spec
   packages (each bringing capability scopes and path builders). App namespaces SHOULD carry an
   epoch (`pub/<app>/v1/...`): unenforceable for foreign namespaces, but the parser already
-  extracts a version from conforming Foreign paths, so the convention buys version-routing for
-  free. `social/vN` itself is governed by the spec repo: a resource type exists exactly when the
+  surfaces the post-namespace segment from Foreign paths, so for conforming apps that segment IS
+  the version and the convention buys version-routing for free. `social/vN` itself is governed by the spec repo: a resource type exists exactly when the
   released crate parses it.
 - **No silent sanitize-rewrites.** v0 silently rewrote `[DELETED]` names to "anonymous",
   truncated-then-blanked over-long `file.src`, and passed unparseable URLs through
@@ -260,7 +260,7 @@ v1: `priv/social/v1/bookmarks/{filename}.json`.
   encoding that fits at all. base64url is also `/`-free, `%`-free, JS-decodable natively, and
   already in the SDK dependency stack.
 - **An overflow form for long targets:** `~ + HashId(target)` with the target kept in content,
-  up to 1024 bytes. Why: real bookmarks exceed 187 bytes (maps and shop URLs); without an
+  from 188 bytes up to the shared 1024 code-point reference cap. Why: real bookmarks exceed 187 bytes (maps and shop URLs); without an
   overflow they could not be represented at all under the reversible form. `~` is outside the
   base64url alphabet, so the two forms are unambiguous.
 - **Content shrinks to `{created_at}`** (plus `target` only in overflow). Why: the target lives
