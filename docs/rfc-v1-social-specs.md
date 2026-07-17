@@ -114,6 +114,15 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
 - **`lock`** kept: the value is the lock-FILE URI (`pub/locks.app/<lock_id>.json`), and presence
   means "locked content" regardless of kind (matches the Locks feature's resolved design).
 - **Dual-root:** posts may live under `/priv/` (drafts, private notes, private collections).
+- **The post is a reusable envelope (adopted from review).** The crate exports the shared
+  mechanics, versioned storage, ids, parent/embed/attachments/lock, preservation, path helpers,
+  as a generic layer (`PostEnvelope<K>`), with the social post as its first specialization
+  (closed kind set, wire bytes unchanged). App specs specialize it with their own kinds in their
+  own namespaces (a Mapky review, an Eventky event), where social readers classify them as
+  foreign data. The envelope fixes reference semantics uniformly (a reply edge means the same
+  thing everywhere); the specialization owns its kind vocabulary and content validation. This
+  makes the incubation path usable at launch: a schema proves itself in an app namespace before
+  being proposed for `social/vN`.
 - The `[DELETED]` content sentinel dies with no replacement (same flag rule as B1); absence is
   the tombstone, synthesized by the indexer from real deletion state, never from content strings.
 

@@ -104,6 +104,12 @@ v0: `pub/pubky.app/posts/{id}`, one flat file, overwritten on edit;
 v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
 `posts/{id}`.
 
+- **The post becomes a reusable envelope.** The shared mechanics (versioned storage, ids,
+  references, attachments, lock, preservation) ship as a generic crate layer that app specs
+  specialize with their own kinds in their own namespaces; the social post is the first
+  specialization, wire-identical to the shape described here. Why: the consumers are real
+  (Mapky, Eventky), the layer costs no wire change, and it turns the governance incubation path
+  into something usable at launch.
 - **Per-edit path versioning.** Storage is one file per edit; the first version reuses the
   post id; every reference (reply, embed, tag, bookmark, collection item) uses the versionless
   form. Why: v0 edits overwrite in place, so nothing distinguishes an edit from a new post on
