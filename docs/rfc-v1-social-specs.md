@@ -39,6 +39,13 @@ the path grammar.
   Consequence: tags are social objects, so the one canonical v1 write location is
   `pub/social/v1/tags/`; indexers reading `tags/` directories inside other app namespaces is a
   legacy read rule, not a v1 write model.
+- **App namespaces SHOULD carry an epoch too** (`pub/<app>/v1/...`). Nothing can be mandated for
+  foreign namespaces (no enforcement point exists), but the recommendation is free and buys an
+  app the same migration mechanics this spec built for itself: old and new data coexist in
+  disjoint subtrees, and the path is the only version signal that survives the events feed,
+  LIST, and anonymous GET. The parser already anticipates this: `Foreign` classification
+  extracts the version whenever the segment after the namespace matches `v[0-9]+`, so indexers
+  version-route conforming app data with zero extra work.
 - **Namespace governance.** `social/vN` is owned by this repo: a resource type exists exactly
   when the released crate parses it, and additions land as ordinary crate-minor PRs here (parser
   arm + model + data assets + vectors in one change). Reserved: epoch segments `v[0-9]+`, the `_`
