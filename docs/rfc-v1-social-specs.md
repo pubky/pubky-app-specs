@@ -4,15 +4,30 @@
 > design model by model (v0 shape, v1 shape, why), then migration, then the rollout. Comment
 > inline on the line you disagree with. The companion `v0-vs-v1.md` expands every model change
 > with its full reasoning.
+>
+> Terms used throughout:
+> - **epoch**: the `vN` path segment; each epoch is a disjoint subtree holding one generation of data (`social/v1` today).
+> - **root**: the leading `pub` or `priv` path segment. The parser reports it as a resource's `visibility`; the `/priv/` root as a feature is the **privacy tier**.
+> - **dual-root**: a resource that may live under either root (posts, files, feeds).
+> - **now-or-never**: a rule only a breaking release can introduce; deferring it means waiting for `social/v2`.
+> - **wire**: the stored/serialized JSON byte form.
+> - **scheme tier**: a reference field's validation class: pubky-only, pubky+web, web-only, or universal (any scheme).
+> - **nexus**: the shared indexer.
+> - **substrate**: the homeserver's dumb blob store (no compare-and-swap, no server-side logic).
+> - **tombstone**: the deletion marker readers act on; in v1, the absence of any public copy.
+> - **pinned / frozen**: committed as a closed-form rule or data asset; never tracks library or Unicode updates.
 
 The first stable and first breaking release of the shared social-data layer. Renames the crate
 `pubky-app-specs` to `pubky-social-specs` (`1.0.0`) and moves all data from the single hard-coded
-app path `/pub/pubky.app/<res>` to a versioned, app-neutral epoch `/{pub|priv}/social/v1/<res>`.
-One coordinated break spends the whole budget on what cannot be added additively later; a
-permanent forward-compat contract is designed so v1.x grows additively. A further epoch stays
-reserved for the changes no contract can make additive: re-pinning a text or id function (which
-re-ids data), changing an existing resource's root or per-kind content semantics, or breaking
-the path grammar.
+app path `/pub/pubky.app/<res>` to a versioned, app-neutral epoch `/{pub|priv}/social/v1/<res>`
+(an epoch is the `vN` path segment; each epoch is a disjoint subtree holding one generation of
+data).
+The strategy has three parts. First, this one coordinated break makes every now-or-never
+change, those that cannot be added additively later. Second, a permanent forward-compat contract
+makes everything else additive, so v1.x grows without breaking. Third, a future epoch
+(`social/v2`) stays reserved for the few changes no contract can make additive: re-pinning a
+text or id function (which re-ids existing data), changing a resource's root (its leading `pub`
+or `priv` segment) or per-kind content semantics, or breaking the path grammar.
 
 # Part A: Why break now
 
@@ -20,7 +35,7 @@ the path grammar.
   every other app. A shared spec must classify foreign data, not error on it.
 - The path is the only version signal that survives the `/events/` feed, LIST, and anonymous GET.
   v0 has none, so v1.x could not evolve without breaking old clients.
-- No privacy tier, no file extensions, GET-per-file bookmarks, and `url::Url` validation that
+- No privacy tier, no file extensions, GET-per-file bookmarks (listing them costs one GET each), and `url::Url` validation that
   normalizes junk into acceptance while rejecting valid short-form URIs.
 
 # Part B: Design, model by model
@@ -43,55 +58,73 @@ the path grammar.
   foreign namespaces (no enforcement point exists), but the recommendation is free and buys an
   app the same migration mechanics this spec built for itself: old and new data coexist in
   disjoint subtrees, and the path is the only version signal that survives the events feed,
-  LIST, and anonymous GET. The parser already anticipates this: `Foreign` classification
-  surfaces the segment after the namespace verbatim; for apps following the convention that
-  segment IS the version, so indexers version-route conforming app data with a single match.
+  LIST, and anonymous GET. The parser already anticipates this: `Foreign` classification surfaces the segment after the
+  namespace verbatim. For an app following the convention, that segment IS its version, so an
+  indexer can version-route conforming app data with a single match.
 - **Namespace governance.** `social/vN` is owned by this repo: a resource type exists exactly
   when the released crate parses it, and additions land as ordinary crate-minor PRs here (parser
   arm + model + data assets + vectors in one change). Reserved: epoch segments `v[0-9]+`, the `_`
   filename prefix, every current resource segment, and the `ext` member name; unknown segments
-  under `social/vN` parse as a handled `Unknown`, so additions never break deployed readers. A
+  under `social/vN` parse as a handled `Resource::Unknown` (a valid classification readers
+  skip, never an error; distinct from the `Unknown` enum variant of the forward-compat contract
+  below), so additions never break deployed readers. A
   new epoch (`social/v2`) is reserved for changes impossible additively (re-pinned text/id
   functions, changed root or content semantics, grammar breaks). App namespaces are self-assigned
   (domain-style names recommended); the parser classifies them foreign, never invalid.
 - **`.json` on every JSON leaf.** The homeserver derives the served type from magic bytes then the
   path extension; extensionless JSON serves as octet-stream/plaintext.
-- **A privacy tier `/priv/` (owner-only, excluded from `/events/`).** For state whose only reader
-  is the owner's own client. The placement test is the actual reader set, not aspiration. The
-  content family (posts, files, feeds) is dual-root: publish is a deterministic root migration,
-  and THE ROOT RULE is now-or-never: a public-rooted object must never reference a priv-root
-  pubky URI (such a reference dangles for every reader but the owner and leaks path existence
-  through the 401-vs-404 oracle); private objects may reference both roots.
-- **Reference tiers (field values), distinct from the path grammar.** Appendix A governs PATHS
+- **A privacy tier `/priv/` (owner-only, excluded from `/events/`).** For state whose only
+  reader is the owner's own client; placement follows the ACTUAL reader set, not aspiration.
+  The leading path segment is the ROOT (`pub` or `priv`); the parser reports it as the
+  resource's visibility. The content family (posts, files, feeds) is dual-root: an object may
+  live under either root, and publish is a deterministic root migration. One rule here is
+  now-or-never, THE ROOT RULE: a public-rooted object must never reference a priv-root pubky
+  URI; private objects may reference both roots. (A public-to-private reference dangles for
+  every reader but the owner and leaks the path's existence through the 401-vs-404 oracle.)
+- **Scheme tiers (reference field values), distinct from the path grammar.** Appendix A governs PATHS
   (where objects live); reference FIELD VALUES (parent, embed, targets, images) are validated by
   per-field scheme tiers: pubky-only, pubky+web, or the universal tier (any scheme-shaped URI
-  via a pinned opaque gate: lowercased scheme, rest verbatim). Each model section names its
-  fields' tiers.
-- **Forward-compat contract (permanent).** All wire enums are plain string enums (unit
+  via a pinned opaque gate: lowercased scheme, rest verbatim). Per-field tiers (each model section gives the rationale):
+
+  | Field | Tier |
+  |---|---|
+  | `post.parent` | pubky-only |
+  | `post.embed` | universal |
+  | `post.lock` | pubky-only |
+  | `collection.items[]` | pubky-only |
+  | tag target | universal |
+  | bookmark target | universal |
+  | `attachments[].uri` | pubky+web |
+  | `user.image`, `article.cover_image`, `collection.cover_image` | pubky+web |
+  | `user.links[].url` | web-only |
+- **Forward-compat contract (permanent).** All wire enums (an enum as stored in JSON; "wire"
+  throughout means the stored byte form) are plain string enums (unit
   variants, `rename_all` lowercase/snake_case), so `#[serde(other)] Unknown` plus
   `#[non_exhaustive]` is well-defined; no model uses `deny_unknown_fields`; every future field is
   optional + defaulted + skip-if-none. Degradation semantics are per-position: an `Unknown` in an
   object's primary enum (`post.kind`) fails validation and readers skip the object; an `Unknown`
   in a secondary enum (`feed.content`) degrades to "no constraint"; deserialization never crashes.
   Unknown members are tolerated on read AND preserved on rewrite: every wire model carries an
-  opaque flattened catch-all map, so a client rewriting an object round-trips members it does not
+  opaque catch-all map (serde flatten: it absorbs every member the model does not declare), so a
+  client rewriting an object round-trips members it does not
   understand instead of destroying another client's data (tolerating without preserving would let
-  any older client drop every field added after it shipped). Conformance vectors cover both the
-  unknown-value and the preservation behavior. Preservation fixes typed-rewrite data loss, not
-  concurrency: concurrent writers still clobber whole-file under last-write-wins where that is
-  the documented rule. Two companion rules keep extensibility bounded and coherent: TOTAL object
-  size is capped (posts 512 KiB, every other JSON resource 64 KiB, measured on stored bytes,
-  checked before parsing on read and after building on write), because per-field validation
-  stopped bounding size the moment unknown members became legal, and a total cap cannot be added
-  later without a break; and a conforming rewrite fetches the current object from the
-  HOMESERVER, never from an indexer view (views can be stale or partial). The caps cover JSON resources only
+  any older client drop every field added after it shipped). Conformance vectors (committed input and expected-output files every implementation must
+  reproduce) cover both the unknown-value and the preservation behavior. Preservation fixes exactly one failure mode: a client deserializing into its own older types
+  and writing back, silently destroying fields it never modeled. It does not fix concurrency:
+  concurrent writers still clobber whole files under last-write-wins where that is the
+  documented rule. Two companion rules keep extensibility bounded. (1) TOTAL object size is
+  capped: 512 KiB for posts, 64 KiB for every other JSON resource, measured on stored bytes,
+  checked before parsing on read and after building on write. Unknown members made per-field
+  validation stop bounding size, and a total cap cannot be added later without a break, so it
+  ships now. (2) A conforming rewrite fetches the current object from the HOMESERVER, never
+  from an indexer view (views can be stale or partial). The caps cover JSON resources only
   (media bytes keep their own media-size bound), and the wedge case is pinned: if a rewrite
   cannot fit the cap while preserving unknown members, the writer fails the write and surfaces
-  it, never silently drops members; the user may explicitly discard extensions. The indexer
-  side:
-  unknown members are carried verbatim into object views, so any client can read an extension
+  it, never silently drops members; the user may explicitly discard extensions.
+  The indexer side:   unknown members are carried verbatim into object views, so any client can read an extension
   through the shared index before the indexer understands it, but they are never validated,
-  queried, or indexed; queryability requires an adopted projection. The extension ladder:
+  queried, or indexed; queryability requires an adopted projection (the indexer explicitly promoting the member into
+  its queryable schema). The extension ladder:
   readable (carried) -> queryable (projection) -> validated (spec field). Deliberate extensions
   SHOULD nest under the reserved `ext` member (`"ext": {"badge": {...}}`), one greppable home
   whose meaning is pinned once: everything under `ext` is third-party data the base spec never
@@ -102,18 +135,37 @@ the path grammar.
   `O`->`0`, dangling bits), each a distinct homeserver key; that leniency is removed.
 - **Engine-free validation.** `url::Url` (normalizes junk into acceptance), the `mime` crate, and
   full-Unicode case/trim are replaced by pinned rules (a strict raw-string canonicalizer, a
-  frozen whitespace table, ASCII-only label folding, code-point lengths) that a Rust and a
+  frozen whitespace table (a committed code-point list that never tracks Unicode updates),
+  ASCII-only label folding, code-point lengths) that a Rust and a
   hand-written JS implementation reproduce byte-for-byte.
 - **No silent sanitize-rewrites.** v0 rewrote `[DELETED]` names to "anonymous" and
   truncated-then-blanked over-long inputs; v1 makes invalid input a validation error.
+
+A migrated user's tree at a glance (`<pk>` a host key, `TS` a TimestampId, `H26` a HashId):
+
+    pubky://<pk>/
+    |-- pub/social/v1/
+    |     profile.json
+    |     posts/TS1/TS1.json      first version (editId reuses the post id)
+    |     posts/TS1/TS2.json      an edit; references still say posts/TS1
+    |     tags/H26.json
+    |     follows/<pk2>.json
+    |     files/H26.jpg
+    |     feeds/H26.json          a published feed (copy of the private file)
+    |-- priv/social/v1/
+          posts/TS3/TS3.json      a draft
+          bookmarks/<b64u>.json   target readable from the filename
+          mutes/<pk3>.json
+          feeds/H26.json
+          settings.json
+          last_read.json
 
 ## B1. User (profile)
 v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
 - `image` accepts pubky/http/https via one shared image validator (cap 300). pubky-app avatars are
   pubky file URIs; an http-only rule would reject every real avatar.
 - The `[DELETED]` magic string dies entirely: v0's silent `[DELETED]` -> "anonymous" rewrite is
-  removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required nexus
-  upgrade (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
+  removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required upgrade in nexus, the shared indexer (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
   on a real flag (`deleted` on the indexed row / UserView) before indexing any v1 data. How a
   deleted account is displayed then becomes pure client presentation (the indexer may
   transitionally keep emitting the old literal at its view layer for old clients; storage and
@@ -126,17 +178,19 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
 `{id}` and `{editId}` are both canonical TimestampIds (Appendix A3, A4).
 - **Per-edit path versioning.** Each edit is a new file; the first version reuses the post id;
   references use the versionless form so edits never orphan replies or re-key tags. A counter was
-  rejected (races across devices on a substrate with no compare-and-swap). Now-or-never: a
+  rejected (races across devices; the substrate, the homeserver's dumb blob store, has no
+  compare-and-swap). Now-or-never: a
   `posts/{id}` file and a `posts/{id}/` directory are mutually exclusive on the homeserver.
 - **Kinds renamed** `short`->`note`, `long`->`article` (nature, not length); all seven kinds kept.
 - **`embed`** flattened from `{uri, kind}` to a plain URI string (kind is derivable from the
   target), and it accepts ANY external URI, the same universal tier as tags: http/https through
-  the strict web gate (an OSM object URL is an ordinary https reference), and any other
+  the strict web gate (the pinned regex validator for web URLs) (an OpenStreetMap object URL is an ordinary https reference), and any other
   scheme-shaped identifier (`nostr:`, `geo:`, `ipfs:`, `did:`) through a pinned opaque gate
-  (lowercased scheme + rest verbatim, no engine parsing). The indexer attaches the post to the same External Resource nodes it builds
+  (lowercased scheme + rest verbatim, no engine parsing). The indexer attaches the post to the same External Resource
+  nodes (its graph records for non-pubky targets) that it builds
   for external tag targets. `parent` stays pubky-only (a reply is a social-graph edge with
-  thread semantics that exist only between posts). This also keeps migration total: v0's
-  `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
+  thread semantics that exist only between posts). This also keeps migration total (every real v0 record has a valid v1 image; nothing fails to
+  migrate): v0's `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
 - **`attachments`** become `Vec<{uri, alt?, name?}>`, always `[]` never null. Objects, not strings,
   so per-item metadata (alt text now; hash/blurhash later) is additive; ships two committed fields.
 - **`lock`** kept: the value is the lock-FILE URI (`pub/locks.app/<lock_id>.json`), and presence
@@ -152,24 +206,27 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   makes the incubation path usable at launch: a schema proves itself in an app namespace before
   being proposed for `social/vN`.
 - The `[DELETED]` content sentinel dies with no replacement (same flag rule as B1); absence is
-  the tombstone, synthesized by the indexer from real deletion state, never from content strings.
+  the tombstone (the deletion marker readers act on), synthesized by the indexer from real
+  deletion state, never from content strings.
 
 ## B3. ArticleContent (new)
 v0: pubky-app hand-rolls `{title, body}` JSON inside `long` posts, unspecified, cover smuggled as
-`attachments[0]`. v1: a typed `{title, body, cover_image?}` envelope in `content` when
-`kind == article`. Per-kind content shape is now-or-never; the cover moves into the envelope.
+`attachments[0]`. v1: a typed `{title, body, cover_image?}` content envelope in `content` when
+`kind == article` (a per-kind content schema INSIDE the content string, distinct from the
+`PostEnvelope` mechanics layer of B2). Per-kind content shape is now-or-never; the cover moves into the envelope.
 Articles may carry parent/embed/attachments (an article can be a reply or carry media).
 
 ## B4. CollectionContent
 Shape unchanged (`{name, description?, items[], cover_image?}`). `items` now accept any
-reference-tier pubky URI (any resource, any app), not just `posts/` under `pubky.app` (a curated
+pubky URI (any resource, any app; the pubky-only scheme tier of B0), not just `posts/` under `pubky.app` (a curated
 list may include foreign resources). Private collections come free from the dual-root post family.
 
 ## B5. Tag
-`tags/{id}.json`. Id hashed over the canonicalized target plus a frozen-trimmed, ASCII-folded
+`tags/{id}.json`. Id = `HashId("{target}:{label}")`, the target canonicalized, the label
+frozen-trimmed and ASCII-folded
 label (v0 used engine `to_lowercase` and `url::Url` normalization, neither reproducible across
-implementations; content-addressed ids must freeze their input functions). Injectivity holds only
-because the label rejects `:`. One write location, any target: every app writes tags at the
+implementations; content-addressed ids must freeze their input functions). The `:` join is injective only because labels reject `:`; that restriction may never be
+lifted while the id format stands. One write location, any target: every app writes tags at the
 author's `pub/social/v1/tags/`, and the target may be any public resource: social objects, other
 apps' objects, or ANY external URI (http/https via the strict web gate; other schemes, `nostr:`,
 `geo:`, `ipfs:`, `did:`, via a pinned opaque gate that lowercases the scheme and keeps the rest
@@ -191,10 +248,10 @@ v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-fi
   resource is the deferred replacement candidate.
 - **Target in the filename, reversibly.** Primary form: unpadded `base64url(canonical target)`
   (no `=`; the parser's form check accepts alphabet characters only) for
-  targets up to 187 bytes. The math: 187 bytes encode to 250 base64url characters, and 250 +
-  `.json` (5) = 255, the homeserver's per-segment maximum, so 187 is the largest cap ANY
-  reversible encoding allows (base64url is the densest standard encoding that is also `/`- and
-  `%`-free and natively JS-decodable). Longer targets use the overflow form `~ + HashId(target)`
+  targets up to 187 bytes. The math: the homeserver caps a path segment at 255 characters, and `.json` takes 5, leaving
+  250. base64url is the densest standard encoding that is also `/`- and `%`-free and natively
+  JS-decodable, and 250 base64url characters carry 187 bytes, so 187 is the largest cap ANY
+  reversible encoding allows. Longer targets use the overflow form `~ + HashId(target)`
   with the target kept in content. Listing costs zero GETs for primary-form entries (the
   overwhelming majority); each overflow entry costs one GET to recover its target.
 - Content shrinks to `{created_at}` (plus `target` only in overflow).
@@ -236,7 +293,7 @@ while exposing the user's privacy posture (`require_pin`, `sign_out_inactive`) t
 one. v1: `PubkySocialSettings` at `priv/social/v1/settings.json`, all sections optional, whole-file
 last-write-wins on a microsecond `updated_at`, the dead per-file `version` field dropped. Rewrites
 preserve unknown members via the catch-all map (B0), so an older client editing one field cannot
-destroy a section a newer client wrote; only the concurrent-edit race is lost, by LWW design.
+destroy a section a newer client wrote; only the concurrent-edit race is lost, by last-write-wins design.
 
 ## B13. Parser and `Resource`
 v0 `url::Url`-based, hard-rejects any non-`pubky.app` app path, silently accepts userinfo/`..`/query
@@ -263,18 +320,17 @@ functions.
 - **Deterministic and total** over real v0 data: each record sources from its highest present
   epoch, transforms compose in memory writing only the latest, resume is by destination existence,
   ids/hashes are re-derived not minted.
-- **Deletion** is user-initiated only: deleting a public object (post, file) removes every copy
-  across epochs and both roots. Cross-epoch copies exist because migration copies and never
-  deletes: a migrated post lives at BOTH `pub/pubky.app/posts/{id}` and
-  `pub/social/v1/posts/{id}/...`, and a delete that missed the legacy copy would resurrect the
-  post on a from-scratch reindex;
+- **Deletion** is user-initiated only. Because migration copies and never deletes, a migrated
+  post lives at BOTH `pub/pubky.app/posts/{id}` and `pub/social/v1/posts/{id}/...`; deleting a
+  public object therefore removes every copy across epochs and both roots, or a from-scratch
+  reindex would resurrect it from the missed legacy copy;
   private-tier deletes touch only the `/priv/` file. Absence is the tombstone: on a dumb blob
   store the owner's files are the only durable state, so restoring an old backup republishes its
   contents, accepted by design. Durable per-object tombstone files were considered and rejected
   (the substrate cannot enforce them against the owner's own writes, and public tombstones would
   leak deletion metadata forever).
-- The indexer contract: dedup on `(author, resource_type, stable_id)`, tag id-sets for cross-epoch
-  un-tagging, intrinsic-time ranking (decode the post id), tombstone only when no publicly visible
+- The indexer contract: dedup on `(author, resource_type, stable_id)`, tag id-sets (each tag edge keeps the set of ids asserting it across epochs, so un-tagging
+  removes all of them), intrinsic-time ranking (decode the post id), tombstone only when no publicly visible
   copy survives.
 
 # Part D: Rollout and subtasks
@@ -294,7 +350,7 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   builders, root rule, publish/unpublish/delete).
 - [ ] **S7** tag + collection (canonical id inputs, reference-tier items).
 - [ ] **S8** media collapse (single bytes object, MIME map, parser ext-strip).
-- [ ] **S9** feed dual-root + user gates.
+- [ ] **S9** feed dual-root + the user profile field gates (image, links).
 - [ ] **S10** private tier + bookmarks + settings.
 - [ ] **S11** legacy_v0 module + cross-epoch normalization (`stable_id`/`resolve_deref`).
 
@@ -316,10 +372,10 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   un-migrated users lose nothing, publish UI, media type threading, deletion engine).
   - [ ] **moderation:** mixed epoch support by both nexus and homeserver synchronization services as well as by checkstep-request services
 
-**Gates:**
+**Release gates:**
 - [ ] **IN-PRIV** verify the target homeserver runs the `/priv/` tier and permits the write
   paths. Prerequisite for M2 onward and for any private-tier go-live, not a late release check.
-- [ ] **REL** publish `1.0.0` (crate + npm), merge `v1` to main after nexus dual-read is live.
+- [ ] **REL** release `1.0.0` (crate + npm), merge `v1` to main after nexus dual-read is live.
 
 **Dependencies** (beyond the serialized spine order above): S11 needs S5. J1 needs S5 and
 regenerates as later S tasks land; J2 needs J1; J3 needs J2 and is merge-blocking from then on.
@@ -337,8 +393,8 @@ Supersedes the v1 roadmap #12. Resolves: #47 (json extensions), #48 (attachment 
 (short-form URIs), #141 (reject non-canonical URIs). Mention-prefix cleanup (`pk:`) is handled
 client-side and already shipped.
 
-No open design decisions remain; the destructive migration carve-out was considered and rejected
-in favor of strictly non-destructive migration (Part C).
+No open design decisions remain; a carve-out allowing migration to delete some legacy data was
+considered and rejected: migration is strictly non-destructive (Part C).
 
 # Appendix A: the v1 URI grammar (normative)
 
@@ -389,7 +445,7 @@ After canonicalization, split the path into segments and classify:
 | Resource | Path remainder | Roots | Leaf rule |
 |---|---|---|---|
 | User | `profile.json` | pub | none |
-| Post (reference) | `posts/{id}` | both | `{id}` = canonical TimestampId |
+| Post (versionless reference) | `posts/{id}` | both | `{id}` = canonical TimestampId |
 | Post (version) | `posts/{id}/{editId}.json` | both | both canonical TimestampIds |
 | File (media) | `files/{hash}.{ext}` | both | strip exactly one extension, case-sensitively, ONLY if it is in the frozen extension set; remainder = canonical HashId; unknown or absent extension is Unknown |
 | Tag | `tags/{id}.json` | pub | `{id}` = canonical HashId |

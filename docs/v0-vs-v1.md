@@ -62,10 +62,12 @@ These are listed once here; the per-model sections below only add what is specif
   engine trim/lowercase/Unicode tables differ between Rust and JS and across browser versions
   (verified divergences on U+FEFF, U+0085, full-Unicode case mapping, i64 rounding), and
   content-addressed ids freeze whatever functions feed them. Changing these later re-ids data,
-  an epoch-class break, so they are pinned now, engine-free.
+  a break fixable only by opening a new `social/vN` epoch, so they are pinned now, engine-free.
 - **One URI grammar.** All `pubky://` validation goes through one raw-string
   canonicalizer (accepts the SDK short form, #120; rejects userinfo, `..`, `%`, query, fragment,
-  whitespace, control, #141); web references are gated by a pinned regex; `url::Url` and WHATWG
+  whitespace, control, #141); web references are gated by a pinned regex. Reference field values are validated by per-field
+  scheme tiers: pubky-only, pubky+web, web-only, or universal (any scheme-shaped URI via the
+  pinned opaque gate); `url::Url` and WHATWG
   `new URL()` leave the normative surface entirely. Why: v0's `url::Url` normalizes junk into
   acceptance and rejects valid short forms, and two independent validation surfaces (parser vs
   field validators) had already drifted; engine URL parsers cannot be version-pinned across
@@ -102,7 +104,8 @@ v1: `pub/social/v1/profile.json`, same fields.
   to "anonymous" because the indexer keys its deletion handling on that literal (verified), so a
   user carrying the name would be treated as deleted. v1 removes the rewrite with NO replacement
   rule: `[DELETED]` is an ordinary legal name. The load-bearing requirement moves to the indexer
-  contract instead: **nexus must key deletion on a real flag** (`deleted` on the indexed row)
+  contract instead: **nexus (the shared indexer) must key deletion on a real flag** (`deleted`
+  on the indexed row)
   before indexing v1 data, and display of deleted accounts becomes pure client presentation. A
   magic string survives nowhere in the v1 wire rules.
 - **`links[].url` validated by the pinned web gate instead of `Url::parse` + `sanitize_url`.**
@@ -152,9 +155,7 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
   first-class (the indexer reuses the External Resource nodes it already builds for external tag
   targets), and they keep migration total: v0's `Url::parse` gate accepted arbitrary embed URLs,
   so real v0 posts can carry them. `parent` stays pubky-only: reply threads are social-graph
-  edges between posts. (The
-  often-cited "casing bug" was a wasm getter wart, not a wire bug; it dies with the wasm
-  surface.)
+  edges between posts.
 - **`attachments` becomes `Vec<{uri, alt?, name?}>`, always present, default `[]` (#48).** Why: v0's
   `Option<Vec<String>>` made every consumer branch on null-vs-empty; and a bare string array can
   never grow per-item metadata without a breaking change. The object form makes alt text (a
@@ -165,8 +166,8 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
 - **`lock` is kept with corrected semantics.** The value is the lock FILE URI
   (`pubky://<creator>/pub/locks.app/<lock_id>.json`), pubky-only; presence means "locked
   content" regardless of kind. Why: this matches the resolved Locks design (pubky-app #2029);
-  earlier drafts (including v0 doc comments) mis-described it as a lock-server URI. The teaser
-  envelope inside a locked post's `content` stays deliberately client-owned, per the Locks
+  earlier drafts (including v0 doc comments) mis-described it as a lock-server URI. The client-owned
+  teaser object inside a locked post's `content` stays deliberately client-owned, per the Locks
   team's own recorded decision.
 - **Reference fields get one shared cap (1024) and canonicalization.** Why: v0 was a mix
   (attachment URI 200, src 1024, parent/embed/lock effectively uncapped or 200); one
@@ -181,8 +182,9 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
 
 v0: none. pubky-app hand-rolls `JSON.stringify({title, body})` into `long` posts, unspecified,
 with the cover image smuggled as `attachments[0]` (both verified in the client).
-v1: `PubkySocialArticleContent {title, body, cover_image?}`, a typed envelope in `content` when
-`kind == article`.
+v1: `PubkySocialArticleContent {title, body, cover_image?}`, a typed content envelope in
+`content` when `kind == article` (a per-kind schema inside the content string, distinct from
+the `PostEnvelope` mechanics layer).
 
 - **The envelope exists at all.** Why: an unspec'd JSON convention inside a spec'd field is
   interop debt; any other client rendering articles must reverse-engineer pubky-app. Per-kind
@@ -263,7 +265,7 @@ v1: `priv/social/v1/bookmarks/{filename}.json`.
 - **Moves to `/priv/`.** Why: what you saved is personal state with zero cross-user readers
   (verified: even pubky-app reads bookmark state via nexus, which only surfaces it to the owner);
   world-readable bookmarks are a privacy leak.
-- **The target moves into the filename, reversibly:** `base64url_nopad(canonical target)` for
+- **The target moves into the filename, reversibly (the primary form):** `base64url_nopad(canonical target)` for
   targets up to 187 bytes. Why: LIST returns keys only, so a reversible filename makes "list all
   my bookmarks" ZERO GETs (v0's defining defect, #47's sibling). 187 bytes is the exact
   substrate maximum (250 chars + `.json` = 255), and at that cap base64url is the ONLY standard
@@ -337,7 +339,8 @@ The metadata sidecar is deleted.
   the PUT Content-Type and derives the stored type from magic bytes, then the path extension
   (verified, `file_metadata.rs`); sniff-miss text types (svg, csv, txt, json, html, xml) served
   wrong in v0. The declared type is consumed exactly once, at upload, to derive `{ext}` via a
-  pinned essence regex + single-valued map; it is never stored. The ext is NEVER part of the
+  pinned essence regex (the essence is the bare type/subtype, parameters stripped) +
+  single-valued map; it is never stored. The ext is NEVER part of the
   hash, so the content address and dedup are untouched; `.bin` is the total fallback.
 - **The MIME whitelist gate is removed.** Why: a closed list on world-readable content is a
   forward-compat trap (it already rejected avif, heic, webm audio, opus, wasm); and the Rust
