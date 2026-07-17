@@ -125,8 +125,13 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
   instead of a hand-rolled convention. All seven concrete kinds survive (each has a live
   creation path in pubky-app); `Link` deliberately stays untyped because the URL lives inside the
   content text, so there is no per-kind shape decision being missed.
-- **`embed` collapses from `{kind, uri}` to a plain URI string.** Why: the embedded target's
-  kind is derivable by resolving the target; storing it duplicates state that can go stale. (The
+- **`embed` collapses from `{kind, uri}` to a plain URI string, and accepts external
+  http/https targets.** Why: the embedded target's kind is derivable by resolving the target;
+  storing it duplicates state that can go stale. External embeds make quoting a web resource
+  first-class (the indexer reuses the External Resource nodes it already builds for external tag
+  targets), and they keep migration total: v0's `Url::parse` gate accepted arbitrary embed URLs,
+  so real v0 posts can carry them. `parent` stays pubky-only: reply threads are social-graph
+  edges between posts. (The
   often-cited "casing bug" was a wasm getter wart, not a wire bug; it dies with the wasm
   surface.)
 - **`attachments` becomes `Vec<{uri, alt?, name?}>`, always present, default `[]` (#48).** Why: v0's
