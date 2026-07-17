@@ -130,7 +130,10 @@ author's `pub/social/v1/tags/`, and the target may be any public resource (socia
 apps' objects, external URIs). A logical tag therefore has exactly one possible address:
 re-tagging self-overwrites idempotently, apps on the same account converge on the same file, and
 the indexer reads one namespace with no writing-app dimension (reading `tags/` directories in
-other app namespaces survives only as a legacy rule).
+other app namespaces survives only as a legacy rule; migrating those files is the owning app's
+job). Because addresses converge, a tag writer SHOULD GET the address first and preserve unknown
+members if a file exists: a blind PUT would destroy another app's enrichment of the same
+statement (preservation protects read-modify-write, not write-without-read).
 
 ## B6. Bookmark
 v0 `pub/pubky.app/bookmarks/{HashId(uri)}` (public, one-way filename, GET-per-file) -> v1
