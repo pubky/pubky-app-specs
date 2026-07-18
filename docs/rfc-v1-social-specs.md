@@ -282,8 +282,12 @@ v0 `pub/pubky.app/feeds/{HashId(serde-json config)}` (public) -> v1
 - **Private by default, published by choice** (copy the same file to `/pub/`). Reader set is the
   owner today; publishing is a deliberate act.
 - **Content-addressed id over a pinned config string** (not serde output, which is field-order
-  fragile and not JS-reproducible). Two users publishing the same config share an id, so future
+  fragile and not JS-reproducible). Six fixed segments: reach, layout, sort, content filter,
+  tags, and domain tags. Two users publishing the same config share an id, so future
   cross-homeserver popularity ranking is additive indexer work.
+- Tracks current v0 (#143): the `wot` and `me` reach values and the optional `domain_tags`
+  filter (same folding and cap rules as tags) are part of the v1 model, and `domain_tags`
+  participates in the id (two feeds differing only in domain filter are different feeds).
 - All three enums gain `Unknown` (v0 hard-crashes old clients on any new reach/layout/sort value);
   `name` gains a cap.
 

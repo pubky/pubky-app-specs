@@ -355,7 +355,9 @@ The metadata sidecar is deleted.
 ## 11. Feed
 
 v0: `pub/pubky.app/feeds/{HashId(serde_json(config))}`, `{feed: config, name, created_at}`,
-public, enums crash on unknown values.
+public, enums crash on unknown values. (Current v0 also carries the `wot`/`me` reaches and an
+optional `domain_tags` filter, added mid-2026 in #143; v1 includes all three, and `domain_tags`
+joins the id input as its own trailing segment.)
 v1: `{priv|pub}/social/v1/feeds/{id}.json`.
 
 - **Private by default, published by choice (dual-root).** Why: a saved feed is a personal
