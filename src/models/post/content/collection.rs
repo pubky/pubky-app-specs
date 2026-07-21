@@ -13,9 +13,8 @@ use super::super::PubkyAppPost;
 
 /// Creator-chosen default layout for experiencing a collection.
 ///
-/// Absent means `grid`. Unknown values deserialize as `Unknown` so future
-/// layouts never invalidate the whole post (same policy as `PubkyAppPostKind`);
-/// clients must treat `Unknown` as `grid`.
+/// Unrecognized values deserialize as `Unknown` so future layouts never
+/// invalidate the whole post (same policy as `PubkyAppPostKind`).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
@@ -81,7 +80,7 @@ pub struct PubkyAppCollectionContent {
     /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
-    /// Creator's preferred default layout. Absent = grid.
+    /// Creator's preferred default layout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<PubkyAppCollectionLayout>,
 }
@@ -523,7 +522,7 @@ mod tests {
     #[test]
     fn test_collection_post_unknown_layout_tolerated() {
         // Forward-compat: a layout variant from a future spec version must not
-        // invalidate the whole post; it degrades to Unknown (rendered as grid).
+        // invalidate the whole post; it degrades to Unknown.
         let envelope_json = r#"{"name":"X","layout":"spiral"}"#;
         let post = PubkyAppPost::new(
             envelope_json.to_string(),
