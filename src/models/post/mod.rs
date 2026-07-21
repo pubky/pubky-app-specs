@@ -8,7 +8,7 @@ use crate::{
 
 pub mod content;
 
-pub use content::PubkyAppCollectionContent;
+pub use content::{PubkyAppCollectionContent, PubkyAppCollectionLayout};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use url::Url;

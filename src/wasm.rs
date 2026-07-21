@@ -317,8 +317,10 @@ impl PubkySpecsBuilder {
     ///
     /// Convenience wrapper around `createPost` that builds the
     /// `PubkyAppCollectionContent` envelope (`{ name, description, items,
-    /// cover_image }`) and JSON-serializes it into `content` internally, so
-    /// JS callers don't have to stringify the envelope themselves.
+    /// cover_image, layout }`) and JSON-serializes it into `content` internally,
+    /// so JS callers don't have to stringify the envelope themselves.
+    ///
+    /// `layout` is one of `"grid" | "list" | "visual"` (absent = grid).
     ///
     /// `parent` and `embed` are not supported for Collection posts — the
     /// validator rejects them — so this helper omits those arguments.
@@ -329,12 +331,17 @@ impl PubkySpecsBuilder {
         description: Option<String>,
         items: Option<Vec<String>>,
         cover_image: Option<String>,
+        layout: Option<String>,
     ) -> Result<PostResult, String> {
+        let layout = layout
+            .map(|s| PubkyAppCollectionLayout::from_str(&s))
+            .transpose()?;
         let envelope = PubkyAppCollectionContent {
             name,
             description,
             items: items.unwrap_or_default(),
             cover_image,
+            layout,
         };
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
