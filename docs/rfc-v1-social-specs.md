@@ -17,7 +17,9 @@
 > - **tombstone**: the deletion marker readers act on; in v1, the absence of any public copy.
 > - **pinned / frozen**: committed as a closed-form rule or data asset; never tracks library or Unicode updates.
 
-The first stable and first breaking release of the shared social-data layer. Renames the crate
+The first stable and first breaking release of the shared social-data layer: shared means many
+applications read and write the same objects (posts, follows, tags), so the schema can belong to
+no single app. Renames the crate
 `pubky-app-specs` to `pubky-social-specs` (`1.0.0`) and moves all data from the single hard-coded
 app path `/pub/pubky.app/<res>` to a versioned, app-neutral epoch `/{pub|priv}/social/v1/<res>`
 (an epoch is the `vN` path segment; each epoch is a disjoint subtree holding one generation of
@@ -130,7 +132,7 @@ or `priv` segment) or per-kind content semantics, or breaking the path grammar.
   whose meaning is pinned once: everything under `ext` is third-party data the base spec never
   validates; treat it as hostile input (escape before rendering, validate against the
   extension's own rules before interpreting).
-- **Canonical-encoding id rule.** An id is valid iff re-encoding its decoded bytes reproduces the
+- **Canonical-encoding id rule.** An id is valid if and only if re-encoding its decoded bytes reproduces the
   input (closed-form final-char check). v0 accepted dozens of alias spellings per id (lowercase,
   `O`->`0`, dangling bits), each a distinct homeserver key; that leniency is removed.
 - **Engine-free validation.** `url::Url` (normalizes junk into acceptance), the `mime` crate, and
@@ -465,7 +467,7 @@ key validation and classifies Unknown.
 
 ## A4. Canonical id encodings
 
-An id is valid iff re-encoding its decoded bytes reproduces the input. Closed form:
+An id is valid if and only if re-encoding its decoded bytes reproduces the input. Closed form:
 
 - **TimestampId** (post/edit ids): 13 chars of uppercase Crockford base32
   (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`); final char in `{0,2,4,6,8,A,C,E,G,J,M,P,R,T,W,Y}`
