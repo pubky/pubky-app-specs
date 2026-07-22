@@ -21,7 +21,8 @@ pub use models::follow::PubkyAppFollow;
 pub use models::last_read::PubkyAppLastRead;
 pub use models::mute::PubkyAppMute;
 pub use models::post::{
-    PubkyAppCollectionContent, PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind,
+    PubkyAppCollectionContent, PubkyAppCollectionLayout, PubkyAppPost, PubkyAppPostEmbed,
+    PubkyAppPostKind,
 };
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};

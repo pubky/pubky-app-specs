@@ -1,5 +1,6 @@
 use crate::{common::validate_crockford_id, limits::VALIDATION_LIMITS, types::PubkyId};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
@@ -9,6 +10,35 @@ use tsify_next::Tsify;
 use utoipa::ToSchema;
 
 use super::super::PubkyAppPost;
+
+/// Creator-chosen default layout for experiencing a collection.
+///
+/// Unrecognized values deserialize as `Unknown` so future layouts never
+/// invalidate the whole post (same policy as `PubkyAppPostKind`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
+#[serde(rename_all = "snake_case")]
+pub enum PubkyAppCollectionLayout {
+    Grid,
+    List,
+    Visual,
+    #[serde(other)]
+    Unknown,
+}
+
+impl FromStr for PubkyAppCollectionLayout {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "grid" => Ok(Self::Grid),
+            "list" => Ok(Self::List),
+            "visual" => Ok(Self::Visual),
+            _ => Err(format!("Invalid collection layout: {}", s)),
+        }
+    }
+}
 
 /// Typed JSON envelope stored in `PubkyAppPost::content` when `kind == Collection`.
 ///
@@ -50,6 +80,9 @@ pub struct PubkyAppCollectionContent {
     /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
+    /// Creator's preferred default layout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<PubkyAppCollectionLayout>,
 }
 
 /// Validates a `kind = Collection` post, including its JSON content envelope.
@@ -176,7 +209,7 @@ mod tests {
             name: name.to_string(),
             description: description.map(|d| d.to_string()),
             items: items.to_vec(),
-            cover_image: None,
+            ..Default::default()
         })
         .unwrap()
     }
@@ -199,9 +232,8 @@ mod tests {
     fn make_collection_post_with_cover(cover_image: Option<&str>) -> PubkyAppPost {
         let envelope = PubkyAppCollectionContent {
             name: "X".to_string(),
-            description: None,
-            items: vec![],
             cover_image: cover_image.map(|s| s.to_string()),
+            ..Default::default()
         };
         let content = serde_json::to_string(&envelope).expect("envelope serialization");
         PubkyAppPost::new(content, PubkyAppPostKind::Collection, None, None, None)
@@ -472,6 +504,40 @@ mod tests {
     }
 
     #[test]
+    fn test_collection_post_roundtrip_layout() {
+        let envelope_json = r#"{"name":"Photos","layout":"visual"}"#;
+        let post = PubkyAppPost::new(
+            envelope_json.to_string(),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Visual));
+    }
+
+    #[test]
+    fn test_collection_post_unknown_layout_tolerated() {
+        // Forward-compat: a layout variant from a future spec version must not
+        // invalidate the whole post; it degrades to Unknown.
+        let envelope_json = r#"{"name":"X","layout":"spiral"}"#;
+        let post = PubkyAppPost::new(
+            envelope_json.to_string(),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Unknown));
+    }
+
+    #[test]
     fn test_collection_envelope_tolerates_extra_fields() {
         // Forward-compat: the envelope intentionally does NOT use deny_unknown_fields,
         // so future minor versions can add fields without breaking older parsers.
@@ -697,7 +763,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn test_create_collection_post_wasm_builder() {
         // End-to-end via the JS-facing builder:
-        //   PubkySpecsBuilder.createCollectionPost(name, description?, items?, cover_image?)
+        //   PubkySpecsBuilder.createCollectionPost(name, description?, items?, cover_image?, layout?)
         // builds the {name, description} envelope internally, packages it
         // into a kind=Collection PubkyAppPost, and returns a PostResult
         // ready to ship to the homeserver. JS callers don't have to
@@ -713,6 +779,7 @@ mod tests {
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
                 ]),
                 Some("https://example.com/cover.png".to_string()),
+                Some("list".to_string()),
             )
             .expect("createCollectionPost should succeed");
 
@@ -728,5 +795,6 @@ mod tests {
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")
         );
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::List));
     }
 }
