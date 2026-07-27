@@ -164,7 +164,7 @@ v1: `{pub|priv}/social/v1/posts/{id}/{editId}.json`, referenced versionlessly as
   blurhash, dimensions, `content_type`/`size`) additive. Exactly two optional fields ship;
   nothing speculative.
 - **`lock` is kept with corrected semantics.** The value is the lock FILE URI
-  (`pubky://<creator>/pub/locks.app/<lock_id>.json`), pubky-only; presence means "locked
+  (`pubky://<creator>/pub/app.locks/<lock_id>.json`, illustrative), pubky-only; presence means "locked
   content" regardless of kind. Why: this matches the resolved Locks design (pubky-app #2029);
   earlier drafts (including v0 doc comments) mis-described it as a lock-server URI. The client-owned
   teaser object inside a locked post's `content` stays deliberately client-owned, per the Locks

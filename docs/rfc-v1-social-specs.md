@@ -72,7 +72,10 @@ or `priv` segment) or per-kind content semantics, or breaking the path grammar.
   below), so additions never break deployed readers. A
   new epoch (`social/v2`) is reserved for changes impossible additively (re-pinned text/id
   functions, changed root or content semantics, grammar breaks). App namespaces are self-assigned
-  (domain-style names recommended); the parser classifies them foreign, never invalid.
+  (reversed-domain form recommended: `app.locks`, `app.eventky`, not `locks.app`, for the same
+  reason the social segment is a bare word: a directory ending in `.app` is treated as an
+  application bundle by macOS when a tree is exported to disk); the parser classifies them
+  foreign, never invalid.
 - **`.json` on every JSON leaf.** The homeserver derives the served type from magic bytes then the
   path extension; extensionless JSON serves as octet-stream/plaintext.
 - **A privacy tier `/priv/` (owner-only, excluded from `/events/`).** For state whose only
@@ -195,7 +198,7 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   migrate): v0's `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
 - **`attachments`** become `Vec<{uri, alt?, name?}>`, always `[]` never null. Objects, not strings,
   so per-item metadata (alt text now; hash/blurhash later) is additive; ships two committed fields.
-- **`lock`** kept: the value is the lock-FILE URI (`pub/locks.app/<lock_id>.json`), and presence
+- **`lock`** kept: the value is the lock-FILE URI (`pub/app.locks/<lock_id>.json`, illustrative), and presence
   means "locked content" regardless of kind (matches the Locks feature's resolved design).
 - **Dual-root:** posts may live under `/priv/` (drafts, private notes, private collections).
 - **The post is a reusable envelope (adopted from review).** The crate exports the shared
