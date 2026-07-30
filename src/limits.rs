@@ -81,6 +81,8 @@ pub struct ValidationLimits {
     pub file_src_max_length: usize,
     /// Maximum number of tags allowed in a feed.
     pub feed_tags_max_count: usize,
+    /// Maximum length of a feed icon name in characters.
+    pub feed_icon_max_length: usize,
 }
 
 /// All validation limits in a single bundle.
@@ -112,4 +114,5 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     file_name_max_length: 255,
     file_src_max_length: 1024,
     feed_tags_max_count: 5,
+    feed_icon_max_length: 50,
 };

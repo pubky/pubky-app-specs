@@ -131,6 +131,45 @@ fn sanitize_tag_list(tags: Option<Vec<String>>) -> Option<Vec<String>> {
     })
 }
 
+fn sanitize_feed_icon(icon: Option<String>) -> Option<String> {
+    icon.map(|icon| icon.trim().to_lowercase())
+}
+
+/// Only the shape of the name is validated, not whether the icon exists: the
+/// icon set is curated by the client.
+///
+/// `None` is accepted for feeds created before the field existed; new feeds
+/// always carry one, since [`PubkyAppFeed::new`] requires it.
+fn validate_feed_icon(icon: &Option<String>) -> Result<(), String> {
+    let Some(icon) = icon else {
+        return Ok(());
+    };
+
+    if icon.trim().is_empty() {
+        return Err("Validation Error: Feed icon cannot be empty".into());
+    }
+
+    let icon_len = icon.chars().count();
+    if icon_len > VALIDATION_LIMITS.feed_icon_max_length {
+        return Err(format!(
+            "Validation Error: Feed icon '{}' exceeds maximum length of {} characters",
+            icon, VALIDATION_LIMITS.feed_icon_max_length
+        ));
+    }
+
+    if let Some(c) = icon
+        .chars()
+        .find(|c| !c.is_ascii_lowercase() && !c.is_ascii_digit() && *c != '-')
+    {
+        return Err(format!(
+            "Validation Error: Feed icon '{}' contains invalid character: {}",
+            icon, c
+        ));
+    }
+
+    Ok(())
+}
+
 fn validate_tag_list(tags: &Option<Vec<String>>, field_name: &str) -> Result<(), String> {
     if let Some(tags) = tags {
         if tags.len() > VALIDATION_LIMITS.feed_tags_max_count {
@@ -180,32 +219,24 @@ pub struct PubkyAppFeed {
     pub feed: PubkyAppFeedConfig,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
+    /// Lucide icon name, e.g. `"bitcoin"`. Required on new feeds, but optional
+    /// on the wire: feeds created before this field existed have none, and
+    /// clients render their default icon for those. Not part of the `feed_id`,
+    /// so the icon can change without recreating the feed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub icon: Option<String>,
     pub created_at: i64,
 }
 
 impl PubkyAppFeed {
     /// Creates a new `PubkyAppFeed` instance and sanitizes it.
-    pub fn new(
-        tags: Option<Vec<String>>,
-        domain_tags: Option<Vec<String>>,
-        reach: PubkyAppFeedReach,
-        layout: PubkyAppFeedLayout,
-        sort: PubkyAppFeedSort,
-        content: Option<PubkyAppPostKind>,
-        name: String,
-    ) -> Self {
+    pub fn new(feed: PubkyAppFeedConfig, name: String, icon: String) -> Self {
         let created_at = timestamp();
-        let feed = PubkyAppFeedConfig {
-            tags,
-            domain_tags,
-            reach,
-            layout,
-            sort,
-            content,
-        };
         Self {
             feed,
             name,
+            icon: Some(icon),
             created_at,
         }
         .sanitize()
@@ -236,6 +267,12 @@ impl PubkyAppFeed {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn name(&self) -> String {
         self.name.clone()
+    }
+
+    /// Getter for `icon`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn icon(&self) -> Option<String> {
+        self.icon.clone()
     }
 }
 
@@ -269,21 +306,19 @@ impl Validatable for PubkyAppFeed {
             return Err("Validation Error: Feed name cannot be empty".into());
         }
 
+        validate_feed_icon(&self.icon)?;
+
         self.feed.validate(None)?;
 
         Ok(())
     }
 
     fn sanitize(self) -> Self {
-        // Sanitize name
-        let name = self.name.trim().to_string();
-
-        let feed = self.feed.sanitize();
-
         PubkyAppFeed {
-            feed,
-            name,
-            created_at: self.created_at,
+            feed: self.feed.sanitize(),
+            name: self.name.trim().to_string(),
+            icon: sanitize_feed_icon(self.icon),
+            ..self
         }
     }
 }
@@ -335,16 +370,37 @@ mod tests {
     use super::*;
     use crate::{limits::VALIDATION_LIMITS, traits::Validatable};
 
+    fn feed_config(
+        tags: Option<Vec<String>>,
+        domain_tags: Option<Vec<String>>,
+        reach: PubkyAppFeedReach,
+        layout: PubkyAppFeedLayout,
+        sort: PubkyAppFeedSort,
+        content: Option<PubkyAppPostKind>,
+    ) -> PubkyAppFeedConfig {
+        PubkyAppFeedConfig {
+            tags,
+            domain_tags,
+            reach,
+            layout,
+            sort,
+            content,
+        }
+    }
+
     #[test]
     fn test_new() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bitcoin".to_string(), "rust".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            Some(PubkyAppPostKind::Image),
+            feed_config(
+                Some(vec!["bitcoin".to_string(), "rust".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                Some(PubkyAppPostKind::Image),
+            ),
             "Rust Bitcoiners".to_string(),
+            "bitcoin".to_string(),
         );
 
         let feed_config = PubkyAppFeedConfig {
@@ -357,6 +413,7 @@ mod tests {
         };
         assert_eq!(feed.feed, feed_config);
         assert_eq!(feed.name, "Rust Bitcoiners");
+        assert_eq!(feed.icon, Some("bitcoin".to_string()));
         // Check that created_at is recent
         let now = timestamp();
         assert!(feed.created_at <= now && feed.created_at >= now - 1_000_000);
@@ -365,13 +422,16 @@ mod tests {
     #[test]
     fn test_create_id() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bitcoin".to_string(), "rust".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["bitcoin".to_string(), "rust".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Rust Bitcoiners".to_string(),
+            "bitcoin".to_string(),
         );
 
         let feed_id = feed.create_id();
@@ -383,13 +443,16 @@ mod tests {
     #[test]
     fn test_validate() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bitcoin".to_string(), "rust".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["bitcoin".to_string(), "rust".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Rust Bitcoiners".to_string(),
+            "bitcoin".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -400,13 +463,16 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bitcoin".to_string(), "rust".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["bitcoin".to_string(), "rust".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Rust Bitcoiners".to_string(),
+            "bitcoin".to_string(),
         );
         let invalid_id = "INVALIDID";
         let result = feed.validate(Some(invalid_id));
@@ -416,15 +482,19 @@ mod tests {
     #[test]
     fn test_sanitize() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["  BiTcoin  ".to_string(), " RUST   ".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["  BiTcoin  ".to_string(), " RUST   ".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "  Rust Bitcoiners".to_string(),
+            "  BitCoin  ".to_string(),
         );
         assert_eq!(feed.name, "Rust Bitcoiners");
+        assert_eq!(feed.icon, Some("bitcoin".to_string()));
         assert_eq!(
             feed.feed.tags,
             Some(vec!["bitcoin".to_string(), "rust".to_string()])
@@ -485,13 +555,16 @@ mod tests {
     #[test]
     fn test_sanitize_domain_tags() {
         let feed = PubkyAppFeed::new(
-            None,
-            Some(vec!["  Synonym  ".to_string(), "  ".to_string()]),
-            PubkyAppFeedReach::Wot,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                None,
+                Some(vec!["  Synonym  ".to_string(), "  ".to_string()]),
+                PubkyAppFeedReach::Wot,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
 
         assert_eq!(feed.feed.domain_tags, Some(vec!["synonym".to_string()]));
@@ -500,20 +573,23 @@ mod tests {
     #[test]
     fn test_validate_too_many_domain_tags() {
         let feed = PubkyAppFeed::new(
-            None,
-            Some(vec![
-                "tag1".to_string(),
-                "tag2".to_string(),
-                "tag3".to_string(),
-                "tag4".to_string(),
-                "tag5".to_string(),
-                "tag6".to_string(),
-            ]),
-            PubkyAppFeedReach::Me,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                None,
+                Some(vec![
+                    "tag1".to_string(),
+                    "tag2".to_string(),
+                    "tag3".to_string(),
+                    "tag4".to_string(),
+                    "tag5".to_string(),
+                    "tag6".to_string(),
+                ]),
+                PubkyAppFeedReach::Me,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -525,13 +601,16 @@ mod tests {
     #[test]
     fn test_validate_domain_tag_with_invalid_char() {
         let feed = PubkyAppFeed::new(
-            None,
-            Some(vec!["synonym,to".to_string()]),
-            PubkyAppFeedReach::Wot,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                None,
+                Some(vec!["synonym,to".to_string()]),
+                PubkyAppFeedReach::Wot,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -543,20 +622,23 @@ mod tests {
     #[test]
     fn test_validate_too_many_tags() {
         let feed = PubkyAppFeed::new(
-            Some(vec![
-                "tag1".to_string(),
-                "tag2".to_string(),
-                "tag3".to_string(),
-                "tag4".to_string(),
-                "tag5".to_string(),
-                "tag6".to_string(), // This exceeds feed_tags_max_count
-            ]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec![
+                    "tag1".to_string(),
+                    "tag2".to_string(),
+                    "tag3".to_string(),
+                    "tag4".to_string(),
+                    "tag5".to_string(),
+                    "tag6".to_string(), // This exceeds feed_tags_max_count
+                ]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -571,13 +653,16 @@ mod tests {
     #[test]
     fn test_validate_tag_too_long() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1)]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1)]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -589,13 +674,16 @@ mod tests {
     #[test]
     fn test_validate_tag_with_whitespace() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bit coin".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["bit coin".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -607,13 +695,16 @@ mod tests {
     #[test]
     fn test_validate_tag_with_invalid_char() {
         let feed = PubkyAppFeed::new(
-            Some(vec!["bitcoin,rust".to_string()]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec!["bitcoin,rust".to_string()]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -625,19 +716,22 @@ mod tests {
     #[test]
     fn test_validate_max_tags() {
         let feed = PubkyAppFeed::new(
-            Some(vec![
-                "tag1".to_string(),
-                "tag2".to_string(),
-                "tag3".to_string(),
-                "tag4".to_string(),
-                "tag5".to_string(),
-            ]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec![
+                    "tag1".to_string(),
+                    "tag2".to_string(),
+                    "tag3".to_string(),
+                    "tag4".to_string(),
+                    "tag5".to_string(),
+                ]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
         let feed_id = feed.create_id();
 
@@ -648,17 +742,20 @@ mod tests {
     #[test]
     fn test_sanitize_filters_empty_tags() {
         let feed = PubkyAppFeed::new(
-            Some(vec![
-                "bitcoin".to_string(),
-                "  ".to_string(), // Empty after trim
-                "rust".to_string(),
-            ]),
-            None,
-            PubkyAppFeedReach::Following,
-            PubkyAppFeedLayout::Columns,
-            PubkyAppFeedSort::Recent,
-            None,
+            feed_config(
+                Some(vec![
+                    "bitcoin".to_string(),
+                    "  ".to_string(), // Empty after trim
+                    "rust".to_string(),
+                ]),
+                None,
+                PubkyAppFeedReach::Following,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
             "Test Feed".to_string(),
+            "rss".to_string(),
         );
 
         assert_eq!(
@@ -681,13 +778,16 @@ mod tests {
 
         for (invalid_tag, expected_error) in invalid_cases {
             let feed = PubkyAppFeed::new(
-                Some(vec![invalid_tag.clone()]),
-                None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
-                None,
+                feed_config(
+                    Some(vec![invalid_tag.clone()]),
+                    None,
+                    PubkyAppFeedReach::Following,
+                    PubkyAppFeedLayout::Columns,
+                    PubkyAppFeedSort::Recent,
+                    None,
+                ),
                 "Test Feed".to_string(),
+                "rss".to_string(),
             );
             let feed_id = feed.create_id();
 
@@ -700,6 +800,169 @@ mod tests {
                 invalid_tag
             );
         }
+    }
+
+    #[test]
+    fn test_icon_json_roundtrip() {
+        let feed_json = r#"
+        {
+            "feed": {
+                "tags": ["rust"],
+                "reach": "all",
+                "layout": "columns",
+                "sort": "recent"
+            },
+            "name": "Rust",
+            "icon": "code-2",
+            "created_at": 1700000000
+        }
+        "#;
+
+        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed_id = feed.create_id();
+
+        let feed_parsed =
+            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+        assert_eq!(feed_parsed.icon, Some("code-2".to_string()));
+
+        let serialized = serde_json::to_value(&feed_parsed).unwrap();
+        assert_eq!(serialized["icon"], "code-2");
+    }
+
+    #[test]
+    fn test_feed_without_icon_stays_valid() {
+        // Feeds stored before `icon` existed carry no icon and must keep
+        // parsing, validating and serializing without one.
+        let feed_json = r#"
+        {
+            "feed": {
+                "tags": ["rust"],
+                "reach": "all",
+                "layout": "columns",
+                "sort": "recent"
+            },
+            "name": "Legacy Feed",
+            "created_at": 1700000000
+        }
+        "#;
+
+        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed_id = feed.create_id();
+
+        let feed_parsed =
+            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+        assert_eq!(feed_parsed.icon, None);
+
+        let serialized = serde_json::to_value(&feed_parsed).unwrap();
+        assert!(serialized.get("icon").is_none());
+    }
+
+    #[test]
+    fn test_feed_with_null_icon_stays_valid() {
+        let feed_json = r#"
+        {
+            "feed": {
+                "tags": ["rust"],
+                "reach": "all",
+                "layout": "columns",
+                "sort": "recent"
+            },
+            "name": "Legacy Feed",
+            "icon": null,
+            "created_at": 1700000000
+        }
+        "#;
+
+        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed_id = feed.create_id();
+        let feed_parsed =
+            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+
+        assert_eq!(feed_parsed.icon, None);
+        let serialized = serde_json::to_value(&feed_parsed).unwrap();
+        assert!(serialized.get("icon").is_none());
+    }
+
+    #[test]
+    fn test_sanitize_icon_lowercases() {
+        let feed = PubkyAppFeed::new(
+            feed_config(
+                None,
+                None,
+                PubkyAppFeedReach::All,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
+            "Mixed Case Icon".to_string(),
+            "  Code-2  ".to_string(),
+        );
+
+        assert_eq!(feed.icon, Some("code-2".to_string()));
+        let feed_id = feed.create_id();
+        assert!(feed.validate(Some(&feed_id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_icon_errors() {
+        let invalid_cases = vec![
+            ("   ".to_string(), "cannot be empty"),
+            (
+                "a".repeat(VALIDATION_LIMITS.feed_icon_max_length + 1),
+                "exceeds maximum length",
+            ),
+            ("bit coin".to_string(), "invalid character"),
+            ("bitcoin,rust".to_string(), "invalid character"),
+            ("bitcoin_rust".to_string(), "invalid character"),
+        ];
+
+        for (invalid_icon, expected_error) in invalid_cases {
+            let feed = PubkyAppFeed::new(
+                feed_config(
+                    None,
+                    None,
+                    PubkyAppFeedReach::All,
+                    PubkyAppFeedLayout::Columns,
+                    PubkyAppFeedSort::Recent,
+                    None,
+                ),
+                "Test Feed".to_string(),
+                invalid_icon.clone(),
+            );
+            let feed_id = feed.create_id();
+
+            let result = feed.validate(Some(&feed_id));
+            assert!(result.is_err(), "Should reject icon: {}", invalid_icon);
+            assert!(
+                result.unwrap_err().contains(expected_error),
+                "Expected error containing '{}' for icon: {}",
+                expected_error,
+                invalid_icon
+            );
+        }
+    }
+
+    #[test]
+    fn test_icon_does_not_change_feed_id() {
+        let make_feed = |icon: &str| {
+            PubkyAppFeed::new(
+                feed_config(
+                    Some(vec!["rust".to_string()]),
+                    None,
+                    PubkyAppFeedReach::All,
+                    PubkyAppFeedLayout::Columns,
+                    PubkyAppFeedSort::Recent,
+                    None,
+                ),
+                "Rust".to_string(),
+                icon.to_string(),
+            )
+        };
+
+        assert_eq!(
+            make_feed("bitcoin").create_id(),
+            make_feed("rss").create_id()
+        );
     }
 
     #[test]

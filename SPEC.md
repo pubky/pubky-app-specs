@@ -286,6 +286,7 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 | -------------- | --------- | --------------------------- | --------------------------------------- |
 | `feed`         | Object    | Feed filter/sort settings.  | Required. See `feed` object below.      |
 | `name`         | String    | Display name of the feed.   | Required. Non-empty after trim.         |
+| `icon`         | String    | Lucide icon name.           | Required on new feeds; may be missing or `null` on older ones. Max 50 chars. Only `a-z`, `0-9`, `-`. |
 | `created_at`   | Integer   | Unix timestamp of creation. | Required.                               |
 
 #### `feed` object (`PubkyAppFeedConfig`)
@@ -301,8 +302,10 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 
 **Validation Notes:**
 
-- The `feed_id` is a **Hash ID** derived from the serialized `feed` object.
+- The `feed_id` is a **Hash ID** derived from the serialized `feed` object. `name` and `icon` are not part of it, so both can change without recreating the feed.
 - Tags and domain tags are trimmed, lowercased, and empty entries are removed on sanitize.
+- `icon` names a [Lucide](https://lucide.dev/icons) icon; the spec does not enumerate the allowed names, and clients fall back to their default icon for names they do not know. It is trimmed and lowercased on sanitize.
+- Every newly created feed must carry an `icon`. It stays optional in the schema only so that feeds written before the field existed remain valid when the field is missing or `null`; an `icon` that is present but empty is rejected.
 
 **Example: Valid Feed**
 
@@ -317,6 +320,7 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
     "content": "video"
   },
   "name": "My Feed",
+  "icon": "bitcoin",
   "created_at": 1700000000
 }
 ```
