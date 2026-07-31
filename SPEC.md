@@ -1,6 +1,6 @@
 # Data model specification
 
-_Version 0.6.0_
+_Version 0.7.0_
 
 ## Table of Contents
 
