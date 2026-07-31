@@ -943,6 +943,47 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_icon_at_max_length() {
+        let feed = PubkyAppFeed::new(
+            feed_config(
+                None,
+                None,
+                PubkyAppFeedReach::All,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
+            "Test Feed".to_string(),
+            "a".repeat(VALIDATION_LIMITS.feed_icon_max_length),
+        );
+        let feed_id = feed.create_id();
+
+        assert!(feed.validate(Some(&feed_id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_accepts_unknown_icon_name() {
+        // Only the shape is validated; clients fall back to their default icon
+        // for names outside their set.
+        let feed = PubkyAppFeed::new(
+            feed_config(
+                None,
+                None,
+                PubkyAppFeedReach::All,
+                PubkyAppFeedLayout::Columns,
+                PubkyAppFeedSort::Recent,
+                None,
+            ),
+            "Test Feed".to_string(),
+            "no-such-icon-42".to_string(),
+        );
+        let feed_id = feed.create_id();
+
+        assert!(feed.validate(Some(&feed_id)).is_ok());
+        assert_eq!(feed.icon, Some("no-such-icon-42".to_string()));
+    }
+
+    #[test]
     fn test_icon_does_not_change_feed_id() {
         let make_feed = |icon: &str| {
             PubkyAppFeed::new(
