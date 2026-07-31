@@ -69,11 +69,20 @@ const { bookmark, meta } = specs.createBookmark(uri);
 const { tag, meta } = specs.createTag(uri, label);
 const { follow, meta } = specs.createFollow(pubkyId);
 const { mute, meta } = specs.createMute(pubkyId);
-const { feed, meta } = specs.createFeed(tags, reach, layout, sort, content, name, domainTags);
+const { feed, meta } = specs.createFeed({
+  tags,
+  reach,
+  layout,
+  sort,
+  content,
+  name,
+  domainTags,
+  icon,
+});
 const { last_read, meta } = specs.createLastRead();
 ```
 
-`domainTags` is optional — omit it or pass `null`/`undefined` when unused. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
+`domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
 For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/example.js).
 

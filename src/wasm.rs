@@ -1,8 +1,10 @@
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, HasPath, HashId, TimestampId, Validatable};
 use crate::*;
+use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use std::str::FromStr;
+use tsify_next::Tsify;
 use wasm_bindgen::prelude::*;
 
 /// Each FFI function:
@@ -70,6 +72,25 @@ impl Meta {
 pub struct PubkySpecsBuilder {
     #[wasm_bindgen(skip)]
     pubky_id: PubkyId,
+}
+
+/// Creation-only input for a feed. Unlike the stored feed model, `icon` is
+/// required because only legacy stored feeds may omit it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFeedInput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tags: Option<Vec<String>>,
+    reach: String,
+    layout: String,
+    sort: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    domain_tags: Option<Vec<String>>,
+    icon: String,
 }
 
 /// A macro to generate result structs and `wasm_bindgen`-exposed getters.
@@ -190,48 +211,26 @@ impl PubkySpecsBuilder {
     // -----------------------------------------------------------------------------
 
     #[wasm_bindgen(js_name = createFeed)]
-    pub fn create_feed(
-        &self,
-        tags: JsValue,
-        reach: String,
-        layout: String,
-        sort: String,
-        content: Option<String>,
-        name: String,
-        domain_tags: JsValue,
-    ) -> Result<FeedResult, String> {
-        let tags_vec: Option<Vec<String>> = if tags.is_null() || tags.is_undefined() {
-            None
-        } else {
-            from_value(tags).map_err(|e| e.to_string())?
-        };
-
-        let domain_tags_vec: Option<Vec<String>> =
-            if domain_tags.is_null() || domain_tags.is_undefined() {
-                None
-            } else {
-                from_value(domain_tags).map_err(|e| e.to_string())?
-            };
-
+    pub fn create_feed(&self, input: CreateFeedInput) -> Result<FeedResult, String> {
         // Use `FromStr` to parse enums
-        let reach = PubkyAppFeedReach::from_str(&reach)?;
-        let layout = PubkyAppFeedLayout::from_str(&layout)?;
-        let sort = PubkyAppFeedSort::from_str(&sort)?;
-        let content = match content {
+        let reach = PubkyAppFeedReach::from_str(&input.reach)?;
+        let layout = PubkyAppFeedLayout::from_str(&input.layout)?;
+        let sort = PubkyAppFeedSort::from_str(&input.sort)?;
+        let content = match input.content {
             Some(val) => Some(PubkyAppPostKind::from_str(&val)?),
             None => None,
         };
 
         // Create the feed
-        let feed = PubkyAppFeed::new(
-            tags_vec,
-            domain_tags_vec,
+        let config = PubkyAppFeedConfig {
+            tags: input.tags,
+            domain_tags: input.domain_tags,
             reach,
             layout,
             sort,
             content,
-            name,
-        );
+        };
+        let feed = PubkyAppFeed::new(config, input.name, input.icon);
 
         let feed_id = feed.create_id();
         feed.validate(Some(&feed_id))?;

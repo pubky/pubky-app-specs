@@ -224,16 +224,18 @@ header("FEEDS & LAST READ");
 
 // Feed
 console.log(`  ${c.yellow}▸ Custom Feed${c.reset}`);
-const { feed, meta: feedMeta } = specsBuilder.createFeed(
-  ["mountain", "hiking", "nature"],
-  "all",
-  "columns",
-  "recent",
-  "image",
-  "Outdoor Adventures"
-);
+const { feed, meta: feedMeta } = specsBuilder.createFeed({
+  tags: ["mountain", "hiking", "nature"],
+  reach: "all",
+  layout: "columns",
+  sort: "recent",
+  content: "image",
+  name: "Outdoor Adventures",
+  icon: "mountain",
+});
 field("ID", feedMeta.id);
 field("Name", feed.toJson().name);
+field("Icon", feed.toJson().icon);
 field("Tags", feed.toJson().feed.tags.join(", "));
 field("Layout", feed.toJson().feed.layout);
 field("Sort", feed.toJson().feed.sort);
@@ -241,15 +243,16 @@ console.log();
 
 // WoT feed with domain tags
 console.log(`  ${c.yellow}▸ WoT Feed with Domain Tags${c.reset}`);
-const { feed: wotFeed, meta: wotFeedMeta } = specsBuilder.createFeed(
-  ["rust"],
-  "wot",
-  "columns",
-  "recent",
-  "image",
-  "Rust WoT",
-  ["synonym"]
-);
+const { feed: wotFeed, meta: wotFeedMeta } = specsBuilder.createFeed({
+  tags: ["rust"],
+  reach: "wot",
+  layout: "columns",
+  sort: "recent",
+  content: "image",
+  name: "Rust WoT",
+  domainTags: ["synonym"],
+  icon: "users",
+});
 field("ID", wotFeedMeta.id);
 field("Reach", wotFeed.toJson().feed.reach);
 field("Domain Tags", wotFeed.toJson().feed.domain_tags.join(", "));

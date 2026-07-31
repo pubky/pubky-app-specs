@@ -15,7 +15,9 @@ pub use limits::*;
 // Re-export domain types
 pub use models::blob::PubkyAppBlob;
 pub use models::bookmark::PubkyAppBookmark;
-pub use models::feed::{PubkyAppFeed, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort};
+pub use models::feed::{
+    PubkyAppFeed, PubkyAppFeedConfig, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort,
+};
 pub use models::file::{PubkyAppFile, VALID_MIME_TYPES};
 pub use models::follow::PubkyAppFollow;
 pub use models::last_read::PubkyAppLastRead;

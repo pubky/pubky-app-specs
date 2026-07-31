@@ -521,14 +521,15 @@ describe("PubkySpecs Example Objects Tests", () => {
 
   describe("Feed Pubky-app-specs", () => {
     it("should create feed with correct properties", () => {
-      const { feed, meta: feedMeta } = specsBuilder.createFeed(
-        ["mountain","hike"], 
-        "all", 
-        "columns", 
-        "recent", 
-        "image", 
-        "nature"
-      );
+      const { feed, meta: feedMeta } = specsBuilder.createFeed({
+        tags: ["mountain", "hike"],
+        reach: "all",
+        layout: "columns",
+        sort: "recent",
+        content: "image",
+        name: "nature",
+        icon: "mountain",
+      });
 
       // Test meta properties
       assert.ok(feedMeta.id, "Feed should have an ID");
@@ -547,20 +548,22 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(feedJson.feed.sort, "recent", "Feed sort should match");
       assert.strictEqual(feedJson.feed.content, "image", "Feed content should match");
       assert.strictEqual(feedJson.name, "nature", "Feed name should match");
+      assert.strictEqual(feedJson.icon, "mountain", "Feed icon should match");
       assert.ok(feedJson.created_at, "Feed should have created_at timestamp");
       assert.ok(typeof feedJson.created_at === "number", "created_at should be a number");
     });
 
     it("should create feed with wot reach and domain_tags", () => {
-      const { feed } = specsBuilder.createFeed(
-        ["rust"],
-        "wot",
-        "columns",
-        "recent",
-        "image",
-        "WoT Feed",
-        ["synonym"]
-      );
+      const { feed } = specsBuilder.createFeed({
+        tags: ["rust"],
+        reach: "wot",
+        layout: "columns",
+        sort: "recent",
+        content: "image",
+        name: "WoT Feed",
+        domainTags: ["synonym"],
+        icon: "users",
+      });
 
       const feedJson = feed.toJson();
       assert.strictEqual(feedJson.feed.reach, "wot", "Feed reach should be wot");
@@ -572,20 +575,45 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     it("should create feed with me reach without domain_tags", () => {
-      const { feed } = specsBuilder.createFeed(
-        null,
-        "me",
-        "list",
-        "popularity",
-        null,
-        "My Posts"
-      );
+      const { feed } = specsBuilder.createFeed({
+        reach: "me",
+        layout: "list",
+        sort: "popularity",
+        name: "My Posts",
+        icon: "user",
+      });
 
       const feedJson = feed.toJson();
       assert.strictEqual(feedJson.feed.reach, "me", "Feed reach should be me");
       assert.ok(
         feedJson.feed.domain_tags == null,
         "Feed domain_tags should be absent or null when not provided"
+      );
+      assert.strictEqual(feedJson.icon, "user", "Feed icon should match");
+    });
+
+    it("should reject icons outside a-z, 0-9 and -", () => {
+      for (const icon of ["bad icon", "bad_icon"]) {
+        assert.throws(() =>
+          specsBuilder.createFeed({
+            reach: "all",
+            layout: "columns",
+            sort: "recent",
+            name: "Bad Icon",
+            icon,
+          })
+        );
+      }
+    });
+
+    it("should require an icon when creating a feed", () => {
+      assert.throws(() =>
+        specsBuilder.createFeed({
+          reach: "all",
+          layout: "columns",
+          sort: "recent",
+          name: "Missing Icon",
+        })
       );
     });
   });
