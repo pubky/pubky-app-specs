@@ -55,7 +55,7 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 | `openapi` | OpenAPI schemas via `utoipa`   |
 
 ```toml
-pubky-app-specs = { version = "0.6", features = ["openapi"] }
+pubky-app-specs = { version = "0.7", features = ["openapi"] }
 ```
 
 - **MSRV:** 1.89 (see `rust-version` in `Cargo.toml`)
