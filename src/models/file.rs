@@ -162,6 +162,21 @@ impl Validatable for PubkyAppFile {
             return Err("Validation Error: Invalid name length".into());
         }
 
+        // Keep file-name validation data-driven so client validation built from
+        // exported limits cannot drift from Rust validation. The list includes
+        // the control characters that an inline `char::is_control()` check
+        // would catch.
+        if let Some(c) = self
+            .name
+            .chars()
+            .find(|c| VALIDATION_LIMITS.file_name_invalid_chars.contains(c))
+        {
+            return Err(format!(
+                "Validation Error: File name '{}' contains invalid character: {}",
+                self.name, c
+            ));
+        }
+
         // Validate src
         if self.src.chars().count() == 0 {
             return Err("Validation Error: Invalid src".into());
@@ -300,6 +315,69 @@ mod tests {
                 expected_error
             );
             assert!(result.unwrap_err().contains(expected_error));
+        }
+    }
+
+    fn valid_file_with_name(name: &str) -> PubkyAppFile {
+        PubkyAppFile::new(
+            name.to_string(),
+            blob_uri_builder("user_id".into(), "id".into()),
+            "image/png".to_string(),
+            1024,
+        )
+    }
+
+    #[test]
+    fn test_validate_file_name_chars() {
+        for c in (0..=char::MAX as u32)
+            .filter_map(char::from_u32)
+            .filter(|c| c.is_control())
+        {
+            assert!(
+                VALIDATION_LIMITS.file_name_invalid_chars.contains(&c),
+                "Expected control character U+{:04X} to be exported as invalid",
+                c as u32
+            );
+        }
+
+        let valid_names = ["example.png", "résumé.pdf", "文档.pdf"];
+        for name in valid_names {
+            let file = valid_file_with_name(name);
+            let id = file.create_id();
+            assert!(
+                file.validate(Some(&id)).is_ok(),
+                "Expected '{}' to be valid",
+                name
+            );
+        }
+
+        let invalid_cases: Vec<(&str, char)> = vec![
+            ("my\"file.txt", '"'),
+            ("path\\file.txt", '\\'),
+            ("file\n.txt", '\n'),
+            ("file\r.txt", '\r'),
+            ("file\0.txt", '\0'),
+        ];
+
+        for (name, expected_char) in invalid_cases {
+            let file = valid_file_with_name(name);
+            let id = file.create_id();
+            let result = file.validate(Some(&id));
+            assert!(result.is_err(), "Expected '{}' to be rejected", name);
+            let error = result.unwrap_err();
+            assert!(
+                error.contains("contains invalid character:"),
+                "Expected invalid character error for '{}', got: {}",
+                name,
+                error
+            );
+            assert!(
+                error.contains(expected_char),
+                "Expected error for '{}' to contain '{}', got: {}",
+                name,
+                expected_char,
+                error
+            );
         }
     }
 
