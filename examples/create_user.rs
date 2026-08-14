@@ -8,7 +8,7 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     anyhow::Result,
-    pubky::{Keypair, Pubky, PublicKey},
+    pubky::{ClientId, Keypair, Pubky, PublicKey},
     pubky_app_specs::{traits::HasPath, traits::Validatable, PubkyAppUser},
     serde_json::to_vec,
 };
@@ -45,10 +45,14 @@ async fn main() -> Result<()> {
     // This step will likely fail "as is" as homeservers are now requiring sign up tokens.
     // Here we provide `None` signup token.
     let signer = pubky.signer(keypair);
-    let session = signer
+    signer
         .signup(&homeserver, None)
         .await
         .expect("Failed to sign up the user on the homeserver.");
+    let session = signer
+        .signin(ClientId::new("pubky.app").expect("Invalid client id."))
+        .await
+        .expect("Failed to sign in after signup.");
 
     println!("User signed up successfully!");
 
@@ -86,10 +90,9 @@ async fn main() -> Result<()> {
     // Step 6: Retrieve the user profile from the homeserver
     println!("\nStep 6: Retrieving the user profile from the homeserver...");
 
-    let addr = format!("{}{}", user_id, path);
-    let response = pubky
-        .public_storage()
-        .get(&addr)
+    let response = session
+        .storage()
+        .get(&path)
         .await
         .expect("Failed to retrieve the user profile from the homeserver.");
 
