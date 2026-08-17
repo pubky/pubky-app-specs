@@ -27,11 +27,14 @@ These are listed once here; the per-model sections below only add what is specif
   magic bytes and then the path extension; extensionless JSON (everything in v0 except
   `profile.json`) serves as `application/octet-stream`/plaintext. The extension fixes serving
   and downloads for free, using machinery the server already has.
-- **A privacy tier.** Why: v0 stores mutes, bookmarks, saved feeds, and the client's
-  settings world-readable and on the public events feed although their verified reader set is
-  exactly one, the owner's own client. `/priv/` (owner-only, excluded from public events,
-  shipped on pubky-core main) is their correct home. The rule that decides placement is the
-  ACTUAL reader set, not aspiration.
+- **A privacy tier.** Why: v0 stores mutes, bookmarks and saved feeds world-readable and on the
+  public events feed although their verified reader set is exactly one, the owner's own client.
+  `/priv/` (owner-only, excluded from public events, shipped on pubky-core main) is their correct
+  home. The rule that decides VISIBILITY is the ACTUAL reader set, not aspiration.
+  A second rule decides OWNERSHIP, and it outranks the first: whose specification defines the
+  object. `settings.json` and `last_read` pass the reader-set test and still leave this spec
+  (sections 9 and 12), because preferences general to any application are not social data however
+  portable they are. Reader set tells you which root; the defining spec tells you which namespace.
 - **Type rename `PubkyApp*` to `PubkySocial*`, wire-invariant.** Why: the crate name and type
   prefixes teach every integrator that one app owns shared data. Serde field names and enum
   strings stay byte-identical: this break costs a compile, not a migration.
@@ -208,11 +211,18 @@ v0: `PubkyAppCollectionContent {name, description?, items[], cover_image?}` in `
 `kind == collection` (shipped shortly before v1).
 v1: same shape, three rule changes.
 
-- **`items` accept any reference-tier pubky URI (any resource, any app).** Why: v0's item check
-  hard-restricted items to `posts/` under `pubky.app`, contradicting the interop goal; a curated
-  list may legitimately include files, profiles, or another app's resources. Items stay
-  pubky-only (a web link belongs in a post) and stay plain strings (per-item annotation is
-  speculative, recorded as an accepted low-probability future break).
+- **`items` accept ANY scheme-shaped URI, on the universal tier.** Why: v0's item check
+  hard-restricted items to `posts/` under `pubky.app`, contradicting the interop goal. The first
+  draft relaxed that to any pubky URI while keeping items pubky-only, on the reasoning that "a web
+  link belongs in a post". That reasoning does not survive the obvious case: a collection of OSM
+  locations or Spotify tracks is a collection of those resources, not a collection of posts about
+  them. Tags, bookmarks and `post.embed` were already universal, so collections were the last
+  field narrowed for no reason that held.
+- **`items` become objects, `{uri, note?}`, not plain strings.** Why: the earlier draft kept plain
+  strings and recorded per-item annotation as an accepted future break. It is not worth accepting.
+  `attachments` makes exactly this move in v1 (section 2) because per-item metadata is additive
+  once the element is an object and a wire break once it is not. Doing it now costs one level of
+  nesting; doing it later costs an epoch.
 - **`cover_image` uses the shared image validator (cap 300).** Why: one rule for one kind of
   value, aligned with Article and `user.image`.
 - **Private collections come free.** A collection post under `/priv/` is a private
@@ -305,16 +315,29 @@ v1: `priv/social/v1/mutes/{muteePk}.json`. Shape unchanged.
   watcher no-ops mute events), and pubky-app already reads mutes by LISTing its own directory. The
   move costs nexus nothing and the client a path change.
 
-## 9. LastRead
+## 9. LastRead, and 12. Settings: both leave this spec
 
-v0: `pub/pubky.app/last_read` (no extension), `{timestamp}` in MILLISECONDS, world-readable.
-v1: `priv/social/v1/last_read.json`, microseconds.
+v0: `pub/pubky.app/last_read` (no extension, MILLISECONDS) and `pub/pubky.app/settings.json`, both
+WORLD-READABLE. `settings.json` was the only unspec'd homeserver artifact in the app, exposing
+`require_pin`, `sign_out_inactive` and the rest of the user's privacy posture to anyone, read by
+nobody but the owner's client.
+v1: both move to the writing app's namespace, `priv/app.pubky/v1/` for pubky-app, and leave this
+library entirely: no shared model, no validation, no builders.
 
-- **Moves to `/priv/`.** Why: pure reading-activity metadata, no cross-user reader.
-- **Milliseconds become microseconds.** Why: it was the lone unit outlier in a spec where every
-  other timestamp is microseconds; a unit change is only fixable at a break, so this is the
-  window. Migration multiplies by 1000, the only unit change in the shared transform table
-  (the pubky-app-owned settings import performs the same ms-to-µs conversion on its side).
+- **Why they leave rather than move to `priv/social/v1/`.** Device state (`require_pin`,
+  `sign_out_inactive`) is not social by any reading. `language` is the interesting case: it is
+  genuinely portable, so it passes the reader-set test, and it still leaves, because it is general
+  to ANY application rather than to social ones. A spec that defines social objects does not get to
+  own general preferences by virtue of having noticed them first. The earlier draft argued the
+  opposite, that portability alone justified adopting them; that argument is withdrawn.
+- **Consequence, accepted.** A second social client starts your unread count from scratch, and
+  neither file is validated by anything shared. That is the correct trade for state whose only
+  reader is one app, and it is precisely why they are leaving.
+- **Migration still carries them.** The v0 values are imported into the new location by the
+  pubky-app `/migrate` route, including the `last_read` millisecond-to-microsecond conversion.
+  That conversion is now app-owned; the shared transform table has no unit changes at all.
+- **Not a precedent for stripping the spec.** Mutes and bookmarks stay, because a different social
+  client reading them gets value: they shape what you see in a shared social graph.
 
 ## 10. File (media), the v0 File + Blob pair collapsed
 
@@ -382,26 +405,6 @@ v1: `{priv|pub}/social/v1/feeds/{id}.json`.
   re-publish if desired); pubky-app's v0 flow already works exactly this way, including the
   known orphan-file behavior, now documented instead of accidental.
 
-## 12. Settings (new model)
-
-v0: none in the spec. pubky-app hand-rolls `pub/pubky.app/settings.json`: WORLD-READABLE, exposing
-`require_pin`, `sign_out_inactive`, and the rest of the user's privacy posture to anyone, read
-by nobody but the owner's client (verified: the only unspec'd homeserver artifact in the app).
-v1: `PubkySocialSettings` at `priv/social/v1/settings.json`.
-
-- **It exists, and it is private.** Why: the strongest reader-set case in the audit; a security
-  posture file must not be public. Spec'd because its content (notification, content-filter,
-  and language preferences) is client-portable social state any client benefits from sharing.
-- **Every section is optional.** Why: a client writes only what it uses; other clients' unknown
-  sections and fields survive a rewrite via the preservation rule (cross-cutting above), not
-  merely deserialization tolerance, which alone would drop them on the next whole-file write.
-- **Whole-file last-write-wins on `updated_at` (now microseconds).** Why: it formalizes exactly
-  what pubky-app already does at bootstrap; anything cleverer (field-wise merge) is machinery
-  without a demonstrated need.
-- **The per-file `version` field is dropped.** Why: verified dead, pubky-app checks it but never
-  bumps it; schema evolution is governed by the path epoch and crate semver like every other
-  model, so a second, parallel versioning channel is a contradiction waiting to happen.
-
 ## 13. Parser and `Resource` (the read side of every model)
 
 v0: `url::Url`-based, hard-rejects any app path that is not `pubky.app`, silently accepts
@@ -449,9 +452,8 @@ v1: one closed grammar (normative form: Appendix A of `rfc-v1-social-specs.md`).
 | Collection | envelope, posts-only items | envelope, reference-tier items | interop items; private collections free |
 | Tag | `tags/{id}` | `tags/{id}.json` | engine-free pinned hash input |
 | Bookmark | `bookmarks/{HashId}` public, GET-per-file | `priv/.../bookmarks/{b64u\|~hash}.json` | private, reversible filename, overflow form |
+| LastRead, Settings | `pub/pubky.app/...`, public | `priv/app.pubky/v1/...` | leave this spec entirely |
 | Follow | `follows/{pk}` | `follows/{pk}.json` | unchanged shape |
 | Mute | `mutes/{pk}` public | `priv/.../mutes/{pk}.json` | private |
-| LastRead | `last_read` ms, public | `priv/.../last_read.json` µs | private; unit fixed |
 | File (media) | `files/{id}` meta + `blobs/{hash}` bytes | `{root}/.../files/{hash}.{ext}` | ONE object (collapse); canonical extension; dual-root |
 | Feed | `feeds/{HashId(serde_json)}` public | `{priv\|pub}/.../feeds/{id}.json` | private default + publish; pinned hash string; enums get Unknown |
-| Settings | (unspec'd, public) | `priv/.../settings.json` | spec'd, private, version field dropped |
