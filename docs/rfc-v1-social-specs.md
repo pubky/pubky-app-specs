@@ -17,25 +17,35 @@
 > - **tombstone**: the deletion marker readers act on; in v1, the absence of any public copy.
 > - **pinned / frozen**: committed as a closed-form rule or data asset; never tracks library or Unicode updates.
 
-The first stable and first breaking release of the shared social-data layer: shared means many
-applications read and write the same objects (posts, follows, tags), so the schema can belong to
-no single app. Renames the crate
-`pubky-app-specs` to `pubky-social-specs` (`1.0.0`) and moves all data from the single hard-coded
-app path `/pub/pubky.app/<res>` to a versioned, app-neutral epoch `/{pub|priv}/social/v1/<res>`
-(an epoch is the `vN` path segment; each epoch is a disjoint subtree holding one generation of
-data).
-**What this release promises, and what it does not.** This one coordinated break makes every
-now-or-never change that we are aware of at current time, those that cannot be added additively
-later. A permanent forward-compat contract then makes everything else additive **for the wire
-models**, so v1.x grows without breaking them.
+This is the first stable release of the shared social-data layer, and the first breaking one.
 
-The contract does not extend past the wire models. The path grammar and the id functions are
-outside it, and a future epoch (`social/v2`) stays reserved for exactly the changes no contract
-can make additive: re-pinning a text or id function (which re-ids existing data), changing a
-resource's root (its leading `pub` or `priv` segment) or per-kind content semantics, or breaking
-the path grammar. **This is not a claim that no epoch will ever follow v1**; it is a claim that
-v1.x will not need one, and that when one does come the path already carries the version signal
-that makes coexistence and migration work.
+Shared means many applications read and write the same objects: posts, follows, tags. So the
+schema cannot belong to any single app.
+
+Two things change. The crate `pubky-app-specs` becomes `pubky-social-specs` at `1.0.0`. All data
+moves from the hard-coded app path `/pub/pubky.app/<res>` to a versioned, app-neutral epoch at
+`/{pub|priv}/social/v1/<res>`.
+
+An epoch is the `vN` path segment. Each epoch is a disjoint subtree holding one generation of
+data, so two epochs can coexist without either one knowing about the other.
+
+**What this release promises, and what it does not.** This one coordinated break makes every
+now-or-never change we are aware of at current time, meaning the ones that cannot be added
+additively later. A permanent forward-compat contract then makes everything else additive **for
+the wire models**, so v1.x grows without breaking them.
+
+The contract stops at the wire models. The path grammar and the id functions sit outside it.
+
+A future epoch, `social/v2`, stays reserved for the changes no contract can make additive:
+
+- re-pinning a text or id function, which re-ids existing data
+- changing a resource's root, its leading `pub` or `priv` segment
+- changing per-kind content semantics
+- breaking the path grammar
+
+**This is not a claim that no epoch will ever follow v1.** It is a claim that v1.x will not need
+one, and that when one does come, the path already carries the version signal that makes
+coexistence and migration work.
 
 # Part A: Why break now
 
@@ -50,60 +60,89 @@ that makes coexistence and migration work.
 
 ## B0. Cross-cutting (applies to every model)
 
-- **Namespace + epoch: `pub/pubky.app/<res>` becomes `{pub|priv}/social/v1/<res>`.** App-neutral
-  (`pubky.app` wrongly signals one app owns shared data), versioned (the path is the only channel
-  that survives events + LIST + anonymous GET), and a bare word with no dot (a dotted directory
-  name like `pubky.app/` reads as an application bundle on macOS when a tree is exported to disk).
-  **Consequence, stated here rather than only under migration: deleting an object means deleting
-  it in every epoch that holds a copy.** Epochs are disjoint subtrees, so a surviving copy in an
-  older one is still publicly readable and a from-scratch reindex would resurrect it. For the
-  v0-to-v1 transition this is bounded, since the cleanup pass (Part C) removes v0 some weeks after
-  migration and leaves a single epoch again. It is not bounded in general: any future epoch
+- **Namespace and epoch: `pub/pubky.app/<res>` becomes `{pub|priv}/social/v1/<res>`.** Three
+  properties, one per part of the new path:
+
+  - `social` is app-neutral. `pubky.app` signals that one app owns shared data, which is false.
+  - `v1` is a version. The path is the only channel that survives the events feed, LIST and
+    anonymous GET, so a version anywhere else is invisible to most readers.
+  - `social` is a bare word with no dot. macOS treats a directory named `pubky.app/` as an
+    application bundle when a tree is exported to disk.
+
+  **This has a consequence for deletion, stated here rather than only under migration: deleting an
+  object means deleting it in every epoch that holds a copy.** Epochs are disjoint subtrees. A
+  surviving copy in an older epoch is still publicly readable, and a from-scratch reindex would
+  resurrect it.
+
+  For the v0-to-v1 transition the problem is bounded. The cleanup pass (Part C) removes v0 some
+  weeks after migration, leaving one epoch again. It is not bounded in general: any future epoch
   reintroduces it for as long as two epochs coexist, and this release does not solve that.
-- **Folder ownership (the composition law).** The specification that defines an object
-  determines its storage namespace, never the application that writes it. An app writing social
-  objects writes them under `social/vN`; its own objects live under its own namespace. Apps
-  therefore compose spec packages, each bringing its capability scopes and path builders (request
-  `/pub/social/v1/:rw` alongside your app scopes; use each package's builders for its paths).
+- **Folder ownership, the composition law.** The specification that defines an object determines
+  its storage namespace. The application that writes it does not.
+
+  So an app writing social objects writes them under `social/vN`, and its own objects live under
+  its own namespace. Apps compose spec packages, and each package brings its own capability scopes
+  and path builders: request `/pub/social/v1/:rw` alongside your app scopes, and use each
+  package's builders for its paths.
+
   **Apps SHOULD request the narrowest scope they use, not the whole namespace.** Capabilities are
-  path prefixes (a trailing-slash scope covers descendants, a slash-less one is exact-match), so an
-  app that only tags requests `/pub/social/v1/tags/:rw` and a consent screen can then say which
-  data is at stake. This does not bound what a granted app may do inside its scope: any write
-  capability over a directory is total there, which is unchanged from v0 and is a homeserver-level
-  concern (`pubky/pubky-homeserver#544`), not something this spec can enforce.
-  Consequence: tags are social objects, so the one canonical v1 write location is
-  `pub/social/v1/tags/`; indexers reading `tags/` directories inside other app namespaces is a
-  legacy read rule, not a v1 write model.
-- **App namespaces SHOULD carry an epoch too** (`pub/<app>/v1/...`). Nothing can be mandated for
-  foreign namespaces (no enforcement point exists), but the recommendation is free and buys an
-  app the same migration mechanics this spec built for itself: old and new data coexist in
-  disjoint subtrees, and the path is the only version signal that survives the events feed,
-  LIST, and anonymous GET. The parser already anticipates this: `Foreign` classification surfaces the segment after the
-  namespace verbatim. For an app following the convention, that segment IS its version, so an
+  path prefixes. A scope with a trailing slash covers everything below it; a scope without one is
+  exact-match. An app that only tags therefore requests `/pub/social/v1/tags/:rw`, and a consent
+  screen can say which data is at stake.
+
+  That narrows what an app can reach, not what it can do once inside. Any write capability over a
+  directory is total within it. This is unchanged from v0 and is a homeserver concern
+  (`pubky/pubky-homeserver#544`) rather than something this spec can enforce.
+
+  Tags follow from the law directly. A tag is a social object, so the one canonical v1 write
+  location is `pub/social/v1/tags/`. An indexer reading `tags/` directories inside other app
+  namespaces is applying a legacy read rule, not a v1 write model.
+- **App namespaces SHOULD carry an epoch too**, as `pub/<app>/v1/...`. Nothing here can be
+  mandated for a foreign namespace, because no enforcement point exists. The recommendation is
+  free, and it buys an app the same migration mechanics this spec built for itself: old and new
+  data coexist in disjoint subtrees, and the version survives the events feed, LIST and anonymous
+  GET.
+
+  The parser already anticipates it. A `Foreign` classification surfaces the segment after the
+  namespace verbatim, so for an app following the convention that segment is its version, and an
   indexer can version-route conforming app data with a single match.
-- **Namespace governance.** `social/vN` is owned by this repo: a resource type exists exactly
-  when the released crate parses it, and additions land as ordinary crate-minor PRs here (parser
-  arm + model + data assets + vectors in one change). Reserved: epoch segments `v[0-9]+`, the `_`
-  filename prefix, every current resource segment, and the `ext` member name; unknown segments
-  under `social/vN` parse as a handled `Resource::Unknown` (a valid classification readers
-  skip, never an error; distinct from the `Unknown` enum variant of the forward-compat contract
-  below), so additions never break deployed readers. A
-  new epoch (`social/v2`) is reserved for changes impossible additively (re-pinned text/id
-  functions, changed root or content semantics, grammar breaks). App namespaces are self-assigned
-  (reversed-domain form recommended: `app.locks`, `app.eventky`, not `locks.app`, for the same
-  reason the social segment is a bare word: a directory ending in `.app` is treated as an
-  application bundle by macOS when a tree is exported to disk); the parser classifies them
-  foreign, never invalid.
+- **Namespace governance.** This repo owns `social/vN`. A resource type exists exactly when the
+  released crate parses it, and additions land as ordinary crate-minor PRs here, with the parser
+  arm, the model, the data assets and the vectors in one change.
+
+  These are reserved:
+
+  - epoch segments matching `v[0-9]+`
+  - the `_` filename prefix
+  - every current resource segment
+  - the `ext` member name
+
+  An unknown segment under `social/vN` parses as `Resource::Unknown`. That is a valid
+  classification a reader skips, not an error, so additions never break deployed readers. It is a
+  different thing from the `Unknown` enum variant in the forward-compat contract below, which is
+  about values inside an object rather than segments in a path.
+
+  A new epoch (`social/v2`) is reserved for changes that cannot be made additively: re-pinned text
+  or id functions, a changed root, changed content semantics, or a grammar break.
+
+  App namespaces are self-assigned and the parser classifies them foreign, never invalid. Use the
+  reversed-domain form, `app.locks` and `app.eventky` rather than `locks.app`, for the same reason
+  the social segment is a bare word: macOS treats a directory ending in `.app` as an application
+  bundle when a tree is exported to disk.
 - **`.json` on every JSON leaf.** The homeserver derives the served type from magic bytes then the
   path extension; extensionless JSON serves as octet-stream/plaintext.
-- **A privacy tier `/priv/` (owner-only, excluded from `/events/`).** For state whose only
-  reader is the owner's own client; placement follows the ACTUAL reader set, not aspiration.
-  The leading path segment is the ROOT (`pub` or `priv`); the parser reports it as the
-  resource's visibility. The content family (posts, files, feeds) is dual-root: an object may
-  live under either root, and publish is a deterministic root migration. One rule here is
-  now-or-never, THE ROOT RULE: a public-rooted object must never reference a priv-root pubky
-  URI; private objects may reference both roots. (A public-to-private reference dangles for
-  every reader but the owner and leaks the path's existence through the 401-vs-404 oracle.)
+- **A privacy tier at `/priv/`**, owner-only and excluded from `/events/`. It holds state whose
+  only reader is the owner's own client. Placement follows the reader set a resource actually has,
+  not the one we would like it to have.
+
+  The leading path segment is the root, either `pub` or `priv`, and the parser reports it as the
+  resource's visibility. Posts, files and feeds are dual-root: each may live under either root,
+  and publishing is a deterministic move between them.
+
+  **The root rule is now-or-never: a public-rooted object must never reference a priv-root pubky
+  URI.** Private objects may reference both roots. A public-to-private reference dangles for every
+  reader except the owner, and it leaks the private path's existence through the difference
+  between a 401 and a 404.
   **Why the root sits inside a reference at all, since it makes references root-specific:** a
   pubky reference is also a fetch address, and the root is the segment that says who may read it.
   A root-less reference would need resolving against both roots, which costs the reader a probe
@@ -112,17 +151,25 @@ that makes coexistence and migration work.
   files, feeds), not only for feeds: the object is written under the other root and the original
   stays. The only reference that must change is a same-owner media URI inside a published object,
   where publish rewrites the `priv` prefix to `pub` (B2).
-  **Building on today's `/priv/` is deliberate, and a future rework of it is expected.** Private
-  data is closed-world: nothing public references it and the indexer never reads it, so moving it
-  to a different private mechanism later is a sweep over the owner's own files, not a
-  network-wide migration. That is what makes the private tier cheap to place now and expensive to
-  defer, and it is not true of anything public, which is where this release spends its care. If
-  the eventual mechanism is not client-side encrypted the homeserver could perform that move
-  itself; if it is, the same client-side migration machinery this release builds covers it.
-- **Scheme tiers (reference field values), distinct from the path grammar.** Appendix A governs PATHS
-  (where objects live); reference FIELD VALUES (parent, embed, targets, images) are validated by
-  per-field scheme tiers: pubky-only, pubky+web, or the universal tier (any scheme-shaped URI
-  via a pinned opaque gate: lowercased scheme, rest verbatim). Per-field tiers (each model section gives the rationale):
+  **Building on today's `/priv/` is deliberate, and a rework of it is expected.**
+
+  Private data is closed-world. Nothing public references it, and the indexer never reads it. So
+  moving it to a different private mechanism later is a sweep over the owner's own files rather
+  than a network-wide migration.
+
+  That asymmetry is why the private tier is cheap to place now and expensive to defer. It does not
+  hold for anything public, which is where this release spends its care.
+
+  If the eventual mechanism is not client-side encrypted, the homeserver could perform the move
+  itself. If it is, the client-side migration machinery this release builds already covers it.
+- **Scheme tiers, which govern reference values rather than paths.** Appendix A governs where
+  objects live. This governs what a reference field may contain: `parent`, `embed`, targets,
+  images.
+
+  Each field is assigned one of three tiers: pubky-only, pubky and web, or universal. The
+  universal tier accepts any scheme-shaped URI through a pinned opaque gate that lowercases the
+  scheme and keeps the rest verbatim. Appendix A5 is the normative statement of what each gate
+  accepts; each model section gives the rationale for its own field.
 
   | Field | Tier |
   |---|---|
@@ -135,49 +182,73 @@ that makes coexistence and migration work.
   | `attachments[].uri` | pubky+web |
   | `user.image`, `article.cover_image`, `collection.cover_image` | pubky+web |
   | `user.links[].url` | web-only |
-- **Forward-compat contract (permanent).** All wire enums (an enum as stored in JSON; "wire"
-  throughout means the stored byte form) are plain string enums (unit
-  variants, `rename_all` lowercase/snake_case), so `#[serde(other)] Unknown` plus
-  `#[non_exhaustive]` is well-defined; no model uses `deny_unknown_fields`; every future field is
-  optional + defaulted + skip-if-none. Degradation semantics are per-position: an `Unknown` in an
-  object's primary enum (`post.kind`) fails validation and readers skip the object; an `Unknown`
-  in a secondary enum (`feed.content`) degrades to "no constraint"; deserialization never crashes.
-  Unknown members are tolerated on read AND preserved on rewrite: every wire model carries an
-  opaque catch-all map (serde flatten: it absorbs every member the model does not declare), so a
-  client rewriting an object round-trips members it does not
-  understand instead of destroying another client's data (tolerating without preserving would let
-  any older client drop every field added after it shipped). Conformance vectors (committed input and expected-output files every implementation must
-  reproduce) cover both the unknown-value and the preservation behavior. Preservation fixes exactly one failure mode: a client deserializing into its own older types
-  and writing back, silently destroying fields it never modeled. It does not fix concurrency:
-  concurrent writers still clobber whole files under last-write-wins where that is the
-  documented rule. Two companion rules keep extensibility bounded. (1) TOTAL object size is
-  capped: 512 KiB for posts, 64 KiB for every other JSON resource, measured on stored bytes,
-  checked before parsing on read and after building on write. Unknown members made per-field
-  validation stop bounding size, and a total cap cannot be added later without a break, so it
-  ships now. (2) A conforming rewrite fetches the current object from the HOMESERVER, never
-  from an indexer view (views can be stale or partial; Part C2 rule 5). The caps cover JSON resources only
-  (media bytes keep their own media-size bound), and the wedge case is pinned: if a rewrite
-  cannot fit the cap while preserving unknown members, the writer fails the write and surfaces
-  it, never silently drops members; the user may explicitly discard extensions.
-  The indexer side:   unknown members are carried verbatim into object views, so any client can read an extension
-  through the shared index before the indexer understands it, but they are never validated,
-  queried, or indexed; queryability requires an adopted projection (the indexer explicitly promoting the member into
-  its queryable schema). The extension ladder:
-  readable (carried) -> queryable (projection) -> validated (spec field). Deliberate extensions
-  SHOULD nest under the reserved `ext` member (`"ext": {"badge": {...}}`), one greppable home
-  whose meaning is pinned once: everything under `ext` is third-party data the base spec never
-  validates; treat it as hostile input (escape before rendering, validate against the
-  extension's own rules before interpreting; Part C2 rules 8 and 9).
-- **Canonical-encoding id rule.** An id is valid if and only if re-encoding its decoded bytes reproduces the
-  input (closed-form final-char check). v0 accepted dozens of alias spellings per id (lowercase,
-  `O`->`0`, dangling bits), each a distinct homeserver key; that leniency is removed.
-- **Engine-free validation.** `url::Url` (normalizes junk into acceptance), the `mime` crate, and
-  full-Unicode case/trim are replaced by pinned rules (a strict raw-string canonicalizer, a
-  frozen whitespace table (a committed code-point list that never tracks Unicode updates),
-  ASCII-only label folding, code-point lengths) that a Rust and a
-  hand-written JS implementation reproduce byte-for-byte.
-- **No silent sanitize-rewrites.** v0 rewrote `[DELETED]` names to "anonymous" and
-  truncated-then-blanked over-long inputs; v1 makes invalid input a validation error.
+- **Forward-compat contract, permanent.** Three mechanisms let v1.x grow without breaking a
+  deployed reader, and two rules keep that growth bounded.
+
+  **Unknown enum values never crash a reader.** Every wire enum is a plain string enum with unit
+  variants and `rename_all`, so `#[serde(other)] Unknown` plus `#[non_exhaustive]` is well
+  defined. No model uses `deny_unknown_fields`, and every future field is optional, defaulted and
+  skip-if-none. What happens on an unknown value depends on where it sits:
+
+  - in an object's primary enum, such as `post.kind`, validation fails and the reader skips that
+    object
+  - in a secondary enum, such as `feed.content`, it degrades to "no constraint"
+
+  Deserialization itself never fails.
+
+  **Unknown members are preserved on rewrite, not merely tolerated on read.** Every wire model
+  carries an opaque catch-all map, a serde flatten that absorbs any member the model does not
+  declare. A client rewriting an object round-trips members it does not understand instead of
+  destroying another client's data. Tolerating without preserving would let any older client drop
+  every field added after it shipped.
+
+  Preservation fixes exactly one failure: a client deserializing into its own older types and
+  writing back, silently destroying fields it never modeled. It does not fix concurrency.
+  Concurrent writers still clobber whole files under last-write-wins wherever that is the
+  documented rule.
+
+  **Conformance vectors cover both behaviours.** These are committed input and expected-output
+  files that every implementation must reproduce.
+
+  Two rules bound the growth. The first: **total object size is capped**, at 512 KiB for posts and
+  64 KiB for every other JSON resource, measured on stored bytes, checked before parsing on read
+  and after building on write. Unknown members stopped per-field validation from bounding size,
+  and a total cap cannot be added later without a break, so it ships now. The caps cover JSON
+  resources only; media bytes keep their own size bound.
+
+  The second: **a conforming rewrite fetches the current object from the homeserver**, never from
+  an indexer view, because a view can be stale or partial (Part C2 rule 5).
+
+  One wedge case is pinned. If a rewrite cannot fit the cap while preserving unknown members, the
+  writer fails the write and surfaces it. It never silently drops members. The user may then
+  explicitly discard extensions.
+
+  **On the indexer side**, unknown members are carried verbatim into object views, so any client
+  can read an extension through the shared index before the indexer understands it. They are
+  never validated, queried or indexed. Queryability requires an adopted projection, meaning the
+  indexer explicitly promoting the member into its queryable schema. That gives an extension three
+  stages: readable when carried, queryable when projected, validated when it becomes a spec field.
+
+  **Deliberate extensions SHOULD nest under the reserved `ext` member**, as `"ext": {"badge":
+  {...}}`. It is one greppable home whose meaning is pinned once: everything under `ext` is
+  third-party data the base spec never validates. Treat it as hostile input, so escape before
+  rendering and validate against the extension's own rules before interpreting (Part C2 rules 8
+  and 9).
+
+- **Canonical-encoding id rule.** An id is valid if and only if re-encoding its decoded bytes
+  reproduces the input exactly. The check is closed-form, on the final character.
+
+  v0 accepted dozens of alias spellings for one id: lowercase, `O` for `0`, dangling bits. Each
+  alias was a distinct key on the homeserver. That leniency is removed.
+- **Engine-free validation.** Three dependencies leave the normative surface: `url::Url`, which
+  normalizes junk into acceptance; the `mime` crate; and full-Unicode case and trim operations.
+
+  Pinned rules replace them: a strict raw-string canonicalizer, a frozen whitespace table,
+  ASCII-only label folding, and code-point lengths. A frozen table is a committed list of code
+  points that never tracks Unicode updates. The Rust crate and the hand-written JS package
+  reproduce all of it byte-for-byte.
+- **No silent sanitize-rewrites.** v0 rewrote `[DELETED]` names to "anonymous", and it truncated
+  over-long input and then blanked it. In v1 invalid input is a validation error.
 
 A migrated user's tree at a glance (`<pk>` a host key, `TS` a TimestampId, `H26` a HashId):
 
@@ -382,75 +453,110 @@ functions.
 
 # Part C: Migration
 
-- **Client-side, opt-in, resumable from the homeserver tree alone, permanent multi-epoch.** A
-  dormant user may migrate years later in one pass; the indexer dual-reads every epoch forever
-  (the permanent v0 parser stays, since the v1 parser classifies `pubky.app` as foreign).
-  **"Forever" is cheaper than it reads, on two counts.** The v0 parser is FROZEN, not maintained:
-  it ships with committed conformance vectors and never changes again, so the recurring cost is
-  running its tests rather than tracking anything. And the v0 population drains rather than
-  accumulates, because the cleanup pass removes v0 a few weeks after each user migrates. What
-  remains years out is dormant accounts that have not been opened since, which is precisely the
-  population opt-in migration exists to serve and precisely the one a cutoff date would strand.
-  A staged upgrade tool ("your data is too old, run this first") remains available as a later
-  option if the maintenance ever proves real; it is additive and needs no decision now.
-- **STRICTLY non-destructive.** Migration never deletes any legacy-epoch data. Privacy lost before
-  v1 is already lost; future activity is private. Private-tier legacy public copies are left inert
-  (the indexer stops surfacing them). Copying rather than moving buys three things: clients still
-  on v0 keep working, a bad migration is recoverable because the source survives, and a good one
-  can be verified against its source before anything is discarded.
-- **It therefore roughly doubles a user's stored social data**, against a homeserver that enforces
-  a per-user quota. Raising the quota is a prerequisite for the migrator going live, not a
-  follow-up (release gate `QUOTA`).
-- **Legacy cleanup is a separate, later, user-confirmed pass**, never part of migration itself.
-  It ships once the migrator has run clean on real data, asks the user before removing anything,
-  and deletes a legacy object only after verifying its v1 counterpart exists and parses. The delay
-  is the point: it puts distance between "did the migration work" and "throw away the original",
-  and it gives anything still reading v0 paths a window to move.
-  **This applies to v0 only, and it is one-time.** v0 was never published as a stable target, so
-  removing it breaks no promise. From v1 onward the rule is the opposite: migration to a future
-  epoch never deletes the epoch it came from, because that epoch was promised stable.
-- **Deterministic and total** over real v0 data: each record sources from its highest present
-  epoch, transforms compose in memory writing only the latest, ids/hashes are re-derived not
-  minted.
-- **Resume compares source against destination**, never merely the destination's existence.
-  Existence proves bytes landed, not that they are correct or current, so an existence check
-  cannot distinguish a good file from one a buggy run wrote, and skips it forever. Comparison
-  also picks up a source edited after it was migrated, which an existence check silently drops.
-  Supporting machinery: a client-private `_migrated` marker records the transform revision, so a
-  shipped migrator fix triggers a re-run; a malformed object is skipped and reported rather than
-  blocking the tree; and the homeserver's quota error is surfaced as a typed failure.
-- **Known failure mode: post-migration writes from a legacy client are not visible.** Once a
-  record exists in both epochs the indexer serves the highest one it understands, so a v0 client
-  editing an already-migrated record writes successfully to a path that still exists and no reader
-  ever sees the change. Nothing errors. Comparison-based resume recovers it on the next run, which
-  narrows the window without closing it; the legacy cleanup pass closes it for good, because a
-  removed epoch has nothing left to write to.
-- **Deletion spans epochs, and that rule is NOT migration-scoped** (Part C2, rules 11 to 13): a
-  migrated post lives at BOTH `pub/pubky.app/posts/{id}` and `pub/social/v1/posts/{id}/...`, so
-  deleting a public object removes every copy in every epoch and both roots, or a from-scratch
-  reindex resurrects it from the missed legacy copy. Absence is the tombstone: on a dumb blob
-  store the owner's files are the only durable state, so restoring an old backup republishes its
-  contents, accepted by design. Durable per-object tombstone files were considered and rejected
-  (the substrate cannot enforce them against the owner's own writes, and public tombstones would
-  leak deletion metadata forever).
-- The indexer contract: dedup on `(author, resource_type, stable_id)`, tag id-sets (each tag edge keeps the set of ids asserting it across epochs, so un-tagging
-  removes all of them), intrinsic-time ranking (decode the post id), tombstone only when no publicly visible
-  copy survives.
+Migration is client-side, opt-in, and resumable from the homeserver tree alone. A dormant user may
+migrate years later in one pass, and the indexer reads every epoch for as long as any exist. The v0
+parser therefore stays permanently, because the v1 parser classifies `pubky.app` as foreign.
+
+**"Permanently" is cheaper than it sounds, on two counts.** The v0 parser is frozen rather than
+maintained: it ships with committed conformance vectors and never changes again, so the recurring
+cost is running its tests. And the v0 population drains rather than accumulates, because the
+cleanup pass below removes v0 a few weeks after each user migrates.
+
+What remains years out is dormant accounts nobody has opened since. That is precisely the
+population opt-in migration exists to serve, and precisely the one a cutoff date would strand. A
+staged upgrade tool, telling a user their data is too old and to run something first, stays
+available as a later option if the maintenance ever proves real. It is additive and needs no
+decision now.
+
+## Migration itself never deletes
+
+Migration copies. It never removes legacy-epoch data, and privacy lost before v1 is already lost,
+so the copies it leaves behind change nothing about what was already public. Legacy public copies
+of now-private types are left inert, and the indexer stops surfacing them.
+
+Copying rather than moving buys three things:
+
+- clients still on v0 keep working
+- a bad migration is recoverable, because the source survives
+- a good one can be verified against its source before anything is discarded
+
+**It therefore roughly doubles a user's stored social data**, against a homeserver that enforces a
+per-user quota. Raising that quota is a prerequisite for the migrator going live rather than a
+follow-up. It is release gate `QUOTA`.
+
+## Legacy cleanup is a separate, later pass
+
+Cleanup is never part of migration. It ships once the migrator has run clean on real data, it asks
+the user before removing anything, and it deletes a legacy object only after verifying that the v1
+counterpart exists and parses.
+
+The delay is the point. It puts distance between "did the migration work" and "throw away the
+original", and it gives anything still reading v0 paths a window to move.
+
+**This applies to v0 only, and it happens once.** v0 was never published as a stable target, so
+removing it breaks no promise. From v1 onward the rule is the opposite: migrating to a future epoch
+never deletes the epoch it came from, because that epoch was promised stable.
+
+## Determinism and resume
+
+Migration is deterministic and total over real v0 data. Each record sources from its highest
+present epoch, transforms compose in memory and write only the latest result, and ids and hashes
+are re-derived rather than minted.
+
+**Resume compares source against destination, never merely the destination's existence.** Existence
+proves that bytes landed. It does not prove they are correct, or current. So an existence check
+cannot tell a good file from one a buggy run wrote, and skips it forever. Comparison also picks up
+a source edited after it was migrated, which an existence check drops silently.
+
+Three supporting mechanisms:
+
+- a client-private `_migrated` marker records the transform revision, so a shipped migrator fix
+  triggers a re-run
+- a malformed object is skipped and reported rather than blocking the tree
+- the homeserver's quota error surfaces as a typed failure
+
+## Known failure mode: writes from a legacy client go unseen
+
+Once a record exists in both epochs, the indexer serves the highest one it understands. So a v0
+client editing an already-migrated record writes successfully, to a path that still exists, and no
+reader ever sees the change. Nothing errors.
+
+Comparison-based resume recovers it on the next run, which narrows the window without closing it.
+The cleanup pass closes it for good, because a removed epoch has nothing left to write to.
+
+## Deletion spans epochs, and that rule is not migration-scoped
+
+See Part C2, rules 11 to 13. A migrated post lives at both `pub/pubky.app/posts/{id}` and
+`pub/social/v1/posts/{id}/...`, so deleting a public object removes every copy, in every epoch and
+both roots. Leave one behind and a from-scratch reindex resurrects it.
+
+Absence is the tombstone. On a dumb blob store the owner's files are the only durable state, so
+restoring an old backup republishes its contents. That is accepted by design.
+
+Durable per-object tombstone files were considered and rejected. The substrate cannot enforce them
+against the owner's own writes, and public tombstones would leak deletion metadata forever.
+
+## The indexer contract
+
+- dedup on `(author, resource_type, stable_id)`
+- tag id-sets: each tag edge keeps the set of ids asserting it across epochs, so un-tagging removes
+  all of them
+- intrinsic-time ranking, by decoding the post id
+- tombstone only when no publicly visible copy survives
 
 # Part C2: Client conformance
 
-Everything above defines what a VALID OBJECT is, and almost all of it is enforced by the shipped
-artifacts: the crate and the JS package carry the types, the validators, the builders and the size
-checks, so a conforming implementation cannot produce an invalid object even by accident. Of the
-normative statements in this document, roughly 106 are of that kind.
+Everything above defines what a valid object is, and almost all of it is enforced by the shipped
+artifacts. The crate and the JS package carry the types, the validators, the builders and the size
+checks. A conforming implementation cannot produce an invalid object even by accident.
 
-This section collects the exception: rules a pure-function library CANNOT enforce, because they
-need I/O, ordering, or state the library never sees. They bind clients, they are normative, and
-they are gathered here rather than scattered so an implementer has one checklist. The model
-sections above reference this section rather than restating it.
+This section collects the exception: rules a pure-function library cannot enforce, because they
+need I/O, ordering, or state the library never sees. They bind clients and they are normative.
+They are gathered here rather than scattered so an implementer has one checklist, and the model
+sections above reference this section instead of restating it.
 
-A separate class, rules addressed to the shared indexer, is marked inline in Part B and Part C as
-"the indexer contract"; those bind nexus, not clients.
+Rules addressed to the shared indexer are a separate class, marked inline in Part B and Part C as
+the indexer contract. Those bind nexus, not clients.
 
 ## Read behaviour
 
@@ -466,12 +572,12 @@ A separate class, rules addressed to the shared indexer, is marked inline in Par
 
 ## Write behaviour, read-modify-write
 
-5. **Read the current object from the HOMESERVER before rewriting it, never from an indexer
-   view.** Indexer views can be stale or partial, and writing back from one destroys whatever the
+5. **Read the current object from the homeserver before rewriting it, never from an indexer
+   view.** An indexer view can be stale or partial. Writing back from one destroys whatever the
    view omitted.
 6. **GET a tag address before PUTting it.** Tag addresses converge by construction, so a blind PUT
    destroys another app's enrichment of the same statement. Preservation protects
-   read-modify-write; it cannot protect write-without-read.
+   read-modify-write. It cannot protect a write that never read.
 7. **Fail loudly when the size cap and preservation conflict.** If a rewrite cannot fit the cap
    while preserving unknown members, the writer FAILS the write and surfaces it. It never
    silently drops members. The user MAY then explicitly discard extensions.
@@ -489,13 +595,14 @@ A separate class, rules addressed to the shared indexer, is marked inline in Par
     validation and the ordered plan; the client performs the writes (B11).
 11. **Deletion is user-initiated only.** Nothing in this spec deletes an object on a user's behalf.
 12. **Deleting a public object removes every copy, in every epoch and both roots.** A migrated post
-    exists at both its legacy and its `social/v1` path; leaving either one behind means a
-    from-scratch reindex resurrects it. This is a PERMANENT client rule, not a migration-only one:
-    it applies for as long as two epochs coexist.
+    exists at both its legacy path and its `social/v1` path. Leave either behind and a
+    from-scratch reindex resurrects it. This is a permanent client rule rather than a
+    migration-only one, and it applies for as long as two epochs coexist.
 13. **Private-tier deletes touch only the `/priv/` file.**
 14. **Un-migrated users must keep reading their own legacy tree.** A client that has adopted v1
     reads the union of v1 and legacy paths for its own user, so opting out of migration costs the
-    user nothing. Stated here because it is normative client behaviour, not a rollout task.
+    user nothing. It is stated here because it is normative client behaviour rather than a
+    rollout task.
 
 ## Presentation
 
@@ -509,9 +616,8 @@ A separate class, rules addressed to the shared indexer, is marked inline in Par
 
 ## What is NOT in this section
 
-Migration conformance is Part C, and the reviewer's carve-out for it stands: those rules bind a
-migrating client for the duration of a migration. Rule 12 is the one that looks like migration and
-is not, which is why it moved here.
+Migration conformance is Part C. Those rules bind a migrating client for the duration of a
+migration. Rule 12 is the one that looks like migration and is not, which is why it moved here.
 
 # Part D: Rollout and subtasks
 
