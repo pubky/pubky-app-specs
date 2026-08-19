@@ -47,6 +47,27 @@ A future epoch, `social/v2`, stays reserved for the changes no contract can make
 one, and that when one does come, the path already carries the version signal that makes
 coexistence and migration work.
 
+**What a third-party reader can rely on.** The promise above is what an outside integrator
+integrates against, so it is worth stating from their side. It is the same promise for every
+resource; no resource gets a second, stabler address than the one the epoch already gives it.
+
+- A path under `social/v1/` keeps its shape for the life of v1. The shape may grow optional
+  fields; it never removes one, retypes one, or changes what one means.
+- A reader must ignore fields it does not know. That is the reader's half of the contract, and a
+  reader that rejects unknown fields breaks on the next additive release rather than on ours.
+- A shape change needs a different path. `social/v2` is a disjoint subtree, so it never overwrites
+  `social/v1`, and a reader pinned to the v1 path never receives a shape it did not agree to.
+
+**The limit, stated plainly.** When a later epoch exists, the v1 copy survives, because migrating
+away from a promised-stable epoch never deletes it. It stops being current, though, from the
+moment the owner's client starts writing v2. A reader that needs current data resolves the highest
+epoch it understands and falls back, which is the rule the indexer follows (Part C). A reader that
+only ever wants a shape it already parses can stay pinned to v1 and accept that it may be reading
+a snapshot.
+
+None of this covers `pub/pubky.app/`. v0 was never published as a stable target, and the cleanup
+pass removes it once the owner agrees (Part C).
+
 # Part A: Why break now
 
 - `pub/pubky.app/` hard-codes one app's domain as the home of shared data and the parser rejects
@@ -95,8 +116,15 @@ coexistence and migration work.
   (`pubky/pubky-homeserver#544`) rather than something this spec can enforce.
 
   Tags follow from the law directly. A tag is a social object, so the one canonical v1 write
-  location is `pub/social/v1/tags/`. An indexer reading `tags/` directories inside other app
-  namespaces is applying a legacy read rule, not a v1 write model.
+  location is `pub/social/v1/tags/`. **Write a tag there and any conforming indexer counts it.**
+  That guarantee is what the write location buys an app author, and it is the reason the location
+  is fixed rather than advisory.
+
+  What an indexer additionally chooses to read is its own policy. This spec neither requires nor
+  forbids an indexer ingesting social objects it finds in other namespaces; that decision belongs
+  to the indexer, and the same applies to any other resource type. What the spec does not do is
+  promise on the indexer's behalf: an app writing social objects outside `social/vN` has no
+  guarantee that anyone indexes them.
 - **App namespaces SHOULD carry an epoch too**, as `pub/<app>/v1/...`. Nothing here can be
   mandated for a foreign namespace, because no enforcement point exists. The recommendation is
   free, and it buys an app the same migration mechanics this spec built for itself: old and new
@@ -278,6 +306,8 @@ v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
   transitionally keep emitting the old literal at its view layer for old clients; storage and
   query logic never key on it).
 - Fields and caps otherwise unchanged; profile stays public (identity must be readable).
+- Third-party readers: profile is the resource outside apps integrate against most, and it carries
+  the ordinary v1 stability promise, no more and no less (B0).
 
 ## B2. Post
 v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
@@ -314,9 +344,12 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   (closed kind set, wire bytes unchanged). App specs specialize it with their own kinds in their
   own namespaces (a Mapky review, an Eventky event), where social readers classify them as
   foreign data. The envelope fixes reference semantics uniformly (a reply edge means the same
-  thing everywhere); the specialization owns its kind vocabulary and content validation. This
-  makes the incubation path usable at launch: a schema proves itself in an app namespace before
-  being proposed for `social/vN`.
+  thing everywhere); the specialization owns its kind vocabulary and content validation.
+
+  The envelope is a library convenience, not a governance mechanism. This spec defines no process
+  for admitting a foreign kind into `social/vN`, and it does not need one: additions here are
+  ordinary crate-minor PRs, and a kind this spec has not defined simply lives in its own namespace
+  where readers classify it as foreign and skip it.
 - The `[DELETED]` content sentinel dies with no replacement (same flag rule as B1); absence is
   the tombstone (the deletion marker readers act on), synthesized by the indexer from real
   deletion state, never from content strings.
