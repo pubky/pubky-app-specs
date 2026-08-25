@@ -188,8 +188,9 @@ pass removes it once the owner agrees (Part C).
   That asymmetry is why the private tier is cheap to place now and expensive to defer. It does not
   hold for anything public, which is where this release spends its care.
 
-  If the eventual mechanism is not client-side encrypted, the homeserver could perform the move
-  itself. If it is, the client-side migration machinery this release builds already covers it.
+  If the eventual mechanism is not client-side encrypted, the homeserver could move the bytes
+  itself, which leaves clients a path change to ship rather than a migration to run. If it is
+  encrypted, the client-side migration machinery this release builds already covers it.
 - **Scheme tiers, which govern reference values rather than paths.** Appendix A governs where
   objects live. This governs what a reference field may contain: `parent`, `embed`, targets,
   images.
