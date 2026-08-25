@@ -261,8 +261,8 @@ pass removes it once the owner agrees (Part C).
   **Deliberate extensions SHOULD nest under the reserved `ext` member**, as `"ext": {"badge":
   {...}}`. It is one greppable home whose meaning is pinned once: everything under `ext` is
   third-party data the base spec never validates. Treat it as hostile input, so escape before
-  rendering and validate against the extension's own rules before interpreting (Part C2 rules 8
-  and 9).
+  rendering and validate against the extension's own rules before interpreting (Part C2 rules 10
+  and 11).
 
 - **Canonical-encoding id rule.** An id is valid if and only if re-encoding its decoded bytes
   reproduces the input exactly. The check is closed-form, on the final character.
@@ -303,7 +303,7 @@ v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
 - The `[DELETED]` magic string dies entirely: v0's silent `[DELETED]` -> "anonymous" rewrite is
   removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required upgrade in nexus, the shared indexer (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
   on a real flag (`deleted` on the indexed row / UserView) before indexing any v1 data. How a
-  deleted account is displayed then becomes pure client presentation (Part C2 rule 17; the indexer may
+  deleted account is displayed then becomes pure client presentation (Part C2 rule 18; the indexer may
   transitionally keep emitting the old literal at its view layer for old clients; storage and
   query logic never key on it).
 - Fields and caps otherwise unchanged; profile stays public (identity must be readable).
@@ -455,6 +455,8 @@ object `files/{hash}.{ext}`, the raw bytes.
   drops that indirection deliberately. In practice "editing an image" is uploading a different
   image, and the referencing post is edited too, which is cheap under per-edit versioning.
 - The extension comes from a frozen MIME-to-ext map (`.bin` fallback), path-only, never hashed.
+- Reclaiming unreferenced media is a client sweep, not a side effect of deleting a post
+  (Part C2 rule 16).
 
 ## B11. Feed
 v0 `pub/pubky.app/feeds/{HashId(serde-json config)}` (public) -> v1
@@ -650,19 +652,25 @@ the indexer contract. Those bind nexus, not clients.
     from-scratch reindex resurrects it. This is a permanent client rule rather than a
     migration-only one, and it applies for as long as two epochs coexist.
 15. **Private-tier deletes touch only the `/priv/` file.**
-16. **Un-migrated users must keep reading their own legacy tree.** A client that has adopted v1
+16. **Deleting a post does not delete its media.** Media is content-addressed and shared, so
+    another of your posts may reference the same file, and nothing on the homeserver tracks that:
+    `LIST` returns names only, and references live inside post bodies. Deciding whether a file is
+    still used costs one GET per post you own. So a client reclaims media in its own pass over all
+    posts, with the user's confirmation, rather than on every delete. References from other owners
+    cannot be checked and dangle like any other reference to a deleted object.
+17. **Un-migrated users must keep reading their own legacy tree.** A client that has adopted v1
     reads the union of v1 and legacy paths for its own user, so opting out of migration costs the
     user nothing. It is stated here because it is normative client behaviour rather than a
     rollout task.
 
 ## Presentation
 
-17. **A deleted account's display is client policy.** The spec removes the `[DELETED]` sentinel and
+18. **A deleted account's display is client policy.** The spec removes the `[DELETED]` sentinel and
     puts nothing in its place; how a deleted account renders is the client's decision.
 
 ## Capabilities
 
-18. **Request the narrowest scope you use** (B0), and use each spec package's own path builders
+19. **Request the narrowest scope you use** (B0), and use each spec package's own path builders
     rather than hand-built strings.
 
 ## What is NOT in this section
@@ -713,7 +721,7 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   flag (deletion keyed on real state, never name/content literals; gates v1 indexing), tag id-sets,
   intrinsic-time ranking, multi-epoch tombstones, bookmark-feature retirement, mixed-epoch resync.
 - [ ] **pubky-app:** v1 adoption (new caps, kind strings, own-tree legacy read union per Part C2
-  rule 16, publish UI, media type threading, deletion engine).
+  rule 17, publish UI, media type threading, deletion engine).
   - [ ] **moderation:** mixed epoch support by both nexus and homeserver synchronization services as well as by checkstep-request services
 
 **Release gates:**
