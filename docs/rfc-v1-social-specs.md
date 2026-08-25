@@ -246,7 +246,7 @@ pass removes it once the owner agrees (Part C).
   resources only; media bytes keep their own size bound.
 
   The second: **a conforming rewrite fetches the current object from the homeserver**, never from
-  an indexer view, because a view can be stale or partial (Part C2 rule 5).
+  an indexer view, because a view can be stale or partial (Part C2 rule 7).
 
   One wedge case is pinned. If a rewrite cannot fit the cap while preserving unknown members, the
   writer fails the write and surfaces it. It never silently drops members. The user may then
@@ -303,7 +303,7 @@ v0 `pub/pubky.app/profile.json` -> v1 `pub/social/v1/profile.json`.
 - The `[DELETED]` magic string dies entirely: v0's silent `[DELETED]` -> "anonymous" rewrite is
   removed with NO replacement rule; `[DELETED]` is an ordinary legal name. **Required upgrade in nexus, the shared indexer (gates v1 indexing):** the indexer currently keys deletion on that literal; it must key
   on a real flag (`deleted` on the indexed row / UserView) before indexing any v1 data. How a
-  deleted account is displayed then becomes pure client presentation (Part C2 rule 15; the indexer may
+  deleted account is displayed then becomes pure client presentation (Part C2 rule 17; the indexer may
   transitionally keep emitting the old literal at its view layer for old clients; storage and
   query logic never key on it).
 - Fields and caps otherwise unchanged; profile stays public (identity must be readable).
@@ -319,6 +319,14 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   rejected (races across devices; the substrate, the homeserver's dumb blob store, has no
   compare-and-swap). Now-or-never: a
   `posts/{id}` file and a `posts/{id}/` directory are mutually exclusive on the homeserver.
+- **An optional readable label on the version leaf.** A version may be written
+  `{editId}-{slug}.json`, so a post can carry a human-readable path without a second id scheme.
+  The label is opaque: never hashed, never normalized, and it carries no identity.
+  `{editId}.json` and `{editId}-anything.json` denote the SAME version, so exactly one spelling
+  may exist (Part C2 rule 6). Writing one is optional and a reader that ignores labels entirely
+  is conforming. The permanence follows from versions being write-once: a version keeps the label
+  it was created with, and a client that derives labels from the title just gets a new label on
+  the next edit, which is a new version anyway.
 - **Kinds renamed** `short`->`note`, `long`->`article` (nature, not length); all seven kinds kept.
 - **`embed`** flattened from `{uri, kind}` to a plain URI string (kind is derivable from the
   target), and it accepts ANY external URI, the same universal tier as tags: http/https through
@@ -390,7 +398,7 @@ verbatim). v0 accepted these via `Url::parse`, so this also keeps migration tota
 re-tagging self-overwrites idempotently, apps on the same account converge on the same file, and
 the indexer reads one namespace with no writing-app dimension (reading `tags/` directories in
 other app namespaces survives only as a legacy rule; migrating those files is the owning app's
-job). Because addresses converge (Part C2 rule 6), a tag writer SHOULD GET the address first and preserve unknown
+job). Because addresses converge (Part C2 rule 8), a tag writer SHOULD GET the address first and preserve unknown
 members if a file exists: a blind PUT would destroy another app's enrichment of the same
 statement (preservation protects read-modify-write, not write-without-read).
 
@@ -560,7 +568,7 @@ The cleanup pass closes it for good, because a removed epoch has nothing left to
 
 ## Deletion spans epochs, and that rule is not migration-scoped
 
-See Part C2, rules 11 to 13. A migrated post lives at both `pub/pubky.app/posts/{id}` and
+See Part C2, rules 13 to 15. A migrated post lives at both `pub/pubky.app/posts/{id}` and
 `pub/social/v1/posts/{id}/...`, so deleting a public object removes every copy, in every epoch and
 both roots. Leave one behind and a from-scratch reindex resurrects it.
 
@@ -606,46 +614,55 @@ the indexer contract. Those bind nexus, not clients.
 
 ## Write behaviour, read-modify-write
 
-5. **Read the current object from the homeserver before rewriting it, never from an indexer
+5. **A version file is written once.** A version path is created and never rewritten: an edit
+   mints a new `{editId}` and writes a new file. Changing the bytes at an existing version path is
+   a violation, and a reader keeps the copy it saw first.
+
+6. **One spelling per version.** A version leaf may carry an optional readable label
+   (`{editId}-{slug}.json`, A3), and the label is not part of the version's identity. So a writer
+   MUST NOT create both `{editId}.json` and `{editId}-{slug}.json` for the same version. Adding or
+   changing a label afterwards is already forbidden by rule 5.
+
+7. **Read the current object from the homeserver before rewriting it, never from an indexer
    view.** An indexer view can be stale or partial. Writing back from one destroys whatever the
    view omitted.
-6. **GET a tag address before PUTting it.** Tag addresses converge by construction, so a blind PUT
+8. **GET a tag address before PUTting it.** Tag addresses converge by construction, so a blind PUT
    destroys another app's enrichment of the same statement. Preservation protects
    read-modify-write. It cannot protect a write that never read.
-7. **Fail loudly when the size cap and preservation conflict.** If a rewrite cannot fit the cap
+9. **Fail loudly when the size cap and preservation conflict.** If a rewrite cannot fit the cap
    while preserving unknown members, the writer FAILS the write and surfaces it. It never
    silently drops members. The user MAY then explicitly discard extensions.
 
 ## Extensions
 
-8. **Nest deliberate extensions under `ext`.** The catch-all preserves members wherever they sit,
+10. **Nest deliberate extensions under `ext`.** The catch-all preserves members wherever they sit,
    but `ext` is the one greppable home whose meaning is pinned.
-9. **Treat everything under `ext` as hostile input.** Escape before rendering; validate against the
+11. **Treat everything under `ext` as hostile input.** Escape before rendering; validate against the
    extension's own rules before interpreting. The base spec never validates it.
 
 ## Multi-object operations
 
-10. **Publish is a copy, and the client executes it.** The crate supplies the paths, the
+12. **Publish is a copy, and the client executes it.** The crate supplies the paths, the
     validation and the ordered plan; the client performs the writes (B11).
-11. **Deletion is user-initiated only.** Nothing in this spec deletes an object on a user's behalf.
-12. **Deleting a public object removes every copy, in every epoch and both roots.** A migrated post
+13. **Deletion is user-initiated only.** Nothing in this spec deletes an object on a user's behalf.
+14. **Deleting a public object removes every copy, in every epoch and both roots.** A migrated post
     exists at both its legacy path and its `social/v1` path. Leave either behind and a
     from-scratch reindex resurrects it. This is a permanent client rule rather than a
     migration-only one, and it applies for as long as two epochs coexist.
-13. **Private-tier deletes touch only the `/priv/` file.**
-14. **Un-migrated users must keep reading their own legacy tree.** A client that has adopted v1
+15. **Private-tier deletes touch only the `/priv/` file.**
+16. **Un-migrated users must keep reading their own legacy tree.** A client that has adopted v1
     reads the union of v1 and legacy paths for its own user, so opting out of migration costs the
     user nothing. It is stated here because it is normative client behaviour rather than a
     rollout task.
 
 ## Presentation
 
-15. **A deleted account's display is client policy.** The spec removes the `[DELETED]` sentinel and
+17. **A deleted account's display is client policy.** The spec removes the `[DELETED]` sentinel and
     puts nothing in its place; how a deleted account renders is the client's decision.
 
 ## Capabilities
 
-16. **Request the narrowest scope you use** (B0), and use each spec package's own path builders
+18. **Request the narrowest scope you use** (B0), and use each spec package's own path builders
     rather than hand-built strings.
 
 ## What is NOT in this section
@@ -696,7 +713,7 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
   flag (deletion keyed on real state, never name/content literals; gates v1 indexing), tag id-sets,
   intrinsic-time ranking, multi-epoch tombstones, bookmark-feature retirement, mixed-epoch resync.
 - [ ] **pubky-app:** v1 adoption (new caps, kind strings, own-tree legacy read union per Part C2
-  rule 14, publish UI, media type threading, deletion engine).
+  rule 16, publish UI, media type threading, deletion engine).
   - [ ] **moderation:** mixed epoch support by both nexus and homeserver synchronization services as well as by checkstep-request services
 
 **Release gates:**
@@ -776,7 +793,7 @@ After canonicalization, split the path into segments and classify:
 |---|---|---|---|
 | User | `profile.json` | pub | none |
 | Post (versionless reference) | `posts/{id}` | both | `{id}` = canonical TimestampId |
-| Post (version) | `posts/{id}/{editId}.json` | both | both canonical TimestampIds |
+| Post (version) | `posts/{id}/{editId}[-{slug}].json` | both | strip `.json`, then split at the FIRST `-`: the head is a canonical TimestampId, the optional tail is the label (A4). An absent, illegal or over-length label is Unknown |
 | File (media) | `files/{hash}.{ext}` | both | strip exactly one extension, case-sensitively, ONLY if it is in the frozen extension set; remainder = canonical HashId; unknown or absent extension is Unknown |
 | Tag | `tags/{id}.json` | pub | `{id}` = canonical HashId |
 | Follow | `follows/{pk}.json` | pub | `{pk}` = canonical host key (as A1) |
@@ -797,6 +814,10 @@ An id is valid if and only if re-encoding its decoded bytes reproduces the input
 - **HashId** (tag/media/feed ids): 26 chars, same alphabet; final char in `{0,4,8,C,G,M,R,W}`
   (two pad bits).
 - **Host key**: as A1 (52 z-base32, final `y`/`o`).
+
+The optional post label (`{editId}-{slug}.json`, A3) is NOT an id and has no canonical form. It is
+1 to 64 characters of `[a-z0-9-]`, validated as written and stored verbatim. It is never hashed,
+so it needs no frozen text function, and it is excluded from every id and from `stable_id`.
 
 Time bounds are never checked at parse time; only canonicality is.
 
@@ -867,6 +888,11 @@ a scheme with a leading digit, a bare scheme with no remainder, and over-cap val
 | `pubky://<pk>/pub/social/v1/files/H26.svg` | Public File, id `H26` |
 | `pubky://<pk>/pub/social/v1/files/H26.JPG` | Unknown (extension set is case-sensitive) |
 | `pubky://<pk>/pub/social/v1/posts/ts-lowercase` | Unknown (non-canonical id) |
+| `pubky://<pk>/pub/social/v1/posts/TS/TS-hello-world.json` | Post version `TS`, label `hello-world` |
+| `pubky://<pk>/pub/social/v1/posts/TS/TS.json` | the SAME version as the row above; labels carry no identity |
+| `pubky://<pk>/pub/social/v1/posts/TS/TS-Hello.json` | Unknown (label is lowercase only) |
+| `pubky://<pk>/pub/social/v1/posts/TS/TS-.json` | Unknown (empty label) |
+| `pubky://<pk>/pub/social/v1/posts/TS/TS-a-b.json` | Post version `TS`, label `a-b` (split is at the FIRST hyphen only) |
 | `pubky://<pk>/pub/social/v2/posts/TS` | UnsupportedVersion |
 | `pubky://<pk>/pub/pubky.app/posts/TS` | Foreign |
 | `pubky://<pk>/pub/social/v1/mutes/<pk>.json` | Unknown (mutes are priv-rooted) |
