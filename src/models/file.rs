@@ -47,7 +47,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppFile {
+pub struct PubkySocialFile {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
     pub created_at: i64,
@@ -60,7 +60,7 @@ pub struct PubkyAppFile {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppFile {
+impl PubkySocialFile {
     // Getters clone the data out because String/JsValue is not Copy.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn name(&self) -> String {
@@ -85,10 +85,10 @@ impl PubkyAppFile {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppFile {}
+impl Json for PubkySocialFile {}
 
-impl PubkyAppFile {
-    /// Creates a new `PubkyAppFile` instance.
+impl PubkySocialFile {
+    /// Creates a new `PubkySocialFile` instance.
     pub fn new(name: String, src: String, content_type: String, size: usize) -> Self {
         let created_at = timestamp();
         Self {
@@ -102,9 +102,9 @@ impl PubkyAppFile {
     }
 }
 
-impl TimestampId for PubkyAppFile {}
+impl TimestampId for PubkySocialFile {}
 
-impl HasIdPath for PubkyAppFile {
+impl HasIdPath for PubkySocialFile {
     const PATH_SEGMENT: &'static str = "files/";
 
     fn create_path(id: &str) -> String {
@@ -112,7 +112,7 @@ impl HasIdPath for PubkyAppFile {
     }
 }
 
-impl Validatable for PubkyAppFile {
+impl Validatable for PubkySocialFile {
     fn sanitize(self) -> Self {
         let name = self.name.trim().to_string();
 
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let file = PubkyAppFile::new(
+        let file = PubkySocialFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
@@ -212,14 +212,14 @@ mod tests {
 
     #[test]
     fn test_create_path() {
-        let file = PubkyAppFile::new(
+        let file = PubkySocialFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
             1024,
         );
         let file_id = file.create_id();
-        let path = PubkyAppFile::create_path(&file_id);
+        let path = PubkySocialFile::create_path(&file_id);
 
         // Check if the path starts with the expected prefix
         let prefix = format!("{}{}files/", PUBLIC_PATH, APP_PATH);
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        let file = PubkyAppFile::new(
+        let file = PubkySocialFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_id() {
-        let file = PubkyAppFile::new(
+        let file = PubkySocialFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
@@ -261,7 +261,7 @@ mod tests {
         let test_cases = vec![
             // Invalid content type
             (
-                PubkyAppFile::new(
+                PubkySocialFile::new(
                     "example.png".to_string(),
                     blob_uri_builder("user_id".into(), "id".into()),
                     "notavalid/content_type".to_string(),
@@ -271,7 +271,7 @@ mod tests {
             ),
             // Invalid size (too large)
             (
-                PubkyAppFile::new(
+                PubkySocialFile::new(
                     "example.png".to_string(),
                     blob_uri_builder("user_id".into(), "id".into()),
                     "image/png".to_string(),
@@ -281,7 +281,7 @@ mod tests {
             ),
             // Invalid size (zero)
             (
-                PubkyAppFile::new(
+                PubkySocialFile::new(
                     "example.png".to_string(),
                     blob_uri_builder("user_id".into(), "id".into()),
                     "image/png".to_string(),
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_src() {
         // Create file directly without sanitization to test validation logic
-        let file = PubkyAppFile {
+        let file = PubkySocialFile {
             name: "example.png".to_string(),
             created_at: timestamp(),
             src: "not_a_url".to_string(), // Invalid URL - sanitization would filter this
@@ -331,7 +331,7 @@ mod tests {
         }
         "#;
 
-        let file = PubkyAppFile::new(
+        let file = PubkySocialFile::new(
             "example.png".to_string(),
             blob_uri_builder("user_id".into(), "id".into()),
             "image/png".to_string(),
@@ -340,7 +340,7 @@ mod tests {
         let id = file.create_id();
 
         let blob = file_json.as_bytes();
-        let file_parsed = <PubkyAppFile as Validatable>::try_from(blob, &id).unwrap();
+        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");
         assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");

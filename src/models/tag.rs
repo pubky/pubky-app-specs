@@ -26,7 +26,7 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppTag {
+pub struct PubkySocialTag {
     /// The URI of the resource this is a tag on
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
@@ -35,7 +35,7 @@ pub struct PubkyAppTag {
     pub created_at: i64,
 }
 
-impl PubkyAppTag {
+impl PubkySocialTag {
     pub fn new(uri: String, label: String) -> Self {
         let created_at = timestamp();
         Self {
@@ -49,7 +49,7 @@ impl PubkyAppTag {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppTag {
+impl PubkySocialTag {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -75,9 +75,9 @@ impl PubkyAppTag {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppTag {}
+impl Json for PubkySocialTag {}
 
-impl HasIdPath for PubkyAppTag {
+impl HasIdPath for PubkySocialTag {
     const PATH_SEGMENT: &'static str = "tags/";
 
     fn create_path(id: &str) -> String {
@@ -85,7 +85,7 @@ impl HasIdPath for PubkyAppTag {
     }
 }
 
-impl HashId for PubkyAppTag {
+impl HashId for PubkySocialTag {
     /// Tag ID is created based on the hash of the URI tagged and the label used
     fn get_id_data(&self) -> String {
         format!("{}:{}", self.uri, self.label)
@@ -98,7 +98,7 @@ pub fn sanitize_tag_label(tag: &str) -> String {
     tag.trim().to_lowercase()
 }
 
-/// Validates a single tag label according to PubkyAppTag rules.
+/// Validates a single tag label according to PubkySocialTag rules.
 /// Returns an error message if validation fails, or Ok(()) if valid.
 /// This function is public so it can be reused by other models that use tags (e.g., Feed).
 pub fn validate_tag_label(tag: &str) -> Result<(), String> {
@@ -139,7 +139,7 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
     Ok(())
 }
 
-impl Validatable for PubkyAppTag {
+impl Validatable for PubkySocialTag {
     fn sanitize(self) -> Self {
         // Sanitize label: trim whitespace and lowercase
         let label = sanitize_tag_label(&self.label);
@@ -152,7 +152,7 @@ impl Validatable for PubkyAppTag {
             Err(_) => self.uri.trim().to_string(),
         };
 
-        PubkyAppTag {
+        PubkySocialTag {
             uri,
             label,
             created_at: self.created_at,
@@ -186,7 +186,7 @@ mod tests {
         // Precomputed earlier
         let tag_id = "CBYS8P6VJPHC5XXT4WDW26662W";
         // Create new tag
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri.clone(),
             created_at: 1627849723,
             label: "cool".to_string(),
@@ -198,7 +198,7 @@ mod tests {
         // Check if the tag ID is correct
         assert_eq!(new_tag_id, tag_id);
 
-        let wrong_tag = PubkyAppTag {
+        let wrong_tag = PubkySocialTag {
             uri: post_uri,
             created_at: 1627849723,
             label: "co0l".to_string(),
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_create_id() {
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: "https://example.com/post/1".to_string(),
             created_at: 1627849723000,
             label: "cool".to_string(),
@@ -228,7 +228,7 @@ mod tests {
     fn test_new() {
         let uri = "https://example.com/post/1".to_string();
         let label = "interesting".to_string();
-        let tag = PubkyAppTag::new(uri.clone(), label.clone());
+        let tag = PubkySocialTag::new(uri.clone(), label.clone());
 
         assert_eq!(tag.uri, uri);
         assert_eq!(tag.label, label);
@@ -244,7 +244,7 @@ mod tests {
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             "0032FNCGXE3R0".into(),
         );
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             created_at: 1627849723000,
             label: "cool".to_string(),
@@ -252,7 +252,7 @@ mod tests {
 
         let expected_id = tag.create_id();
         let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = PubkyAppTag::create_path(&expected_id);
+        let path = PubkySocialTag::create_path(&expected_id);
 
         assert_eq!(path, expected_path);
     }
@@ -268,7 +268,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let tag = PubkyAppTag {
+            let tag = PubkySocialTag {
                 uri: post_uri.clone(),
                 label: input.to_string(),
                 created_at: 1627849723000,
@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn test_validate() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             label: "cool".to_string(),
             created_at: 1627849723000,
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_label_length() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             label: "a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1),
             created_at: 1627849723000,
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             label: "cool".to_string(),
             created_at: 1627849723000,
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_char() {
         let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             label: format!("invalidchar{}", VALIDATION_LIMITS.tag_invalid_chars[0]),
             created_at: 1627849723000,
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_uri() {
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: "user_id/pub/pubky.app/posts/post_id".into(),
             label: "cool".to_string(),
             created_at: 1627849723000,
@@ -369,10 +369,10 @@ mod tests {
         "#
         );
 
-        let id = PubkyAppTag::new(user_uri.clone(), tag_label.clone()).create_id();
+        let id = PubkySocialTag::new(user_uri.clone(), tag_label.clone()).create_id();
 
         let blob = tag_json.as_bytes();
-        let sanitized_validated_tag = <PubkyAppTag as Validatable>::try_from(blob, &id).unwrap();
+        let sanitized_validated_tag = <PubkySocialTag as Validatable>::try_from(blob, &id).unwrap();
         assert_eq!(sanitized_validated_tag.uri, user_uri);
         assert_eq!(sanitized_validated_tag.label, "cooltag");
     }
@@ -389,7 +389,7 @@ mod tests {
 
         let id = "D2DV4EZDA03Q3KCRMVGMDYZ8C0";
         let blob = tag_json.as_bytes();
-        let result = <PubkyAppTag as Validatable>::try_from(blob, id);
+        let result = <PubkySocialTag as Validatable>::try_from(blob, id);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -404,7 +404,7 @@ mod tests {
         // Leading/trailing whitespace should be trimmed and pass validation
         let trim_cases = vec![" cool", "cool ", "cool\n", "  cool  "];
         for label in trim_cases {
-            let tag = PubkyAppTag {
+            let tag = PubkySocialTag {
                 uri: post_uri.clone(),
                 created_at: 1627849723,
                 label: label.to_string(),
@@ -419,7 +419,7 @@ mod tests {
         }
 
         // Internal whitespace cannot be trimmed and should fail validation
-        let tag = PubkyAppTag {
+        let tag = PubkySocialTag {
             uri: post_uri,
             created_at: 1627849723,
             label: "   co ol ".to_string(),
@@ -442,7 +442,7 @@ mod tests {
         ];
 
         for (input, expected) in unicode_cases {
-            let tag = PubkyAppTag::new(post_uri.clone(), input.to_string());
+            let tag = PubkySocialTag::new(post_uri.clone(), input.to_string());
             assert_eq!(tag.label, expected, "Failed for input: {}", input);
             assert!(
                 tag.validate(None).is_ok(),
@@ -458,7 +458,7 @@ mod tests {
             max_emoji_tag.chars().count(),
             VALIDATION_LIMITS.tag_label_max_length
         );
-        let tag = PubkyAppTag::new(post_uri.clone(), max_emoji_tag);
+        let tag = PubkySocialTag::new(post_uri.clone(), max_emoji_tag);
         assert!(
             tag.validate(None).is_ok(),
             "Should accept {} emoji characters as tag",

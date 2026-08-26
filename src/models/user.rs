@@ -19,7 +19,7 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppUser {
+pub struct PubkySocialUser {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     // Avoid wasm-pack automatically generating getter/setters for the pub fields.
     pub name: String,
@@ -28,14 +28,14 @@ pub struct PubkyAppUser {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub image: Option<String>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub links: Option<Vec<PubkyAppUserLink>>,
+    pub links: Option<Vec<PubkySocialUserLink>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
 }
 
-impl Default for PubkyAppUser {
+impl Default for PubkySocialUser {
     fn default() -> Self {
-        PubkyAppUser {
+        PubkySocialUser {
             name: "anonymous".to_string(),
             bio: None,
             image: None,
@@ -48,7 +48,7 @@ impl Default for PubkyAppUser {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppUser {
+impl PubkySocialUser {
     // Getters clone the data out because String/JsValue is not Copy.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn name(&self) -> String {
@@ -63,7 +63,7 @@ impl PubkyAppUser {
         self.image.clone()
     }
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn links(&self) -> Option<Vec<PubkyAppUserLink>> {
+    pub fn links(&self) -> Option<Vec<PubkySocialUserLink>> {
         self.links.clone()
     }
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
@@ -83,13 +83,13 @@ impl PubkyAppUser {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppUser {}
+impl Json for PubkySocialUser {}
 
 /// Represents a user's single link with a title and URL.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppUserLink {
+pub struct PubkySocialUserLink {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub title: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -98,7 +98,7 @@ pub struct PubkyAppUserLink {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppUserLink {
+impl PubkySocialUserLink {
     // Getters clone the data out because String/JsValue is not Copy.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn title(&self) -> String {
@@ -111,14 +111,14 @@ impl PubkyAppUserLink {
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppUser {
-    /// Creates a new `PubkyAppUser` instance and sanitizes it.
+impl PubkySocialUser {
+    /// Creates a new `PubkySocialUser` instance and sanitizes it.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
         bio: Option<String>,
         image: Option<String>,
-        links: Option<Vec<PubkyAppUserLink>>,
+        links: Option<Vec<PubkySocialUserLink>>,
         status: Option<String>,
     ) -> Self {
         Self {
@@ -132,7 +132,7 @@ impl PubkyAppUser {
     }
 }
 
-impl HasPath for PubkyAppUser {
+impl HasPath for PubkySocialUser {
     const PATH_SEGMENT: &'static str = "profile.json";
 
     fn create_path() -> String {
@@ -140,7 +140,7 @@ impl HasPath for PubkyAppUser {
     }
 }
 
-impl Validatable for PubkyAppUser {
+impl Validatable for PubkySocialUser {
     fn sanitize(self) -> Self {
         // Sanitize name: trim whitespace only
         let mut name = self.name.trim().to_string();
@@ -165,7 +165,7 @@ impl Validatable for PubkyAppUser {
             .links
             .map(|links_vec| links_vec.into_iter().map(|link| link.sanitize()).collect());
 
-        PubkyAppUser {
+        PubkySocialUser {
             name,
             bio,
             image,
@@ -226,15 +226,15 @@ impl Validatable for PubkyAppUser {
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppUserLink {
-    /// Creates a new `PubkyAppUserLink` instance and sanitizes it.
+impl PubkySocialUserLink {
+    /// Creates a new `PubkySocialUserLink` instance and sanitizes it.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
         Self { title, url }.sanitize()
     }
 }
 
-impl Validatable for PubkyAppUserLink {
+impl Validatable for PubkySocialUserLink {
     fn sanitize(self) -> Self {
         // Sanitize title: trim whitespace only
         let title = self.title.trim().to_string();
@@ -242,7 +242,7 @@ impl Validatable for PubkyAppUserLink {
         // Sanitize URL
         let url = sanitize_url(&self.url);
 
-        PubkyAppUserLink { title, url }
+        PubkySocialUserLink { title, url }
     }
 
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
@@ -277,16 +277,16 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Alice".to_string(),
             Some("Maximalist".to_string()),
             Some("https://example.com/image.png".to_string()),
             Some(vec![
-                PubkyAppUserLink {
+                PubkySocialUserLink {
                     title: "GitHub".to_string(),
                     url: "https://github.com/alice".to_string(),
                 },
-                PubkyAppUserLink {
+                PubkySocialUserLink {
                     title: "Website".to_string(),
                     url: "https://alice.dev".to_string(),
                 },
@@ -307,22 +307,22 @@ mod tests {
 
     #[test]
     fn test_create_path() {
-        let path = PubkyAppUser::create_path();
+        let path = PubkySocialUser::create_path();
         assert_eq!(path, format!("{}{}profile.json", PUBLIC_PATH, APP_PATH));
     }
 
     #[test]
     fn test_sanitize() {
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "   Alice   ".to_string(),
             Some("  Maximalist and developer.  ".to_string()),
             Some("  https://example.com/image.png  ".to_string()),
             Some(vec![
-                PubkyAppUserLink {
+                PubkySocialUserLink {
                     title: " GitHub ".to_string(),
                     url: " https://github.com/alice ".to_string(),
                 },
-                PubkyAppUserLink {
+                PubkySocialUserLink {
                     title: "Website".to_string(),
                     url: "  https://example.com  ".to_string(),
                 },
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Alice".to_string(),
             Some("Maximalist".to_string()),
             Some("https://example.com/image.png".to_string()),
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_name() {
         // Test name too short
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Al".to_string(), // Too short
             None,
             None,
@@ -381,7 +381,7 @@ mod tests {
 
         // Test name too long - sanitization should NOT truncate
         let long_name = "a".repeat(VALIDATION_LIMITS.user_name_max_length + 1);
-        let user = PubkyAppUser::new(long_name.clone(), None, None, None, None);
+        let user = PubkySocialUser::new(long_name.clone(), None, None, None, None);
 
         // Sanitization should preserve full length
         assert_eq!(user.name.len(), VALIDATION_LIMITS.user_name_max_length + 1);
@@ -414,7 +414,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkyAppUser as Validatable>::try_from(blob, "").unwrap();
+        let user = <PubkySocialUser as Validatable>::try_from(blob, "").unwrap();
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist"));
@@ -442,7 +442,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let result = <PubkyAppUser as Validatable>::try_from(blob, "");
+        let result = <PubkySocialUser as Validatable>::try_from(blob, "");
 
         // Invalid link URL should cause validation to fail
         assert!(result.is_err());
@@ -459,7 +459,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let result = <PubkyAppUser as Validatable>::try_from(blob, "");
+        let result = <PubkySocialUser as Validatable>::try_from(blob, "");
 
         // Invalid image URL should cause validation to fail
         assert!(result.is_err());
@@ -469,11 +469,11 @@ mod tests {
     #[test]
     fn test_sanitize_preserves_invalid_urls() {
         // Sanitize should preserve invalid URLs (just trim), validation rejects them
-        let user = PubkyAppUser {
+        let user = PubkySocialUser {
             name: "Alice".to_string(),
             bio: None,
             image: Some("  invalid_image_url  ".to_string()),
-            links: Some(vec![PubkyAppUserLink {
+            links: Some(vec![PubkySocialUserLink {
                 title: "Test".to_string(),
                 url: "  invalid_link_url  ".to_string(),
             }]),
@@ -505,7 +505,7 @@ mod tests {
             "a".repeat(VALIDATION_LIMITS.user_image_url_max_length - 30)
         );
 
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Alice".to_string(),
             Some(long_bio.clone()),
             Some(long_image.clone()),
@@ -524,7 +524,7 @@ mod tests {
         // Test multiple field length validation errors
         let test_cases = vec![
             (
-                PubkyAppUser::new(
+                PubkySocialUser::new(
                     "Alice".to_string(),
                     Some("a".repeat(VALIDATION_LIMITS.user_bio_max_length + 1)),
                     None,
@@ -534,7 +534,7 @@ mod tests {
                 "bio",
             ),
             (
-                PubkyAppUser::new(
+                PubkySocialUser::new(
                     "Alice".to_string(),
                     None,
                     None,
@@ -544,7 +544,7 @@ mod tests {
                 "status",
             ),
             (
-                PubkyAppUser::new(
+                PubkySocialUser::new(
                     "Alice".to_string(),
                     None,
                     Some(format!(
@@ -573,13 +573,13 @@ mod tests {
     fn test_validate_too_many_links() {
         let mut links = Vec::new();
         for i in 0..VALIDATION_LIMITS.user_links_max_count + 1 {
-            links.push(PubkyAppUserLink {
+            links.push(PubkySocialUserLink {
                 title: format!("Link {}", i),
                 url: format!("https://example.com/{}", i),
             });
         }
 
-        let user = PubkyAppUser::new("Alice".to_string(), None, None, Some(links), None);
+        let user = PubkySocialUser::new("Alice".to_string(), None, None, Some(links), None);
 
         // Sanitization should preserve all links (not truncate)
         assert_eq!(
@@ -597,7 +597,7 @@ mod tests {
     fn test_validate_link_length_errors() {
         // Test link title too long
         let long_title = "a".repeat(VALIDATION_LIMITS.user_link_title_max_length + 1);
-        let link = PubkyAppUserLink {
+        let link = PubkySocialUserLink {
             title: long_title.clone(),
             url: "https://example.com".to_string(),
         };
@@ -613,7 +613,7 @@ mod tests {
         // Test link URL too long - create URL that exceeds limit after normalization
         let very_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length);
         let very_long_url = format!("https://example.com/{}", very_long_path);
-        let link2 = PubkyAppUserLink {
+        let link2 = PubkySocialUserLink {
             title: "Test".to_string(),
             url: very_long_url,
         };
@@ -633,7 +633,7 @@ mod tests {
             // If normalization shortened it, create an even longer one
             let extremely_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length + 50);
             let extremely_long_url = format!("https://example.com/{}", extremely_long_path);
-            let link3 = PubkyAppUserLink {
+            let link3 = PubkySocialUserLink {
                 title: "Test".to_string(),
                 url: extremely_long_url,
             };
@@ -654,7 +654,7 @@ mod tests {
         // Emoji name: 3 emoji characters (each is 1 char but multiple bytes)
         // This verifies .chars().count() is used instead of .len()
         let emoji_name = "Hi👋🏻Bob"; // 7 characters: H, i, 👋, 🏻, B, o, b
-        let user = PubkyAppUser::new(emoji_name.to_string(), None, None, None, None);
+        let user = PubkySocialUser::new(emoji_name.to_string(), None, None, None, None);
         assert!(
             user.validate(None).is_ok(),
             "Should accept emoji in name (counts chars, not bytes)"
@@ -662,7 +662,7 @@ mod tests {
 
         // Unicode bio with various scripts
         let unicode_bio = "你好世界 🌍 مرحبا"; // Mix of Chinese, emoji, Arabic
-        let user_with_bio = PubkyAppUser::new(
+        let user_with_bio = PubkySocialUser::new(
             "Alice".to_string(),
             Some(unicode_bio.to_string()),
             None,
@@ -681,7 +681,7 @@ mod tests {
             max_emoji_name.chars().count(),
             VALIDATION_LIMITS.user_name_max_length
         );
-        let user_max_emoji = PubkyAppUser::new(max_emoji_name, None, None, None, None);
+        let user_max_emoji = PubkySocialUser::new(max_emoji_name, None, None, None, None);
         assert!(
             user_max_emoji.validate(None).is_ok(),
             "Should accept {} emoji characters as name",
@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn test_create_user_with_empty_image() {
         // Test what happens when image is an empty string
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Alice".to_string(),
             None,
             Some("".to_string()), // Empty string for image
@@ -715,7 +715,7 @@ mod tests {
     #[test]
     fn test_create_user_without_image() {
         // Test what happens when image is None
-        let user = PubkyAppUser::new(
+        let user = PubkySocialUser::new(
             "Alice".to_string(),
             None,
             None, // No image provided

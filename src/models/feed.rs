@@ -3,7 +3,7 @@ use crate::{
     limits::VALIDATION_LIMITS,
     models::tag::{sanitize_tag_label, validate_tag_label},
     traits::{HasIdPath, HashId, Validatable},
-    PubkyAppPostKind, APP_PATH, PUBLIC_PATH,
+    PubkySocialPostKind, APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -21,7 +21,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub enum PubkyAppFeedReach {
+pub enum PubkySocialFeedReach {
     Following,
     Followers,
     Friends,
@@ -35,7 +35,7 @@ pub enum PubkyAppFeedReach {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub enum PubkyAppFeedLayout {
+pub enum PubkySocialFeedLayout {
     Columns,
     Wide,
     Visual,
@@ -47,7 +47,7 @@ pub enum PubkyAppFeedLayout {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub enum PubkyAppFeedSort {
+pub enum PubkySocialFeedSort {
     Recent,
     Popularity,
 }
@@ -56,25 +56,25 @@ pub enum PubkyAppFeedSort {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppFeedConfig {
+pub struct PubkySocialFeedConfig {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub domain_tags: Option<Vec<String>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub reach: PubkyAppFeedReach,
+    pub reach: PubkySocialFeedReach,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub layout: PubkyAppFeedLayout,
+    pub layout: PubkySocialFeedLayout,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub sort: PubkyAppFeedSort,
+    pub sort: PubkySocialFeedSort,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub content: Option<PubkyAppPostKind>,
+    pub content: Option<PubkySocialPostKind>,
 }
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppFeedConfig {
+impl PubkySocialFeedConfig {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -99,25 +99,25 @@ impl PubkyAppFeedConfig {
 
     /// Getter for `name`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn reach(&self) -> PubkyAppFeedReach {
+    pub fn reach(&self) -> PubkySocialFeedReach {
         self.reach.clone()
     }
 
     /// Getter for `layout`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn layout(&self) -> PubkyAppFeedLayout {
+    pub fn layout(&self) -> PubkySocialFeedLayout {
         self.layout.clone()
     }
 
     /// Getter for `sort`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn sort(&self) -> PubkyAppFeedSort {
+    pub fn sort(&self) -> PubkySocialFeedSort {
         self.sort.clone()
     }
 
     /// Getter for `content`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn content(&self) -> Option<PubkyAppPostKind> {
+    pub fn content(&self) -> Option<PubkySocialPostKind> {
         self.content.clone()
     }
 }
@@ -139,7 +139,7 @@ fn sanitize_feed_icon(icon: Option<String>) -> Option<String> {
 /// icon set is curated by the client.
 ///
 /// `None` is accepted for feeds created before the field existed; new feeds
-/// always carry one, since [`PubkyAppFeed::new`] requires it.
+/// always carry one, since [`PubkySocialFeed::new`] requires it.
 fn validate_feed_icon(icon: &Option<String>) -> Result<(), String> {
     let Some(icon) = icon else {
         return Ok(());
@@ -187,12 +187,12 @@ fn validate_tag_list(tags: &Option<Vec<String>>, field_name: &str) -> Result<(),
     Ok(())
 }
 
-impl Validatable for PubkyAppFeedConfig {
+impl Validatable for PubkySocialFeedConfig {
     fn sanitize(self) -> Self {
         let tags = sanitize_tag_list(self.tags);
         let domain_tags = sanitize_tag_list(self.domain_tags);
 
-        PubkyAppFeedConfig {
+        PubkySocialFeedConfig {
             tags,
             domain_tags,
             ..self
@@ -208,15 +208,15 @@ impl Validatable for PubkyAppFeedConfig {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppFeedConfig {}
+impl Json for PubkySocialFeedConfig {}
 
 /// Represents a feed configuration.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppFeed {
+pub struct PubkySocialFeed {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub feed: PubkyAppFeedConfig,
+    pub feed: PubkySocialFeedConfig,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
     /// Lucide icon name, e.g. `"bitcoin"`. Required on new feeds, but optional
@@ -229,9 +229,9 @@ pub struct PubkyAppFeed {
     pub created_at: i64,
 }
 
-impl PubkyAppFeed {
-    /// Creates a new `PubkyAppFeed` instance and sanitizes it.
-    pub fn new(feed: PubkyAppFeedConfig, name: String, icon: String) -> Self {
+impl PubkySocialFeed {
+    /// Creates a new `PubkySocialFeed` instance and sanitizes it.
+    pub fn new(feed: PubkySocialFeedConfig, name: String, icon: String) -> Self {
         let created_at = timestamp();
         Self {
             feed,
@@ -245,7 +245,7 @@ impl PubkyAppFeed {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppFeed {
+impl PubkySocialFeed {
     /// Serialize to JSON for WASM.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
@@ -259,7 +259,7 @@ impl PubkyAppFeed {
 
     /// Getter for `feed`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn feed(&self) -> PubkyAppFeedConfig {
+    pub fn feed(&self) -> PubkySocialFeedConfig {
         self.feed.clone()
     }
 
@@ -277,16 +277,16 @@ impl PubkyAppFeed {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppFeed {}
+impl Json for PubkySocialFeed {}
 
-impl HashId for PubkyAppFeed {
+impl HashId for PubkySocialFeed {
     /// Generates an ID based on the serialized `feed` object.
     fn get_id_data(&self) -> String {
         serde_json::to_string(&self.feed).unwrap_or_default()
     }
 }
 
-impl HasIdPath for PubkyAppFeed {
+impl HasIdPath for PubkySocialFeed {
     const PATH_SEGMENT: &'static str = "feeds/";
 
     fn create_path(id: &str) -> String {
@@ -294,7 +294,7 @@ impl HasIdPath for PubkyAppFeed {
     }
 }
 
-impl Validatable for PubkyAppFeed {
+impl Validatable for PubkySocialFeed {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the feed ID
         if let Some(id) = id {
@@ -314,7 +314,7 @@ impl Validatable for PubkyAppFeed {
     }
 
     fn sanitize(self) -> Self {
-        PubkyAppFeed {
+        PubkySocialFeed {
             feed: self.feed.sanitize(),
             name: self.name.trim().to_string(),
             icon: sanitize_feed_icon(self.icon),
@@ -323,43 +323,43 @@ impl Validatable for PubkyAppFeed {
     }
 }
 
-impl FromStr for PubkyAppFeedReach {
+impl FromStr for PubkySocialFeedReach {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "following" => Ok(PubkyAppFeedReach::Following),
-            "followers" => Ok(PubkyAppFeedReach::Followers),
-            "friends" => Ok(PubkyAppFeedReach::Friends),
-            "all" => Ok(PubkyAppFeedReach::All),
-            "wot" => Ok(PubkyAppFeedReach::Wot),
-            "me" => Ok(PubkyAppFeedReach::Me),
+            "following" => Ok(PubkySocialFeedReach::Following),
+            "followers" => Ok(PubkySocialFeedReach::Followers),
+            "friends" => Ok(PubkySocialFeedReach::Friends),
+            "all" => Ok(PubkySocialFeedReach::All),
+            "wot" => Ok(PubkySocialFeedReach::Wot),
+            "me" => Ok(PubkySocialFeedReach::Me),
             _ => Err(format!("Invalid feed reach: {}", s)),
         }
     }
 }
 
-impl FromStr for PubkyAppFeedLayout {
+impl FromStr for PubkySocialFeedLayout {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "columns" => Ok(PubkyAppFeedLayout::Columns),
-            "wide" => Ok(PubkyAppFeedLayout::Wide),
-            "visual" => Ok(PubkyAppFeedLayout::Visual),
-            "list" => Ok(PubkyAppFeedLayout::List),
+            "columns" => Ok(PubkySocialFeedLayout::Columns),
+            "wide" => Ok(PubkySocialFeedLayout::Wide),
+            "visual" => Ok(PubkySocialFeedLayout::Visual),
+            "list" => Ok(PubkySocialFeedLayout::List),
             _ => Err(format!("Invalid feed layout: {}", s)),
         }
     }
 }
 
-impl FromStr for PubkyAppFeedSort {
+impl FromStr for PubkySocialFeedSort {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "recent" => Ok(PubkyAppFeedSort::Recent),
-            "popularity" => Ok(PubkyAppFeedSort::Popularity),
+            "recent" => Ok(PubkySocialFeedSort::Recent),
+            "popularity" => Ok(PubkySocialFeedSort::Popularity),
             _ => Err(format!("Invalid feed sort: {}", s)),
         }
     }
@@ -373,12 +373,12 @@ mod tests {
     fn feed_config(
         tags: Option<Vec<String>>,
         domain_tags: Option<Vec<String>>,
-        reach: PubkyAppFeedReach,
-        layout: PubkyAppFeedLayout,
-        sort: PubkyAppFeedSort,
-        content: Option<PubkyAppPostKind>,
-    ) -> PubkyAppFeedConfig {
-        PubkyAppFeedConfig {
+        reach: PubkySocialFeedReach,
+        layout: PubkySocialFeedLayout,
+        sort: PubkySocialFeedSort,
+        content: Option<PubkySocialPostKind>,
+    ) -> PubkySocialFeedConfig {
+        PubkySocialFeedConfig {
             tags,
             domain_tags,
             reach,
@@ -390,26 +390,26 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bitcoin".to_string(), "rust".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
-                Some(PubkyAppPostKind::Image),
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
+                Some(PubkySocialPostKind::Image),
             ),
             "Rust Bitcoiners".to_string(),
             "bitcoin".to_string(),
         );
 
-        let feed_config = PubkyAppFeedConfig {
+        let feed_config = PubkySocialFeedConfig {
             tags: Some(vec!["bitcoin".to_string(), "rust".to_string()]),
             domain_tags: None,
-            reach: PubkyAppFeedReach::Following,
-            layout: PubkyAppFeedLayout::Columns,
-            sort: PubkyAppFeedSort::Recent,
-            content: Some(PubkyAppPostKind::Image),
+            reach: PubkySocialFeedReach::Following,
+            layout: PubkySocialFeedLayout::Columns,
+            sort: PubkySocialFeedSort::Recent,
+            content: Some(PubkySocialPostKind::Image),
         };
         assert_eq!(feed.feed, feed_config);
         assert_eq!(feed.name, "Rust Bitcoiners");
@@ -421,13 +421,13 @@ mod tests {
 
     #[test]
     fn test_create_id() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bitcoin".to_string(), "rust".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Rust Bitcoiners".to_string(),
@@ -442,13 +442,13 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bitcoin".to_string(), "rust".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Rust Bitcoiners".to_string(),
@@ -462,13 +462,13 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_id() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bitcoin".to_string(), "rust".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Rust Bitcoiners".to_string(),
@@ -481,13 +481,13 @@ mod tests {
 
     #[test]
     fn test_sanitize() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["  BiTcoin  ".to_string(), " RUST   ".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "  Rust Bitcoiners".to_string(),
@@ -517,11 +517,11 @@ mod tests {
         }
         "#;
 
-        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
         let feed_id = feed.create_id();
 
         let blob = feed_json.as_bytes();
-        let feed_parsed = <PubkyAppFeed as Validatable>::try_from(blob, &feed_id).unwrap();
+        let feed_parsed = <PubkySocialFeed as Validatable>::try_from(blob, &feed_id).unwrap();
 
         assert_eq!(feed_parsed.name, "My Feed");
         assert_eq!(
@@ -547,20 +547,20 @@ mod tests {
         }
         "#;
 
-        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
-        assert_eq!(feed.feed.reach, PubkyAppFeedReach::Wot);
+        let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
+        assert_eq!(feed.feed.reach, PubkySocialFeedReach::Wot);
         assert_eq!(feed.feed.domain_tags, Some(vec!["synonym".to_string()]));
     }
 
     #[test]
     fn test_sanitize_domain_tags() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 Some(vec!["  Synonym  ".to_string(), "  ".to_string()]),
-                PubkyAppFeedReach::Wot,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Wot,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -572,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_validate_too_many_domain_tags() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 Some(vec![
@@ -583,9 +583,9 @@ mod tests {
                     "tag5".to_string(),
                     "tag6".to_string(),
                 ]),
-                PubkyAppFeedReach::Me,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Me,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -600,13 +600,13 @@ mod tests {
 
     #[test]
     fn test_validate_domain_tag_with_invalid_char() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 Some(vec!["synonym,to".to_string()]),
-                PubkyAppFeedReach::Wot,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Wot,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_validate_too_many_tags() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec![
                     "tag1".to_string(),
@@ -632,9 +632,9 @@ mod tests {
                     "tag6".to_string(), // This exceeds feed_tags_max_count
                 ]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -652,13 +652,13 @@ mod tests {
 
     #[test]
     fn test_validate_tag_too_long() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1)]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -673,13 +673,13 @@ mod tests {
 
     #[test]
     fn test_validate_tag_with_whitespace() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bit coin".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -694,13 +694,13 @@ mod tests {
 
     #[test]
     fn test_validate_tag_with_invalid_char() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec!["bitcoin,rust".to_string()]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn test_validate_max_tags() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec![
                     "tag1".to_string(),
@@ -725,9 +725,9 @@ mod tests {
                     "tag5".to_string(),
                 ]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -741,7 +741,7 @@ mod tests {
 
     #[test]
     fn test_sanitize_filters_empty_tags() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 Some(vec![
                     "bitcoin".to_string(),
@@ -749,9 +749,9 @@ mod tests {
                     "rust".to_string(),
                 ]),
                 None,
-                PubkyAppFeedReach::Following,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::Following,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -777,13 +777,13 @@ mod tests {
         ];
 
         for (invalid_tag, expected_error) in invalid_cases {
-            let feed = PubkyAppFeed::new(
+            let feed = PubkySocialFeed::new(
                 feed_config(
                     Some(vec![invalid_tag.clone()]),
                     None,
-                    PubkyAppFeedReach::Following,
-                    PubkyAppFeedLayout::Columns,
-                    PubkyAppFeedSort::Recent,
+                    PubkySocialFeedReach::Following,
+                    PubkySocialFeedLayout::Columns,
+                    PubkySocialFeedSort::Recent,
                     None,
                 ),
                 "Test Feed".to_string(),
@@ -818,11 +818,11 @@ mod tests {
         }
         "#;
 
-        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
         let feed_id = feed.create_id();
 
         let feed_parsed =
-            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
         assert_eq!(feed_parsed.icon, Some("code-2".to_string()));
 
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -846,11 +846,11 @@ mod tests {
         }
         "#;
 
-        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
         let feed_id = feed.create_id();
 
         let feed_parsed =
-            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
         assert_eq!(feed_parsed.icon, None);
 
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -873,10 +873,10 @@ mod tests {
         }
         "#;
 
-        let feed: PubkyAppFeed = serde_json::from_str(feed_json).unwrap();
+        let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
         let feed_id = feed.create_id();
         let feed_parsed =
-            <PubkyAppFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
 
         assert_eq!(feed_parsed.icon, None);
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -885,13 +885,13 @@ mod tests {
 
     #[test]
     fn test_sanitize_icon_lowercases() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 None,
-                PubkyAppFeedReach::All,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::All,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Mixed Case Icon".to_string(),
@@ -917,13 +917,13 @@ mod tests {
         ];
 
         for (invalid_icon, expected_error) in invalid_cases {
-            let feed = PubkyAppFeed::new(
+            let feed = PubkySocialFeed::new(
                 feed_config(
                     None,
                     None,
-                    PubkyAppFeedReach::All,
-                    PubkyAppFeedLayout::Columns,
-                    PubkyAppFeedSort::Recent,
+                    PubkySocialFeedReach::All,
+                    PubkySocialFeedLayout::Columns,
+                    PubkySocialFeedSort::Recent,
                     None,
                 ),
                 "Test Feed".to_string(),
@@ -944,13 +944,13 @@ mod tests {
 
     #[test]
     fn test_validate_icon_at_max_length() {
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 None,
-                PubkyAppFeedReach::All,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::All,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -965,13 +965,13 @@ mod tests {
     fn test_validate_accepts_unknown_icon_name() {
         // Only the shape is validated; clients fall back to their default icon
         // for names outside their set.
-        let feed = PubkyAppFeed::new(
+        let feed = PubkySocialFeed::new(
             feed_config(
                 None,
                 None,
-                PubkyAppFeedReach::All,
-                PubkyAppFeedLayout::Columns,
-                PubkyAppFeedSort::Recent,
+                PubkySocialFeedReach::All,
+                PubkySocialFeedLayout::Columns,
+                PubkySocialFeedSort::Recent,
                 None,
             ),
             "Test Feed".to_string(),
@@ -986,13 +986,13 @@ mod tests {
     #[test]
     fn test_icon_does_not_change_feed_id() {
         let make_feed = |icon: &str| {
-            PubkyAppFeed::new(
+            PubkySocialFeed::new(
                 feed_config(
                     Some(vec!["rust".to_string()]),
                     None,
-                    PubkyAppFeedReach::All,
-                    PubkyAppFeedLayout::Columns,
-                    PubkyAppFeedSort::Recent,
+                    PubkySocialFeedReach::All,
+                    PubkySocialFeedLayout::Columns,
+                    PubkySocialFeedSort::Recent,
                     None,
                 ),
                 "Rust".to_string(),
@@ -1010,71 +1010,71 @@ mod tests {
     fn test_feed_reach_from_str() {
         // Valid cases
         assert_eq!(
-            "following".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::Following
+            "following".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::Following
         );
         assert_eq!(
-            "followers".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::Followers
+            "followers".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::Followers
         );
         assert_eq!(
-            "friends".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::Friends
+            "friends".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::Friends
         );
         assert_eq!(
-            "all".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::All
+            "all".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::All
         );
         assert_eq!(
-            "wot".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::Wot
+            "wot".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::Wot
         );
         assert_eq!(
-            "me".parse::<PubkyAppFeedReach>().unwrap(),
-            PubkyAppFeedReach::Me
+            "me".parse::<PubkySocialFeedReach>().unwrap(),
+            PubkySocialFeedReach::Me
         );
 
         // Invalid case
-        assert!("invalid".parse::<PubkyAppFeedReach>().is_err());
+        assert!("invalid".parse::<PubkySocialFeedReach>().is_err());
     }
 
     #[test]
     fn test_feed_layout_from_str() {
         // Valid cases
         assert_eq!(
-            "columns".parse::<PubkyAppFeedLayout>().unwrap(),
-            PubkyAppFeedLayout::Columns
+            "columns".parse::<PubkySocialFeedLayout>().unwrap(),
+            PubkySocialFeedLayout::Columns
         );
         assert_eq!(
-            "wide".parse::<PubkyAppFeedLayout>().unwrap(),
-            PubkyAppFeedLayout::Wide
+            "wide".parse::<PubkySocialFeedLayout>().unwrap(),
+            PubkySocialFeedLayout::Wide
         );
         assert_eq!(
-            "visual".parse::<PubkyAppFeedLayout>().unwrap(),
-            PubkyAppFeedLayout::Visual
+            "visual".parse::<PubkySocialFeedLayout>().unwrap(),
+            PubkySocialFeedLayout::Visual
         );
         assert_eq!(
-            "list".parse::<PubkyAppFeedLayout>().unwrap(),
-            PubkyAppFeedLayout::List
+            "list".parse::<PubkySocialFeedLayout>().unwrap(),
+            PubkySocialFeedLayout::List
         );
 
         // Invalid case
-        assert!("invalid".parse::<PubkyAppFeedLayout>().is_err());
+        assert!("invalid".parse::<PubkySocialFeedLayout>().is_err());
     }
 
     #[test]
     fn test_feed_sort_from_str() {
         // Valid cases
         assert_eq!(
-            "recent".parse::<PubkyAppFeedSort>().unwrap(),
-            PubkyAppFeedSort::Recent
+            "recent".parse::<PubkySocialFeedSort>().unwrap(),
+            PubkySocialFeedSort::Recent
         );
         assert_eq!(
-            "popularity".parse::<PubkyAppFeedSort>().unwrap(),
-            PubkyAppFeedSort::Popularity
+            "popularity".parse::<PubkySocialFeedSort>().unwrap(),
+            PubkySocialFeedSort::Popularity
         );
 
         // Invalid case
-        assert!("invalid".parse::<PubkyAppFeedSort>().is_err());
+        assert!("invalid".parse::<PubkySocialFeedSort>().is_err());
     }
 }

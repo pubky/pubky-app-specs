@@ -1,4 +1,4 @@
-import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -16,7 +16,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     specsBuilder = new PubkySpecsBuilder(OTTO);
   });
 
-  describe("User Pubky-app-specs", () => {
+  describe("User Pubky-social-specs", () => {
     it("should create user with correct properties", () => {
       const { user, meta: userMeta } = specsBuilder.createUser(
         "Alice Smith",
@@ -65,10 +65,10 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Post Pubky-app-specs", () => {
+  describe("Post Pubky-social-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(postContent, PubkyAppPostKind.Short);
+      const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Short);
 
       // Test meta properties
       assert.ok(meta.id, "Post should have an ID");
@@ -91,7 +91,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       const { post: replyPost } = specsBuilder.createPost(
         "This is a reply to the first post!",
-        PubkyAppPostKind.Short,
+        PubkySocialPostKind.Short,
         parentPostUriRaw
       );
 
@@ -105,10 +105,10 @@ describe("PubkySpecs Example Objects Tests", () => {
       const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
       assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
 
-      const embed = new PubkyAppPostEmbed(embedUriRaw, PubkyAppPostKind.Video);
+      const embed = new PubkySocialPostEmbed(embedUriRaw, PubkySocialPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
         "This is a repost to random post!",
-        PubkyAppPostKind.Short,
+        PubkySocialPostKind.Short,
         null,
         embed
       );
@@ -139,7 +139,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         () => {
           specsBuilder.createPost(
             "Post with too many attachments",
-            PubkyAppPostKind.Image,
+            PubkySocialPostKind.Image,
             null,
             null,
             attachments
@@ -164,7 +164,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         const postContent = "Visible preview for locked content";
         const { post } = specsBuilder.createPost(
           postContent,
-          PubkyAppPostKind.Long,
+          PubkySocialPostKind.Long,
           null,
           null,
           null,
@@ -178,7 +178,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
 
       it("should create unlocked post when lock is omitted", () => {
-        const { post } = specsBuilder.createPost("Hello", PubkyAppPostKind.Short);
+        const { post } = specsBuilder.createPost("Hello", PubkySocialPostKind.Short);
         const lock = post.lock;
         assert.ok(
           lock === null || lock === undefined,
@@ -192,7 +192,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
 
       it("should deserialize post without lock field as unlocked", () => {
-        const post = PubkyAppPost.fromJson({
+        const post = PubkySocialPost.fromJson({
           content: "Hello World!",
           kind: "short",
           parent: null,
@@ -211,7 +211,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkyAppPostKind.Short,
+              PubkySocialPostKind.Short,
               null,
               null,
               null,
@@ -235,7 +235,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkyAppPostKind.Short,
+              PubkySocialPostKind.Short,
               null,
               null,
               null,
@@ -325,7 +325,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Bookmark Pubky-app-specs", () => {
+  describe("Bookmark Pubky-social-specs", () => {
     it("should create bookmark with correct properties", () => {
       const postUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
 
@@ -349,7 +349,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Follow Pubky-app-specs", () => {
+  describe("Follow Pubky-social-specs", () => {
     it("should create follow with correct properties", () => {
       const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
       const followUriFromBuilder = followUriBuilder(OTTO, RIO)
@@ -370,7 +370,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Tag Pubky-app-specs", () => {
+  describe("Tag Pubky-social-specs", () => {
     it("should create tag with correct properties", () => {
       const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
       const userUriFromBuilder = userUriBuilder(OTTO)
@@ -435,7 +435,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Mute Pubky-app-specs", () => {
+  describe("Mute Pubky-social-specs", () => {
     it("should create mute with correct properties", () => {
       const { mute, meta: muteMeta } = specsBuilder.createMute(RIO);
 
@@ -454,7 +454,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("LastRead Pubky-app-specs", () => {
+  describe("LastRead Pubky-social-specs", () => {
     it("should create last_read with correct properties", () => {
       const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead(RIO);
 
@@ -472,7 +472,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Blob/File Pubky-app-specs", () => {
+  describe("Blob/File Pubky-social-specs", () => {
     it("should create blob with correct properties", () => {
       const length = 8
       const randomData = Array.from({length}, () => Math.floor(Math.random() * 256));
@@ -519,7 +519,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Feed Pubky-app-specs", () => {
+  describe("Feed Pubky-social-specs", () => {
     it("should create feed with correct properties", () => {
       const { feed, meta: feedMeta } = specsBuilder.createFeed({
         tags: ["mountain", "hike"],

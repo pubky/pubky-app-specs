@@ -1,7 +1,7 @@
 import {
-  PubkyAppPostKind,
+  PubkySocialPostKind,
   PubkySpecsBuilder,
-  PubkyAppPostEmbed,
+  PubkySocialPostEmbed,
   userUriBuilder,
   postUriBuilder,
   bookmarkUriBuilder,
@@ -85,7 +85,7 @@ header("POSTS");
 console.log(`  ${c.yellow}▸ Simple Post${c.reset}`);
 const { post, meta } = specsBuilder.createPost(
   "Hello, Pubky world! This is my first post.",
-  PubkyAppPostKind.Short
+  PubkySocialPostKind.Short
 );
 field("ID", meta.id);
 field("URL", meta.url);
@@ -96,7 +96,7 @@ console.log();
 console.log(`  ${c.yellow}▸ Reply Post${c.reset}`);
 const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   "This is a reply to the first post!",
-  PubkyAppPostKind.Short,
+  PubkySocialPostKind.Short,
   userMeta.url
 );
 field("ID", replyMeta.id);
@@ -105,13 +105,13 @@ console.log();
 
 // Repost with embed
 console.log(`  ${c.yellow}▸ Repost with Embed${c.reset}`);
-const embed = new PubkyAppPostEmbed(
+const embed = new PubkySocialPostEmbed(
   `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`,
-  PubkyAppPostKind.Video
+  PubkySocialPostKind.Video
 );
 const { post: repost, meta: repostMeta } = specsBuilder.createPost(
   "Check out this awesome video!",
-  PubkyAppPostKind.Short,
+  PubkySocialPostKind.Short,
   null,
   embed
 );
@@ -124,7 +124,7 @@ console.log();
 console.log(`  ${c.yellow}▸ Post with Attachments${c.reset}`);
 const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilder.createPost(
   "Check out these photos from my trip!",
-  PubkyAppPostKind.Image,
+  PubkySocialPostKind.Image,
   null,
   null,
   [
@@ -141,7 +141,7 @@ console.log(`  ${c.yellow}▸ Locked Post${c.reset}`);
 const lockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
 const { post: lockedPost, meta: lockedPostMeta } = specsBuilder.createPost(
   "We were reckless adopting Lightning without understanding the tradeoffs.",
-  PubkyAppPostKind.Long,
+  PubkySocialPostKind.Long,
   null,
   null,
   null,

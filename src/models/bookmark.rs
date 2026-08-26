@@ -25,15 +25,15 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppBookmark {
+pub struct PubkySocialBookmark {
     /// The URI of the resource this is a bookmark of
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     pub created_at: i64,
 }
 
-impl PubkyAppBookmark {
-    /// Creates a new `PubkyAppBookmark` instance.
+impl PubkySocialBookmark {
+    /// Creates a new `PubkySocialBookmark` instance.
     pub fn new(uri: String) -> Self {
         let created_at = timestamp();
         Self { uri, created_at }.sanitize()
@@ -42,7 +42,7 @@ impl PubkyAppBookmark {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppBookmark {
+impl PubkySocialBookmark {
     /// Serialize to JSON for WASM.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
@@ -62,16 +62,16 @@ impl PubkyAppBookmark {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppBookmark {}
+impl Json for PubkySocialBookmark {}
 
-impl HashId for PubkyAppBookmark {
+impl HashId for PubkySocialBookmark {
     /// Bookmark ID is created based on the hash of the URI bookmarked.
     fn get_id_data(&self) -> String {
         self.uri.clone()
     }
 }
 
-impl HasIdPath for PubkyAppBookmark {
+impl HasIdPath for PubkySocialBookmark {
     const PATH_SEGMENT: &'static str = "bookmarks/";
 
     fn create_path(id: &str) -> String {
@@ -79,7 +79,7 @@ impl HasIdPath for PubkyAppBookmark {
     }
 }
 
-impl Validatable for PubkyAppBookmark {
+impl Validatable for PubkySocialBookmark {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the bookmark ID
         if let Some(id) = id {
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_create_bookmark_id() {
-        let bookmark = PubkyAppBookmark {
+        let bookmark = PubkySocialBookmark {
             uri: post_uri_builder("user_id".into(), "post_id".into()),
             created_at: 1627849723,
         };
@@ -113,20 +113,20 @@ mod tests {
     #[test]
     fn test_create_path() {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-        let bookmark = PubkyAppBookmark {
+        let bookmark = PubkySocialBookmark {
             uri: post_uri,
             created_at: 1627849723,
         };
         let expected_id = bookmark.create_id();
         let expected_path = format!("{}{}bookmarks/{}", PUBLIC_PATH, APP_PATH, expected_id);
-        let path = PubkyAppBookmark::create_path(&expected_id);
+        let path = PubkySocialBookmark::create_path(&expected_id);
         assert_eq!(path, expected_path);
     }
 
     #[test]
     fn test_validate() {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-        let bookmark = PubkyAppBookmark::new(post_uri);
+        let bookmark = PubkySocialBookmark::new(post_uri);
         let id = bookmark.create_id();
         let result = bookmark.validate(Some(&id));
         assert!(result.is_ok());
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-        let bookmark = PubkyAppBookmark::new(post_uri);
+        let bookmark = PubkySocialBookmark::new(post_uri);
         let invalid_id = "INVALIDID";
         let result = bookmark.validate(Some(invalid_id));
         assert!(result.is_err());
@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_uri() {
         let post_uri = "user_id/pub/pubky.app/posts/post_id".to_string();
-        let bookmark = PubkyAppBookmark::new(post_uri);
+        let bookmark = PubkySocialBookmark::new(post_uri);
 
         let id = bookmark.create_id();
         let res = bookmark.validate(Some(&id));
@@ -163,11 +163,11 @@ mod tests {
         "#;
 
         let uri = post_uri_builder("user_id".into(), "post_id".into());
-        let bookmark = PubkyAppBookmark::new(uri.clone());
+        let bookmark = PubkySocialBookmark::new(uri.clone());
         let id = bookmark.create_id();
 
         let blob = bookmark_json.as_bytes();
-        let bookmark_parsed = <PubkyAppBookmark as Validatable>::try_from(blob, &id).unwrap();
+        let bookmark_parsed = <PubkySocialBookmark as Validatable>::try_from(blob, &id).unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);
     }

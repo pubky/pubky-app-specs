@@ -12,78 +12,78 @@ pub mod tag;
 pub mod user;
 
 use super::{
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
-    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser,
+    PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow,
+    PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 
-/// A unified enum wrapping all PubkyApp objects.
+/// A unified enum wrapping all PubkySocial objects.
 #[derive(Debug, Clone)]
-pub enum PubkyAppObject {
-    User(user::PubkyAppUser),
-    Post(post::PubkyAppPost),
-    Follow(follow::PubkyAppFollow),
-    Mute(mute::PubkyAppMute),
-    Bookmark(bookmark::PubkyAppBookmark),
-    Tag(tag::PubkyAppTag),
-    File(file::PubkyAppFile),
-    Blob(blob::PubkyAppBlob),
-    Feed(feed::PubkyAppFeed),
-    LastRead(last_read::PubkyAppLastRead),
+pub enum PubkySocialObject {
+    User(user::PubkySocialUser),
+    Post(post::PubkySocialPost),
+    Follow(follow::PubkySocialFollow),
+    Mute(mute::PubkySocialMute),
+    Bookmark(bookmark::PubkySocialBookmark),
+    Tag(tag::PubkySocialTag),
+    File(file::PubkySocialFile),
+    Blob(blob::PubkySocialBlob),
+    Feed(feed::PubkySocialFeed),
+    LastRead(last_read::PubkySocialLastRead),
 }
 
-impl PubkyAppObject {
+impl PubkySocialObject {
     /// Given a URI and a blob (raw data from the homeserver),
-    /// this function returns the fully formed PubkyAppObject.
+    /// this function returns the fully formed PubkySocialObject.
     pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {
         let parsed_uri = ParsedUri::try_from(uri.as_ref())?;
         Self::from_resource(&parsed_uri.resource, blob)
     }
 
     /// Given a Resource and a blob (raw data from the homeserver),
-    /// this function returns the fully formed PubkyAppObject.
+    /// this function returns the fully formed PubkySocialObject.
     pub fn from_resource(resource: &Resource, blob: &[u8]) -> Result<Self, String> {
         match resource {
             Resource::User => {
                 // For a user, no ID is needed (or you may use an empty string)
-                let user = <PubkyAppUser as Validatable>::try_from(blob, "")?;
-                Ok(PubkyAppObject::User(user))
+                let user = <PubkySocialUser as Validatable>::try_from(blob, "")?;
+                Ok(PubkySocialObject::User(user))
             }
             Resource::Post(post_id) => {
-                let post = <PubkyAppPost as Validatable>::try_from(blob, post_id)?;
-                Ok(PubkyAppObject::Post(post))
+                let post = <PubkySocialPost as Validatable>::try_from(blob, post_id)?;
+                Ok(PubkySocialObject::Post(post))
             }
             Resource::Follow(follow_id) => {
                 // Use the follow id from the parsed URI.
-                let follow = <PubkyAppFollow as Validatable>::try_from(blob, follow_id)?;
-                Ok(PubkyAppObject::Follow(follow))
+                let follow = <PubkySocialFollow as Validatable>::try_from(blob, follow_id)?;
+                Ok(PubkySocialObject::Follow(follow))
             }
             Resource::Mute(muted_id) => {
-                let mute = <PubkyAppMute as Validatable>::try_from(blob, muted_id)?;
-                Ok(PubkyAppObject::Mute(mute))
+                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id)?;
+                Ok(PubkySocialObject::Mute(mute))
             }
             Resource::Bookmark(bookmark_id) => {
-                let bookmark = <PubkyAppBookmark as Validatable>::try_from(blob, bookmark_id)?;
-                Ok(PubkyAppObject::Bookmark(bookmark))
+                let bookmark = <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id)?;
+                Ok(PubkySocialObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
-                let tag = <PubkyAppTag as Validatable>::try_from(blob, tag_id)?;
-                Ok(PubkyAppObject::Tag(tag))
+                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id)?;
+                Ok(PubkySocialObject::Tag(tag))
             }
             Resource::File(file_id) => {
-                let file = <PubkyAppFile as Validatable>::try_from(blob, file_id)?;
-                Ok(PubkyAppObject::File(file))
+                let file = <PubkySocialFile as Validatable>::try_from(blob, file_id)?;
+                Ok(PubkySocialObject::File(file))
             }
             Resource::Blob(blob_id) => {
-                let blob_obj = <PubkyAppBlob as Validatable>::try_from(blob, blob_id)?;
-                Ok(PubkyAppObject::Blob(blob_obj))
+                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id)?;
+                Ok(PubkySocialObject::Blob(blob_obj))
             }
             Resource::Feed(feed_id) => {
-                let feed = <PubkyAppFeed as Validatable>::try_from(blob, feed_id)?;
-                Ok(PubkyAppObject::Feed(feed))
+                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id)?;
+                Ok(PubkySocialObject::Feed(feed))
             }
             Resource::LastRead => {
-                let last_read = <PubkyAppLastRead as Validatable>::try_from(blob, "")?;
-                Ok(PubkyAppObject::LastRead(last_read))
+                let last_read = <PubkySocialLastRead as Validatable>::try_from(blob, "")?;
+                Ok(PubkySocialObject::LastRead(last_read))
             }
             Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),
         }
@@ -113,14 +113,14 @@ mod tests {
             "links": null,
             "status": "active"
         }"#;
-        let result = PubkyAppObject::from_uri(uri, user_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, user_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for user, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::User(user) => {
+            PubkySocialObject::User(user) => {
                 assert_eq!(user.name, "Alice", "User name mismatch");
                 assert_eq!(
                     user.bio.unwrap_or_default(),
@@ -145,14 +145,14 @@ mod tests {
             "embed": null,
             "attachments": null
         }"#;
-        let result = PubkyAppObject::from_uri(uri, post_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, post_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for post, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Post(post) => {
+            PubkySocialObject::Post(post) => {
                 assert_eq!(post.content, "Hello World!", "Post content mismatch");
             }
             other => panic!("Expected a Post object, got {:?}", other),
@@ -168,14 +168,14 @@ mod tests {
         let follow_json = r#"{
             "created_at": 1627849723
         }"#;
-        let result = PubkyAppObject::from_uri(uri, follow_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, follow_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for follow, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Follow(follow) => {
+            PubkySocialObject::Follow(follow) => {
                 assert_eq!(follow.created_at, 1627849723, "Follow created_at mismatch");
             }
             other => panic!("Expected a Follow object, got {:?}", other),
@@ -191,14 +191,14 @@ mod tests {
         let mute_json = r#"{
             "created_at": 1627849724
         }"#;
-        let result = PubkyAppObject::from_uri(uri, mute_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, mute_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for mute, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Mute(mute) => {
+            PubkySocialObject::Mute(mute) => {
                 assert_eq!(mute.created_at, 1627849724, "Mute created_at mismatch");
             }
             other => panic!("Expected a Mute object, got {:?}", other),
@@ -222,14 +222,14 @@ mod tests {
                 "created_at": 1627849725
             }}"#
         );
-        let result = PubkyAppObject::from_uri(uri, bookmark_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for bookmark, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Bookmark(bookmark) => {
+            PubkySocialObject::Bookmark(bookmark) => {
                 assert_eq!(bookmark.uri, post_uri, "Bookmark URI mismatch");
             }
             other => panic!("Expected a Bookmark object, got {:?}", other),
@@ -254,14 +254,14 @@ mod tests {
             "created_at": 1627849726
         }}"#
         );
-        let result = PubkyAppObject::from_uri(uri, tag_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, tag_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for tag, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Tag(tag) => {
+            PubkySocialObject::Tag(tag) => {
                 assert_eq!(tag.label, "cool", "Tag label mismatch");
             }
             other => panic!("Expected a Tag object, got {:?}", other),
@@ -281,14 +281,14 @@ mod tests {
             "content_type": "image/png",
             "size": 1024
         }"#;
-        let result = PubkyAppObject::from_uri(uri, file_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, file_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for file, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::File(file) => {
+            PubkySocialObject::File(file) => {
                 assert_eq!(file.name, "example.png", "File name mismatch");
                 assert_eq!(
                     file.src, "https://example.com/example.png",
@@ -307,14 +307,14 @@ mod tests {
         );
         // For a blob, assume the JSON is an array of numbers representing the data.
         let blob: Vec<u8> = vec![1, 2, 3, 4];
-        let result = PubkyAppObject::from_uri(uri, &blob);
+        let result = PubkySocialObject::from_uri(uri, &blob);
         assert!(
             result.is_ok(),
             "Expected a successful import for blob, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Blob(blob_obj) => {
+            PubkySocialObject::Blob(blob_obj) => {
                 let data = blob_obj.0;
                 assert_eq!(data, vec![1, 2, 3, 4], "Blob data mismatch");
             }
@@ -339,14 +339,14 @@ mod tests {
             "name": "My Feed",
             "created_at": 1627849728
         }"#;
-        let result = PubkyAppObject::from_uri(uri, feed_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, feed_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for feed, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::Feed(feed) => {
+            PubkySocialObject::Feed(feed) => {
                 assert_eq!(feed.name, "My Feed", "Feed name mismatch");
             }
             other => panic!("Expected a Feed object, got {:?}", other),
@@ -360,14 +360,14 @@ mod tests {
         let last_read_json = r#"{
             "timestamp": 1627849729
         }"#;
-        let result = PubkyAppObject::from_uri(uri, last_read_json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, last_read_json.as_bytes());
         assert!(
             result.is_ok(),
             "Expected a successful import for last_read, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkyAppObject::LastRead(last_read) => {
+            PubkySocialObject::LastRead(last_read) => {
                 assert_eq!(
                     last_read.timestamp, 1627849729,
                     "LastRead timestamp mismatch"
@@ -382,7 +382,7 @@ mod tests {
         let uri =
             "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/ID";
         let json = r#"{}"#;
-        let result = PubkyAppObject::from_uri(uri, json.as_bytes());
+        let result = PubkySocialObject::from_uri(uri, json.as_bytes());
         assert!(
             result.is_err(),
             "Expected an error for unknown resource, but got: {:?}",

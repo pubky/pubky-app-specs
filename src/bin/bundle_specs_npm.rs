@@ -8,12 +8,12 @@ use std::process::{Command, ExitStatus};
 // If the process hangs, try `cargo clean` to remove all locks.
 
 fn main() {
-    println!("🏗️ Building wasm for pubky-app-specs...");
+    println!("🏗️ Building wasm for pubky-social-specs...");
 
     build_wasm("nodejs").unwrap();
     write_validation_limits_assets().unwrap();
     patch().unwrap();
-    println!("📦 Pubky-app-specs JS binding package built successfully!");
+    println!("📦 Pubky-social-specs JS binding package built successfully!");
 }
 
 fn build_wasm(target: &str) -> io::Result<ExitStatus> {
@@ -65,7 +65,7 @@ fn write_validation_limits_assets() -> io::Result<()> {
     let pkg_dir = Path::new(&manifest_dir).join("pkg");
     fs::create_dir_all(&pkg_dir)?;
 
-    let json = serde_json::to_string_pretty(&pubky_app_specs::VALIDATION_LIMITS)
+    let json = serde_json::to_string_pretty(&pubky_social_specs::VALIDATION_LIMITS)
         .map_err(io::Error::other)?;
 
     fs::write(pkg_dir.join("validationLimits.json"), format!("{json}\n"))?;

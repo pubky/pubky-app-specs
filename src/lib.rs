@@ -13,22 +13,23 @@ pub use common::validate_crockford_id;
 #[doc(inline)]
 pub use limits::*;
 // Re-export domain types
-pub use models::blob::PubkyAppBlob;
-pub use models::bookmark::PubkyAppBookmark;
+pub use models::blob::PubkySocialBlob;
+pub use models::bookmark::PubkySocialBookmark;
 pub use models::feed::{
-    PubkyAppFeed, PubkyAppFeedConfig, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort,
+    PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
+    PubkySocialFeedSort,
 };
-pub use models::file::{PubkyAppFile, VALID_MIME_TYPES};
-pub use models::follow::PubkyAppFollow;
-pub use models::last_read::PubkyAppLastRead;
-pub use models::mute::PubkyAppMute;
+pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
+pub use models::follow::PubkySocialFollow;
+pub use models::last_read::PubkySocialLastRead;
+pub use models::mute::PubkySocialMute;
 pub use models::post::{
-    PubkyAppCollectionContent, PubkyAppCollectionLayout, PubkyAppPost, PubkyAppPostEmbed,
-    PubkyAppPostKind,
+    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialPost,
+    PubkySocialPostEmbed, PubkySocialPostKind,
 };
-pub use models::tag::PubkyAppTag;
-pub use models::user::{PubkyAppUser, PubkyAppUserLink};
-pub use models::PubkyAppObject;
+pub use models::tag::PubkySocialTag;
+pub use models::user::{PubkySocialUser, PubkySocialUserLink};
+pub use models::PubkySocialObject;
 pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{

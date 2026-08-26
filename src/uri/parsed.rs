@@ -1,7 +1,8 @@
 use crate::{
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
-    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId, APP_PATH, PROTOCOL,
+    PubkyId, PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile,
+    PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag,
+    PubkySocialUser, APP_PATH, PROTOCOL,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -19,16 +20,16 @@ impl ParsedUri {
     /// Returns an error if the resource is Unknown.
     pub fn try_to_uri_str(&self) -> Result<String, String> {
         let path = match &self.resource {
-            Resource::User => PubkyAppUser::create_path(),
-            Resource::LastRead => PubkyAppLastRead::create_path(),
-            Resource::Post(id) => PubkyAppPost::create_path(id),
-            Resource::Follow(id) => PubkyAppFollow::create_path(id.as_ref()),
-            Resource::Mute(id) => PubkyAppMute::create_path(id.as_ref()),
-            Resource::Bookmark(id) => PubkyAppBookmark::create_path(id),
-            Resource::Tag(id) => PubkyAppTag::create_path(id),
-            Resource::File(id) => PubkyAppFile::create_path(id),
-            Resource::Blob(id) => PubkyAppBlob::create_path(id),
-            Resource::Feed(id) => PubkyAppFeed::create_path(id),
+            Resource::User => PubkySocialUser::create_path(),
+            Resource::LastRead => PubkySocialLastRead::create_path(),
+            Resource::Post(id) => PubkySocialPost::create_path(id),
+            Resource::Follow(id) => PubkySocialFollow::create_path(id.as_ref()),
+            Resource::Mute(id) => PubkySocialMute::create_path(id.as_ref()),
+            Resource::Bookmark(id) => PubkySocialBookmark::create_path(id),
+            Resource::Tag(id) => PubkySocialTag::create_path(id),
+            Resource::File(id) => PubkySocialFile::create_path(id),
+            Resource::Blob(id) => PubkySocialBlob::create_path(id),
+            Resource::Feed(id) => PubkySocialFeed::create_path(id),
             Resource::Unknown => return Err("Cannot convert Unknown resource to URI".to_string()),
         };
 
@@ -63,23 +64,25 @@ fn resource_from_segments(segments: &[String]) -> Result<Resource, String> {
     match segments {
         [] => Ok(Resource::Unknown),
         [segment] => Ok(match segment.as_str() {
-            s if s == PubkyAppUser::PATH_SEGMENT.trim_end_matches('/') => Resource::User,
-            s if s == PubkyAppLastRead::PATH_SEGMENT.trim_end_matches('/') => Resource::LastRead,
+            s if s == PubkySocialUser::PATH_SEGMENT.trim_end_matches('/') => Resource::User,
+            s if s == PubkySocialLastRead::PATH_SEGMENT.trim_end_matches('/') => Resource::LastRead,
             _ => Resource::Unknown,
         }),
         [res_type, id, ..] if !id.is_empty() => {
             let resource_type = format!("{res_type}/");
             Ok(match resource_type.as_str() {
-                PubkyAppPost::PATH_SEGMENT => Resource::Post(id.clone()),
-                PubkyAppFollow::PATH_SEGMENT => {
+                PubkySocialPost::PATH_SEGMENT => Resource::Post(id.clone()),
+                PubkySocialFollow::PATH_SEGMENT => {
                     PubkyId::try_from(id.as_str()).map(Resource::Follow)?
                 }
-                PubkyAppMute::PATH_SEGMENT => PubkyId::try_from(id.as_str()).map(Resource::Mute)?,
-                PubkyAppBookmark::PATH_SEGMENT => Resource::Bookmark(id.clone()),
-                PubkyAppTag::PATH_SEGMENT => Resource::Tag(id.clone()),
-                PubkyAppFile::PATH_SEGMENT => Resource::File(id.clone()),
-                PubkyAppBlob::PATH_SEGMENT => Resource::Blob(id.clone()),
-                PubkyAppFeed::PATH_SEGMENT => Resource::Feed(id.clone()),
+                PubkySocialMute::PATH_SEGMENT => {
+                    PubkyId::try_from(id.as_str()).map(Resource::Mute)?
+                }
+                PubkySocialBookmark::PATH_SEGMENT => Resource::Bookmark(id.clone()),
+                PubkySocialTag::PATH_SEGMENT => Resource::Tag(id.clone()),
+                PubkySocialFile::PATH_SEGMENT => Resource::File(id.clone()),
+                PubkySocialBlob::PATH_SEGMENT => Resource::Blob(id.clone()),
+                PubkySocialFeed::PATH_SEGMENT => Resource::Feed(id.clone()),
                 _ => Resource::Unknown,
             })
         }

@@ -1,7 +1,8 @@
 use crate::{
     traits::{HasIdPath, HasPath},
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppFeed, PubkyAppFile, PubkyAppFollow, PubkyAppLastRead,
-    PubkyAppMute, PubkyAppPost, PubkyAppTag, PubkyAppUser, PubkyId,
+    PubkyId, PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile,
+    PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag,
+    PubkySocialUser,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -27,16 +28,16 @@ impl fmt::Display for Resource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Use the associated constant for each resource type, trimming any trailing '/'
         let name = match self {
-            Resource::User => PubkyAppUser::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::LastRead => PubkyAppLastRead::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Post(_) => PubkyAppPost::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Follow(_) => PubkyAppFollow::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Mute(_) => PubkyAppMute::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Bookmark(_) => PubkyAppBookmark::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Tag(_) => PubkyAppTag::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::File(_) => PubkyAppFile::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Blob(_) => PubkyAppBlob::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Feed(_) => PubkyAppFeed::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::User => PubkySocialUser::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::LastRead => PubkySocialLastRead::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Post(_) => PubkySocialPost::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Follow(_) => PubkySocialFollow::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Mute(_) => PubkySocialMute::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Bookmark(_) => PubkySocialBookmark::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Tag(_) => PubkySocialTag::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::File(_) => PubkySocialFile::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Blob(_) => PubkySocialBlob::PATH_SEGMENT.trim_end_matches('/'),
+            Resource::Feed(_) => PubkySocialFeed::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Unknown => "unknown",
         };
         write!(f, "{}", name)
