@@ -1,4 +1,3 @@
-use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::io;
@@ -78,8 +77,6 @@ fn write_validation_limits_assets() -> io::Result<()> {
         validation_limits_cjs(),
     )?;
 
-    update_package_json(&pkg_dir)?;
-
     Ok(())
 }
 
@@ -103,62 +100,4 @@ module.exports = {\n\
   getValidationLimits: clone,\n\
   default: limits,\n\
 };\n"
-}
-
-fn update_package_json(pkg_dir: &Path) -> io::Result<()> {
-    let package_json_path = pkg_dir.join("package.json");
-    let package_json = fs::read_to_string(&package_json_path)?;
-    let mut package: Value = serde_json::from_str(&package_json).map_err(io::Error::other)?;
-
-    ensure_files(&mut package);
-    ensure_exports(&mut package);
-
-    let updated = serde_json::to_string_pretty(&package).map_err(io::Error::other)?;
-    fs::write(package_json_path, format!("{updated}\n"))?;
-    Ok(())
-}
-
-fn ensure_files(package: &mut Value) {
-    if package.get("files").is_none() {
-        package["files"] = Value::Array(Vec::new());
-    }
-
-    let files = package
-        .get_mut("files")
-        .and_then(Value::as_array_mut)
-        .expect("files array");
-
-    for entry in [
-        "validationLimits.json",
-        "validationLimits.js",
-        "validationLimits.cjs",
-    ] {
-        if !files.iter().any(|value| value.as_str() == Some(entry)) {
-            files.push(Value::String(entry.to_string()));
-        }
-    }
-}
-
-fn ensure_exports(package: &mut Value) {
-    if package.get("exports").is_none() {
-        package["exports"] = Value::Object(serde_json::Map::new());
-    }
-
-    let exports = package
-        .get_mut("exports")
-        .and_then(Value::as_object_mut)
-        .expect("exports object");
-
-    exports
-        .entry("./validationLimits".to_string())
-        .or_insert_with(|| {
-            json!({
-                "import": "./validationLimits.js",
-                "require": "./validationLimits.cjs"
-            })
-        });
-
-    exports
-        .entry("./validationLimits.json".to_string())
-        .or_insert_with(|| Value::String("./validationLimits.json".to_string()));
 }
