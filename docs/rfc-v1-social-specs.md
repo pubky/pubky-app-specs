@@ -274,8 +274,9 @@ pass removes it once the owner agrees (Part C).
 
   Pinned rules replace them: a strict raw-string canonicalizer, a frozen whitespace table,
   ASCII-only label folding, and code-point lengths. A frozen table is a committed list of code
-  points that never tracks Unicode updates. The Rust crate and the hand-written JS package
-  reproduce all of it byte-for-byte.
+  points that never tracks Unicode updates. One implementation, the crate, ships native to the
+  indexer and as wasm to the app. The pinned rules are what a second implementation would have to
+  reproduce byte-for-byte, and they keep that door open without re-iding data.
 - **No silent sanitize-rewrites.** v0 rewrote `[DELETED]` names to "anonymous", and it truncated
   over-long input and then blanked it. In v1 invalid input is a validation error.
 
@@ -385,6 +386,9 @@ anything further is additive under the forward-compat contract.
 
 Private collections come free from the dual-root post family.
 
+Tracks current v0 (#147): the optional `layout` preference (`grid`, `list`, `visual`) stays, and it
+gains `Unknown` like every other wire enum.
+
 ## B5. Tag
 `tags/{id}.json`. Id = `HashId("{target}:{label}")`, the target canonicalized, the label
 frozen-trimmed and ASCII-folded
@@ -476,6 +480,9 @@ v0 `pub/pubky.app/feeds/{HashId(serde-json config)}` (public) -> v1
 - Tracks current v0 (#143): the `wot` and `me` reach values and the optional `domain_tags`
   filter (same folding and cap rules as tags) are part of the v1 model, and `domain_tags`
   participates in the id (two feeds differing only in domain filter are different feeds).
+- Tracks current v0 (#149) too: the optional `icon` name stays. It sits outside the id, because a
+  feed is identified by what it filters, not by how it looks, and a published copy carries it
+  alongside `name`.
 - All three enums gain `Unknown` (v0 hard-crashes old clients on any new reach/layout/sort value);
   `name` gains a cap.
 
@@ -488,11 +495,11 @@ is Appendix A; the reference crate and its committed conformance vectors are the
 
 ## B14. IDs
 TimestampId (post and edit ids), HashId (tag/media/feed files, 128-bit), PubkyId (host/follow/mute), all
-under the canonical-encoding rule (B0). TimestampId gains a per-session monotonic mint guard (the
-JS runtime mints at ms resolution, so same-ms writes would clobber on path). **The guard
+under the canonical-encoding rule (B0). TimestampId gains a per-session monotonic mint guard (in the
+browser the crate mints at ms resolution, so same-ms writes would clobber on path). **The guard
 constrains MINTING only.** Copying, publishing and migration reuse an id that already exists and
 never mint, so none of them is affected by it. No id function
-content-addresses a serialized struct, so the Rust/JS byte-identity surface is pure string/byte
+content-addresses a serialized struct, so the byte-identity surface is pure string/byte
 functions.
 
 # Part C: Migration
@@ -591,7 +598,7 @@ against the owner's own writes, and public tombstones would leak deletion metada
 # Part C2: Client conformance
 
 Everything above defines what a valid object is, and almost all of it is enforced by the shipped
-artifacts. The crate and the JS package carry the types, the validators, the builders and the size
+artifacts. The crate, native and as wasm, carries the types, the validators, the builders and the size
 checks. A conforming implementation cannot produce an invalid object even by accident.
 
 This section collects the exception: rules a pure-function library cannot enforce, because they
@@ -685,7 +692,8 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 
 **Spine (serialized):**
 - [ ] **S1** rename crate + types (wire-invariant).
-- [ ] **S2** retire the wasm surface; native rlib; single-sourced DATA assets (limits, enum names).
+- [ ] **S2** fix the wasm packaging: a build never rewrites a tracked file; the limits asset is
+  generated at build.
 - [ ] **S3** forward-compat contract (`Unknown` on every wire enum).
 - [ ] **S4** validation core: limits table, canonical id validators, frozen text ops, mint guard.
 - [ ] **S5** path epoch + canonicalizers + parser (atomic).
@@ -700,14 +708,18 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 - [ ] **S10** private tier + bookmarks.
 - [ ] **S11** legacy_v0 module + cross-epoch normalization (`stable_id`/`resolve_deref`).
 
-**Pure-JS + gate:**
+**Conformance corpus + JS surface:**
 - [ ] **J1** Rust conformance-vector generator (byte-identity + verdict tiers, fuzzed).
-- [ ] **J2** hand-written pure-JS package (ids, paths, canonicalizers, validation, builders).
-- [ ] **J3** merge-blocking differential CI gate.
+- [ ] **J2** the v1 wasm surface: function-shaped exports returning `{object, meta}`, an explicit
+  `init()`, TS types.
+- **J3** differential gate, retired: a pure-JS implementation is deferred past v1, and the gate
+  returns with it.
 
 **Migrator:**
-- [ ] **M1** transform registry + v0 reader (Rust reference emits semantic vectors).
-- [ ] **M2** engine (epoch discovery, compare-based resume, abort-if-no-`/priv/`). Acceptance
+- [ ] **M1** transform registry + v0 reader, in the crate behind a `migrator` feature and shipped
+  in the same wasm (semantic vectors committed).
+- [ ] **M2** engine in pubky-app (epoch discovery, compare-based resume, abort-if-no-`/priv/`),
+  calling the M1 transforms. Acceptance
   includes two mismatch cases: a destination that exists but does not match its source, and a
   source edited after it was migrated. Both must be re-migrated, not skipped.
 - [ ] **M3** pubky.app `/migrate` route (caps, upgrade flow, live counts, and the import of
@@ -733,13 +745,13 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 - [ ] **REL** release `1.0.0` (crate + npm), merge `v1` to main after nexus dual-read is live.
 
 **Dependencies** (beyond the serialized spine order above): S11 needs S5. J1 needs S5 and
-regenerates as later S tasks land; J2 needs J1; J3 needs J2 and is merge-blocking from then on.
-M1 needs S11; M2 needs M1 and IN-PRIV; M3 needs M2 and J2. Nexus dual-read must be live before
+regenerates as later S tasks land; J2 needs J1 and S11. M1 needs J2 and S11; M2 needs M1 and
+IN-PRIV; M3 needs M2. Nexus dual-read must be live before
 any client writes v1 data; the pubky-app track needs J2 and that nexus gate. REL is last.
 
 **Acceptance, every task:** its listed artifact lands with the full CI bar green (fmt, clippy
-with warnings denied, tests, doctests, feature checks, regenerate-and-diff on committed data
-assets); from J3 on, additionally the Rust/JS differential gate.
+with warnings denied, tests, doctests, feature checks, the wasm and npm legs, and a clean tree
+after the package build).
 
 # Part E: Folds in and supersedes
 
@@ -880,8 +892,7 @@ consequence:
 - Structure inside the remainder is never validated. A malformed query string in an `https` value
   is accepted; a percent-sequence is neither decoded nor checked.
 
-Both implementations reproduce these gates byte-for-byte, and the committed conformance vectors
-cover them, including the rejection cases (embedded tab, embedded newline, control characters,
+The committed conformance vectors cover these gates, including the rejection cases (embedded tab, embedded newline, control characters,
 a scheme with a leading digit, a bare scheme with no remainder, and over-cap values).
 
 ## A6. Representative vectors
