@@ -3,18 +3,16 @@ name = "pubky-social-specs"
 version = "1.0.0-alpha.1"
 edition = "2021"
 rust-version = "1.89"
-description = "Pubky.app data models with validation, sanitization, and URI helpers"
+description = "Pubky social data models with validation, sanitization, and URI helpers"
 readme = "README.md"
 homepage = "https://pubky.app"
 repository = "https://github.com/pubky/pubky-social-specs"
 license = "MIT"
 documentation = "https://docs.rs/pubky-social-specs"
-keywords = ["pubky", "pubky-app", "nexus", "social", "watcher"]
+keywords = ["pubky", "pubky-social", "nexus", "social", "watcher"]
 exclude = [
     ".github",
     "pkg",
-    "test",
-    "build.sh",
     "src/bin",
 ]
 

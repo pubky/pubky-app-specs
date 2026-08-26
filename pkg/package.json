@@ -7,7 +7,7 @@
     "tipogi",
     "ok300"
   ],
-  "description": "Pubky.app Data Model Specifications",
+  "description": "Pubky social data model specifications",
   "devDependencies": {
     "mocha": "^11.7.5"
   },
@@ -35,7 +35,7 @@
   ],
   "homepage": "https://pubky.app",
   "keywords": [
-    "pubky-app",
+    "pubky-social",
     "pubky-nexus",
     "specs"
   ],

@@ -36,6 +36,13 @@ jobs:
         cd ./pkg
         npm run build
 
+    - name: Build left the tracked package files untouched
+      run: |
+        if [ -n "$(git status --porcelain pkg/)" ]; then
+          git status --short pkg/
+          exit 1
+        fi
+
     - name: Run JS tests
       run: |        
         cd ./pkg

@@ -1,6 +1,7 @@
 # Data model specification
 
-_Version 0.7.0_
+> Legacy 0.x layout: the `pub/pubky.app` tree written by pubky-app-specs 0.x, up to 0.8.0 (commit
+> `3eebe18`). Kept for reading un-migrated data. The 1.x design is in `docs/rfc-v1-social-specs.md`.
 
 ## Table of Contents
 
@@ -31,7 +32,7 @@ _Version 0.7.0_
 
 This document specifies the data models and validation rules for the **Pubky.app** clients interactions. It defines the structure of data entities, their properties, and the validation rules to ensure data integrity and consistency. This is intended for developers building compatible libraries or clients.
 
-This document is a faithful representation of our [Rust pubky.app models](https://github.com/pubky/pubky-app-specs/tree/main/src).
+This document is a faithful representation of the [Rust models at 0.8.0](https://github.com/pubky/pubky-social-specs/tree/3eebe18/src).
 
 ---
 
