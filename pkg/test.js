@@ -16,7 +16,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     specsBuilder = new PubkySpecsBuilder(OTTO);
   });
 
-  describe("User Pubky-app-specs", () => {
+  describe("User Pubky-social-specs", () => {
     it("should create user with correct properties", () => {
       const { user, meta: userMeta } = specsBuilder.createUser(
         "Alice Smith",
@@ -65,7 +65,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Post Pubky-app-specs", () => {
+  describe("Post Pubky-social-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
       const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Short);
@@ -325,7 +325,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Bookmark Pubky-app-specs", () => {
+  describe("Bookmark Pubky-social-specs", () => {
     it("should create bookmark with correct properties", () => {
       const postUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
 
@@ -349,7 +349,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Follow Pubky-app-specs", () => {
+  describe("Follow Pubky-social-specs", () => {
     it("should create follow with correct properties", () => {
       const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
       const followUriFromBuilder = followUriBuilder(OTTO, RIO)
@@ -370,7 +370,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Tag Pubky-app-specs", () => {
+  describe("Tag Pubky-social-specs", () => {
     it("should create tag with correct properties", () => {
       const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
       const userUriFromBuilder = userUriBuilder(OTTO)
@@ -435,7 +435,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Mute Pubky-app-specs", () => {
+  describe("Mute Pubky-social-specs", () => {
     it("should create mute with correct properties", () => {
       const { mute, meta: muteMeta } = specsBuilder.createMute(RIO);
 
@@ -454,7 +454,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("LastRead Pubky-app-specs", () => {
+  describe("LastRead Pubky-social-specs", () => {
     it("should create last_read with correct properties", () => {
       const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead(RIO);
 
@@ -472,7 +472,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Blob/File Pubky-app-specs", () => {
+  describe("Blob/File Pubky-social-specs", () => {
     it("should create blob with correct properties", () => {
       const length = 8
       const randomData = Array.from({length}, () => Math.floor(Math.random() * 256));
@@ -519,7 +519,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Feed Pubky-app-specs", () => {
+  describe("Feed Pubky-social-specs", () => {
     it("should create feed with correct properties", () => {
       const { feed, meta: feedMeta } = specsBuilder.createFeed({
         tags: ["mountain", "hike"],

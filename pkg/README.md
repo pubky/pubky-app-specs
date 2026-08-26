@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/pubky-social-specs)](https://www.npmjs.com/package/pubky-social-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-JavaScript and TypeScript bindings for Pubky.app data models, generated from the canonical Rust specs.
+JavaScript and TypeScript bindings for Pubky social data models, generated from the canonical Rust crate.
 
 The package initializes WASM automatically, so no manual `.wasm` loading is required.
 

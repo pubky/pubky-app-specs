@@ -68,4 +68,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: '! git grep -n -E "PubkyApp[A-Za-z]|pubky_app_specs|pubky-app-specs" -- src tests examples Cargo.toml README.md docs/UNICODE_NOTES.md pkg/README.md pkg/package.json'
+      - run: '! git grep -n -E "PubkyApp[A-Za-z]|pubky_app_specs|pubky-app-specs" -- . ":!SPEC.md" ":!docs/SPEC_V0.md" ":!.github/workflows/rust-checks.yml"'

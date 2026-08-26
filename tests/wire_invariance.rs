@@ -1,5 +1,6 @@
 //! Serialized bytes of every v0 wire model, pinned as literals so a rename or refactor that
-//! changes a serde attribute fails here before it reaches a homeserver.
+//! changes a serde attribute fails here before it reaches a homeserver. Captured from the 0.8.0
+//! crate (commit 3eebe18), before the rename. `{PK}` stands in for the host key.
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
@@ -8,7 +9,7 @@ use pubky_social_specs::{
     PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
     PubkySocialFile, PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost,
     PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink, Resource,
+    PubkySocialUserLink, Resource, VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
@@ -177,17 +178,18 @@ fn extended_universal_tag() -> ExtendedParsedUri {
 }
 
 /// The parse types are not stored objects, but they derive serde, so their names are pinned too.
+#[rustfmt::skip]
 fn pinned() -> Vec<(&'static str, String, &'static str)> {
     vec![
         (
             "user",
             json(&user()),
-            r#"{"name":"Alice","bio":"bio","image":"pubky://PK/pub/pubky.app/files/0032SSN7Q4EVG","links":[{"title":"site","url":"https://example.com/"}],"status":"here"}"#,
+            r#"{"name":"Alice","bio":"bio","image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","links":[{"title":"site","url":"https://example.com/"}],"status":"here"}"#,
         ),
         (
             "post_full",
             json(&post_full()),
-            r#"{"content":"hello","kind":"short","parent":"pubky://PK/pub/pubky.app/posts/0032SSN7Q4EVG","embed":{"kind":"short","uri":"pubky://PK/pub/pubky.app/posts/0034A0X7NJ52G"},"attachments":["pubky://PK/pub/pubky.app/files/0032SSN7Q4EVG"],"lock":"pubky://PK/pub/app.locks/0032SSN7Q4EVG.json"}"#,
+            r#"{"content":"hello","kind":"short","parent":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","embed":{"kind":"short","uri":"pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G"},"attachments":["pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG"],"lock":"pubky://{PK}/pub/app.locks/0032SSN7Q4EVG.json"}"#,
         ),
         (
             "post_minimal",
@@ -197,12 +199,12 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "tag",
             json(&tag()),
-            r#"{"uri":"pubky://PK/pub/pubky.app/posts/0032SSN7Q4EVG","label":"rust","created_at":1727740800000000}"#,
+            r#"{"uri":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","label":"rust","created_at":1727740800000000}"#,
         ),
         (
             "bookmark",
             json(&bookmark()),
-            r#"{"uri":"pubky://PK/pub/pubky.app/posts/0032SSN7Q4EVG","created_at":1727740800000000}"#,
+            r#"{"uri":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","created_at":1727740800000000}"#,
         ),
         (
             "follow",
@@ -223,7 +225,7 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "file",
             json(&file()),
-            r#"{"name":"cat.jpg","created_at":1727740800000000,"src":"pubky://PK/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG","content_type":"image/jpeg","size":1234}"#,
+            r#"{"name":"cat.jpg","created_at":1727740800000000,"src":"pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG","content_type":"image/jpeg","size":1234}"#,
         ),
         ("blob", json(&blob()), r#"[1,2]"#),
         (
@@ -234,7 +236,7 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "collection_with_layout",
             json(&collection_with_layout()),
-            r#"{"name":"Photos","description":"mine","items":["pubky://PK/pub/pubky.app/posts/0032SSN7Q4EVG"],"cover_image":"pubky://PK/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
+            r#"{"name":"Photos","description":"mine","items":["pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"],"cover_image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
         ),
         (
             "collection_legacy",
@@ -244,17 +246,17 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "parsed_uri",
             json(&parsed_uri()),
-            r#"{"user_id":"PK","resource":{"Post":"0032SSN7Q4EVG"}}"#,
+            r#"{"user_id":"{PK}","resource":{"Post":"0032SSN7Q4EVG"}}"#,
         ),
         (
             "extended_app",
             json(&extended_app()),
-            r#"{"PubkyApp":{"user_id":"PK","resource":"User"}}"#,
+            r#"{"PubkyApp":{"user_id":"{PK}","resource":"User"}}"#,
         ),
         (
             "extended_universal_tag",
             json(&extended_universal_tag()),
-            r#"{"UniversalTag":{"user_id":"PK","app":"mapky.app","resource":{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}}}"#,
+            r#"{"UniversalTag":{"user_id":"{PK}","app":"mapky.app","resource":{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}}}"#,
         ),
     ]
 }
@@ -262,6 +264,61 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
 #[test]
 fn wire_bytes_are_unchanged() {
     for (name, actual, expected) in pinned() {
-        assert_eq!(actual, expected.replace("PK", PK), "{name}");
+        assert_eq!(actual, expected.replace("{PK}", PK), "{name}");
     }
+}
+
+fn pk() -> PubkyId {
+    PubkyId::try_from(PK).unwrap()
+}
+
+/// Every variant of every serde enum, so a rename that touches a variant name fails here.
+#[rustfmt::skip]
+fn pinned_variants() -> Vec<(String, &'static str)> {
+    use PubkySocialCollectionLayout as C;
+    use PubkySocialFeedLayout as L;
+    use PubkySocialFeedReach as R;
+    use PubkySocialFeedSort as S;
+    use PubkySocialPostKind as K;
+    let h = "8Z8CWH8NVYQY39ZEBFGKQWWEKG".to_string();
+    vec![
+        (json(&Resource::User), r#""User""#),
+        (json(&Resource::Post("0032SSN7Q4EVG".into())), r#"{"Post":"0032SSN7Q4EVG"}"#),
+        (json(&Resource::Follow(pk())), r#"{"Follow":"{PK}"}"#),
+        (json(&Resource::Mute(pk())), r#"{"Mute":"{PK}"}"#),
+        (json(&Resource::Bookmark(h.clone())), r#"{"Bookmark":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::Tag(h.clone())), r#"{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::File("0032SSN7Q4EVG".into())), r#"{"File":"0032SSN7Q4EVG"}"#),
+        (json(&Resource::Blob(h.clone())), r#"{"Blob":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::Feed(h)), r#"{"Feed":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::LastRead), r#""LastRead""#),
+        (json(&Resource::Unknown), r#""Unknown""#),
+        (json(&K::Short), r#""short""#), (json(&K::Long), r#""long""#), (json(&K::Image), r#""image""#),
+        (json(&K::Video), r#""video""#), (json(&K::Link), r#""link""#), (json(&K::File), r#""file""#),
+        (json(&K::Collection), r#""collection""#), (json(&K::Unknown), r#""unknown""#),
+        (json(&R::Following), r#""following""#), (json(&R::Followers), r#""followers""#),
+        (json(&R::Friends), r#""friends""#), (json(&R::All), r#""all""#), (json(&R::Wot), r#""wot""#),
+        (json(&R::Me), r#""me""#),
+        (json(&L::Columns), r#""columns""#), (json(&L::Wide), r#""wide""#), (json(&L::Visual), r#""visual""#),
+        (json(&L::List), r#""list""#),
+        (json(&S::Recent), r#""recent""#), (json(&S::Popularity), r#""popularity""#),
+        (json(&C::Grid), r#""grid""#), (json(&C::List), r#""list""#), (json(&C::Visual), r#""visual""#),
+        (json(&C::Unknown), r#""unknown""#),
+    ]
+}
+
+#[test]
+fn every_enum_variant_serializes_as_before() {
+    for (actual, expected) in pinned_variants() {
+        assert_eq!(actual, expected.replace("{PK}", PK));
+    }
+}
+
+/// The limits table ships to npm as `validationLimits.json`, so its keys are wire too.
+#[test]
+fn validation_limits_keys_are_unchanged() {
+    assert_eq!(
+        json(&VALIDATION_LIMITS),
+        r#"{"maxBlobSizeBytes":104857600,"maxFileSizeBytes":104857600,"tagLabelMinLength":1,"tagLabelMaxLength":20,"tagInvalidChars":[",",":"," ","\t","\n","\r"],"userNameMinLength":3,"userNameMaxLength":50,"userBioMaxLength":160,"userImageUrlMaxLength":300,"userLinksMaxCount":5,"userLinkTitleMaxLength":100,"userLinkUrlMaxLength":300,"userStatusMaxLength":50,"postShortContentMaxLength":2000,"postLongContentMaxLength":50000,"postAttachmentsMaxCount":10,"postAttachmentUrlMaxLength":200,"postAllowedAttachmentProtocols":["pubky","http","https"],"collectionContentMaxLength":40000,"collectionNameMinLength":1,"collectionNameMaxLength":100,"collectionDescriptionMaxLength":500,"collectionItemsMaxCount":100,"fileNameMinLength":1,"fileNameMaxLength":255,"fileSrcMaxLength":1024,"feedTagsMaxCount":5,"feedIconMaxLength":50}"#
+    );
 }
