@@ -150,7 +150,7 @@ if (!validMimeTypes.includes(file.type)) {
 
 ## Specification
 
-See the [full data model specification](https://github.com/pubky/pubky-social-specs/blob/main/SPEC.md) for URI layout, field rules, examples, and validation behavior.
+The legacy 0.x layout is documented in [`docs/SPEC_V0.md`](https://github.com/pubky/pubky-social-specs/blob/v1/docs/SPEC_V0.md), for reading un-migrated data.
 
 ## Building from Source
 
