@@ -63,3 +63,10 @@ jobs:
 
       - name: Verify crates.io package
         run: cargo publish --dry-run
+
+  old-names:
+    name: no pre-rename identifiers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: '! git grep -n "PubkyApp\|pubky_app_specs" -- src tests examples'
