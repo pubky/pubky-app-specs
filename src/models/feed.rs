@@ -21,6 +21,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedReach {
     Following,
     Followers,
@@ -44,6 +45,7 @@ impl PubkySocialFeedReach {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedLayout {
     Columns,
     Wide,
@@ -65,6 +67,7 @@ impl PubkySocialFeedLayout {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedSort {
     Recent,
     Popularity,

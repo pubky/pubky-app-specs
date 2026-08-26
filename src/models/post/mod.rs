@@ -30,6 +30,7 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialPostKind {
     #[default]
     Short,

@@ -18,7 +18,9 @@
 //! the object; `Unknown` in an optional, secondary enum (for example
 //! `feed.content` or `collection.layout`) degrades to "no constraint": a
 //! consumer treats it as no filter. Deserialization itself never fails on
-//! an unrecognized variant.
+//! an unrecognized variant. The same enums are `#[non_exhaustive]`, so a
+//! variant added later is a minor release: downstream matches must carry a
+//! wildcard arm, which is the same discipline `Unknown` already asks for.
 //!
 //! One known limit: a feed id is still derived from the serialized config,
 //! so on the id-checked read path a feed carrying an unrecognized value

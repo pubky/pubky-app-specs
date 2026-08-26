@@ -19,6 +19,7 @@ use super::super::PubkySocialPost;
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PubkySocialCollectionLayout {
     Grid,
     List,
