@@ -1,6 +1,6 @@
 {
   "bugs": {
-    "url": "https://github.com/pubky/pubky-app-specs/issues"
+    "url": "https://github.com/pubky/pubky-social-specs/issues"
   },
   "contributors": [
     "SHAcollision",
@@ -45,7 +45,7 @@
   "name": "pubky-social-specs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pubky/pubky-app-specs.git"
+    "url": "git+https://github.com/pubky/pubky-social-specs.git"
   },
   "scripts": {
     "build": "cargo run --bin bundle_specs_npm",

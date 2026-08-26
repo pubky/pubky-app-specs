@@ -20,7 +20,7 @@ Rust types, sanitization, and validation for [Pubky.app](https://pubky.app) data
 cargo add pubky-social-specs
 ```
 
-**JavaScript / TypeScript** ([npm](https://www.npmjs.com/package/pubky-social-specs)): see [`pkg/README.md`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/README.md).
+**JavaScript / TypeScript** ([npm](https://www.npmjs.com/package/pubky-social-specs)): see [`pkg/README.md`](https://github.com/pubky/pubky-social-specs/blob/main/pkg/README.md).
 
 ## Rust quick start
 
@@ -40,7 +40,7 @@ let json = to_vec(&user).unwrap();
 let profile = PubkySocialUser::try_from(&json, "").unwrap();
 ```
 
-For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/pubky/pubky-app-specs/blob/main/examples/create_user.rs).
+For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/pubky/pubky-social-specs/blob/main/examples/create_user.rs).
 
 ## Why use this crate
 
@@ -78,7 +78,7 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 
 ## Specification
 
-See the [full data model specification](https://github.com/pubky/pubky-app-specs/blob/main/SPEC.md) for URI layout, examples, and validation rules.
+See the [full data model specification](https://github.com/pubky/pubky-social-specs/blob/main/SPEC.md) for URI layout, examples, and validation rules.
 
 ## License
 
