@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how string length validation works in `pubky-app-specs` and the important differences between JavaScript's native string length and Rust's character counting.
+This document explains how string length validation works in `pubky-social-specs` and the important differences between JavaScript's native string length and Rust's character counting.
 
 ## The Problem
 
@@ -40,7 +40,7 @@ Characters **outside the BMP** (U+10000 and above) require a **surrogate pair** 
 
 ## Our Solution: WASM-Based Validation
 
-All validation in `pubky-app-specs` happens **inside the WASM module** (Rust), not in JavaScript.
+All validation in `pubky-social-specs` happens **inside the WASM module** (Rust), not in JavaScript.
 
 ### Architecture
 
@@ -48,7 +48,7 @@ All validation in `pubky-app-specs` happens **inside the WASM module** (Rust), n
 ┌─────────────────────────────────────────────────────────┐
 │                    JavaScript Client                     │
 │                                                         │
-│   const user = PubkyAppUser.fromJson({                  │
+│   const user = PubkySocialUser.fromJson({                  │
 │       name: "Alice🔥",                                  │
 │       bio: "Hello 𓀀"                                   │
 │   });                                                   │
@@ -96,14 +96,14 @@ fn validate(&self, _id: Option<&str>) -> Result<(), String> {
 
 ## Client-Side Validation
 
-For client-side validation (for UX feedback), we recommend relying on the existing pubky-app-specs validation in the WASM module.
+For client-side validation (for UX feedback), we recommend relying on the existing pubky-social-specs validation in the WASM module.
 
 ### How to Validate in Your Application
 
 The WASM module automatically validates all objects when you create them or parse them from JSON. Use these methods for validation:
 
 ```javascript
-import { PubkySpecsBuilder, PubkyAppUser } from "pubky-app-specs";
+import { PubkySpecsBuilder, PubkySocialUser } from "pubky-social-specs";
 
 // Method 1: Using builder
 try {
@@ -120,7 +120,7 @@ try {
 
 // Method 2: From JSON
 try {
-    const user = PubkyAppUser.fromJson({
+    const user = PubkySocialUser.fromJson({
         name: "Alice🔥",
         bio: "Bio with 𓀀",
         image: null,

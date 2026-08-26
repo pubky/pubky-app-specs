@@ -5,7 +5,6 @@ on:
   push:
     branches: ["main", "v1"]
   pull_request:
-    branches: ["main", "v1"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -69,4 +68,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: '! git grep -n "PubkyApp\|pubky_app_specs" -- src tests examples'
+      - run: '! git grep -n -E "PubkyApp[A-Za-z]|pubky_app_specs" -- src tests examples README.md docs/UNICODE_NOTES.md'

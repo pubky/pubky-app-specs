@@ -3,11 +3,12 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    PubkySocialBlob, PubkySocialBookmark, PubkySocialCollectionContent,
-    PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
-    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow,
-    PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialPostEmbed,
-    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink,
+    ExtendedParsedUri, ParsedUri, PubkyId, PubkySocialBlob, PubkySocialBookmark,
+    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
+    PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
+    PubkySocialFile, PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost,
+    PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
+    PubkySocialUserLink, Resource,
 };
 use serde::Serialize;
 
@@ -153,6 +154,29 @@ fn collection_legacy() -> PubkySocialCollectionContent {
 }
 
 /// Captured from the 0.8.0 crate (commit 3eebe18), before the rename. `PK` stands in for the host key.
+fn parsed_uri() -> ParsedUri {
+    ParsedUri {
+        user_id: PubkyId::try_from(PK).unwrap(),
+        resource: Resource::Post("0032SSN7Q4EVG".into()),
+    }
+}
+
+fn extended_app() -> ExtendedParsedUri {
+    ExtendedParsedUri::PubkyApp {
+        user_id: PubkyId::try_from(PK).unwrap(),
+        resource: Resource::User,
+    }
+}
+
+fn extended_universal_tag() -> ExtendedParsedUri {
+    ExtendedParsedUri::UniversalTag {
+        user_id: PubkyId::try_from(PK).unwrap(),
+        app: "mapky.app".into(),
+        resource: Resource::Tag("8Z8CWH8NVYQY39ZEBFGKQWWEKG".into()),
+    }
+}
+
+/// The parse types are not stored objects, but they derive serde, so their names are pinned too.
 fn pinned() -> Vec<(&'static str, String, &'static str)> {
     vec![
         (
@@ -216,6 +240,21 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
             "collection_legacy",
             json(&collection_legacy()),
             r#"{"name":"Photos","items":[]}"#,
+        ),
+        (
+            "parsed_uri",
+            json(&parsed_uri()),
+            r#"{"user_id":"PK","resource":{"Post":"0032SSN7Q4EVG"}}"#,
+        ),
+        (
+            "extended_app",
+            json(&extended_app()),
+            r#"{"PubkyApp":{"user_id":"PK","resource":"User"}}"#,
+        ),
+        (
+            "extended_universal_tag",
+            json(&extended_universal_tag()),
+            r#"{"UniversalTag":{"user_id":"PK","app":"mapky.app","resource":{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}}}"#,
         ),
     ]
 }
