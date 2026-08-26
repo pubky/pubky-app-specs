@@ -1,6 +1,7 @@
-# Data model specification
+# Data model specification (legacy 0.x layout)
 
-_Version 0.7.0_
+> Describes the `pub/pubky.app` layout written by pubky-app-specs 0.x, up to 0.8.0. Kept as the
+> reference for reading un-migrated data. The 1.x layout is specified separately.
 
 ## Table of Contents
 

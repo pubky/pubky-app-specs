@@ -39,9 +39,9 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 
 ## Why use this crate
 
-- **Validation consistency** — same sanitization and validation rules as Pubky indexers.
-- **Auto IDs and paths** — generates IDs, paths, and URLs according to Pubky standards.
-- **Single source of truth** — Rust models drive native apps, WASM bindings, and this spec.
+- **Validation consistency:** same sanitization and validation rules as Pubky indexers.
+- **Auto IDs and paths:** generates IDs, paths, and URLs according to Pubky standards.
+- **Single source of truth:** Rust models drive native apps, WASM bindings, and this spec.
 
 ## Features
 
@@ -73,7 +73,7 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 
 ## Specification
 
-See the [full data model specification](https://github.com/pubky/pubky-social-specs/blob/main/SPEC.md) for URI layout, examples, and validation rules.
+The legacy 0.x layout is documented in [`docs/SPEC_V0.md`](https://github.com/pubky/pubky-social-specs/blob/v1/docs/SPEC_V0.md), for reading un-migrated data.
 
 ## License
 
