@@ -1,3 +1,22 @@
+//! # Forward-compatibility contract (permanent)
+//!
+//! Every JSON object stored on a homeserver obeys two rules, forever:
+//!
+//! 1. Never `#[serde(deny_unknown_fields)]`, on any model. Unknown fields
+//!    are ignored on read; a newer writer must never be able to break an
+//!    older reader by adding a field.
+//! 2. Additive fields only. Every field added to a model after it first
+//!    ships MUST be `Option<T>` + `#[serde(default)]` +
+//!    `#[serde(skip_serializing_if = "Option::is_none")]`, so old data
+//!    reads back cleanly and old readers never see a shape change.
+//!
+//! Every wire enum carries a `#[serde(other)] Unknown` catch-all and an
+//! `is_known()` helper. `Unknown` in an object's PRIMARY enum (for example
+//! `post.kind` or `feed.reach`) fails validation, so consumers skip the
+//! object; `Unknown` in an optional, secondary enum (for example
+//! `feed.content` or `collection.layout`) degrades to "no constraint".
+//! Deserialization itself never fails on an unrecognized variant.
+
 use crate::{traits::Validatable, ParsedUri, Resource};
 
 pub mod blob;

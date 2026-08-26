@@ -28,6 +28,15 @@ pub enum PubkySocialFeedReach {
     All,
     Wot,
     Me,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedReach {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Enum representing the layout of the feed.
@@ -40,6 +49,15 @@ pub enum PubkySocialFeedLayout {
     Wide,
     Visual,
     List,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedLayout {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Enum representing the sort order of the feed.
@@ -50,6 +68,15 @@ pub enum PubkySocialFeedLayout {
 pub enum PubkySocialFeedSort {
     Recent,
     Popularity,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedSort {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Configuration object for the feed.
@@ -200,6 +227,17 @@ impl Validatable for PubkySocialFeedConfig {
     }
 
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+        // reach, layout and sort define the feed, so an unknown value rejects it.
+        // An unknown content filter only degrades to "no filter", so it passes.
+        if !self.reach.is_known() {
+            return Err("Validation Error: feed reach is unknown".into());
+        }
+        if !self.layout.is_known() {
+            return Err("Validation Error: feed layout is unknown".into());
+        }
+        if !self.sort.is_known() {
+            return Err("Validation Error: feed sort is unknown".into());
+        }
         validate_tag_list(&self.tags, "tags")?;
         validate_tag_list(&self.domain_tags, "domain_tags")?;
 

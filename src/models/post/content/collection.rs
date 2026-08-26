@@ -27,6 +27,13 @@ pub enum PubkySocialCollectionLayout {
     Unknown,
 }
 
+impl PubkySocialCollectionLayout {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
+}
+
 impl FromStr for PubkySocialCollectionLayout {
     type Err = String;
 
