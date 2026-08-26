@@ -324,7 +324,7 @@ header("VALIDATION LIMITS");
 const limitsCopy = getValidationLimits();
 
 field("User name max", validationLimits.userNameMaxLength);
-field("Short post max", validationLimits.postShortContentMaxLength);
+field("Short post max", validationLimits.postNoteContentMaxLength);
 field("Max attachments", validationLimits.postAttachmentsMaxCount);
 field("Copy matches", JSON.stringify(limitsCopy) === JSON.stringify(validationLimits));
 

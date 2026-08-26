@@ -17,6 +17,11 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
+// The whole metadata model goes away with the media collapse; these caps stay local until then.
+const V0_FILE_NAME_MIN_LENGTH: usize = 1;
+const V0_FILE_NAME_MAX_LENGTH: usize = 255;
+const V0_FILE_SRC_MAX_LENGTH: usize = 1024;
+
 /// Valid MIME types for file attachments.
 pub const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
@@ -120,7 +125,7 @@ impl Validatable for PubkySocialFile {
             .src
             .trim()
             .chars()
-            .take(VALIDATION_LIMITS.file_src_max_length)
+            .take(V0_FILE_SRC_MAX_LENGTH)
             .collect::<String>();
 
         let src = match Url::parse(&sanitized_src) {
@@ -156,9 +161,7 @@ impl Validatable for PubkySocialFile {
         // Validate name
         let name_length = self.name.chars().count();
 
-        if !(VALIDATION_LIMITS.file_name_min_length..=VALIDATION_LIMITS.file_name_max_length)
-            .contains(&name_length)
-        {
+        if !(V0_FILE_NAME_MIN_LENGTH..=V0_FILE_NAME_MAX_LENGTH).contains(&name_length) {
             return Err("Validation Error: Invalid name length".into());
         }
 
@@ -166,7 +169,7 @@ impl Validatable for PubkySocialFile {
         if self.src.chars().count() == 0 {
             return Err("Validation Error: Invalid src".into());
         }
-        if self.src.chars().count() > VALIDATION_LIMITS.file_src_max_length {
+        if self.src.chars().count() > V0_FILE_SRC_MAX_LENGTH {
             return Err("Validation Error: src exceeds maximum length".into());
         }
         // Validate URL format

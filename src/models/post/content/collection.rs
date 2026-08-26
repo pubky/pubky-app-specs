@@ -1,4 +1,4 @@
-use crate::{common::validate_crockford_id, limits::VALIDATION_LIMITS, types::PubkyId};
+use crate::{common::validate_timestamp_id_format, limits::VALIDATION_LIMITS, types::PubkyId};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
@@ -84,7 +84,7 @@ pub struct PubkySocialCollectionContent {
     #[serde(default)]
     pub items: Vec<String>,
     /// Optional hero/cover image URL. Length bounded by
-    /// `VALIDATION_LIMITS.post_attachment_url_max_length`; protocol must be in
+    /// `VALIDATION_LIMITS.image_url_max_length`; protocol must be in
     /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
@@ -145,10 +145,10 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
         }
     }
     if let Some(cover) = &envelope.cover_image {
-        if cover.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+        if cover.chars().count() > VALIDATION_LIMITS.image_url_max_length {
             return Err(format!(
                 "Validation Error: Collection cover_image URL exceeds {} characters",
-                VALIDATION_LIMITS.post_attachment_url_max_length
+                VALIDATION_LIMITS.image_url_max_length
             ));
         }
         let parsed = Url::parse(cover).map_err(|_| {
@@ -189,7 +189,7 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
 /// Deliberately avoids `Url::parse`: it silently strips userinfo and collapses
 /// `..` path segments, smuggling non-canonical strings past a parse-and-recheck
 /// approach. Splitting the raw string and delegating to `PubkyId::try_from`
-/// (52-char z-base-32) and `validate_crockford_id` (13-char Crockford) enforces
+/// (52-char z-base-32) and `validate_timestamp_id_format` (13-char Crockford) enforces
 /// the canonical 94-char form structurally.
 fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
     const PREFIX: &str = "pubky://";
@@ -201,7 +201,9 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
         .split_once(MIDDLE)
         .ok_or_else(|| format!("must be a canonical post URI: {uri}"))?;
     PubkyId::try_from(host).map_err(|e| format!("invalid pubky-id in host: {e}"))?;
-    validate_crockford_id(post_id).map_err(|e| format!("invalid post id: {e}"))?;
+    validate_timestamp_id_format(post_id)
+        .map(|_| ())
+        .map_err(|e| format!("invalid post id: {e}"))?;
     Ok(())
 }
 
@@ -255,7 +257,7 @@ mod tests {
             Some("Best stuff"),
             Some(vec![
                 format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A"),
-                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52B"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52E"),
                 format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52C"),
             ]),
         );
@@ -392,8 +394,8 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_cover_image_too_long() {
-        // post_attachment_url_max_length is 200; this URL exceeds it.
-        let too_long = format!("https://example.com/{}", "a".repeat(200));
+        // image_url_max_length is 300; this URL exceeds it.
+        let too_long = format!("https://example.com/{}", "a".repeat(300));
         let post = make_collection_post_with_cover(Some(&too_long));
         let id = post.create_id();
         let err = post.validate(Some(&id)).unwrap_err();
@@ -487,7 +489,7 @@ mod tests {
     #[test]
     fn test_collection_post_accepts_100_items() {
         let items: Vec<String> = (0..100)
-            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:013}", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:012X}0", i))
             .collect();
         let post = make_collection_post("Big list", None, Some(items));
         let id = post.create_id();
@@ -742,7 +744,7 @@ mod tests {
     fn test_collection_post_envelope_at_max_size() {
         // 100 distinct valid pubky post URIs (max-count). Each exactly 94 chars.
         let items: Vec<String> = (0..VALIDATION_LIMITS.collection_items_max_count)
-            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:013}", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:012X}0", i))
             .collect();
         let max_name = "a".repeat(VALIDATION_LIMITS.collection_name_max_length);
         let max_desc = "b".repeat(VALIDATION_LIMITS.collection_description_max_length);

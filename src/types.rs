@@ -1,4 +1,3 @@
-use base32::{decode, Alphabet};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
@@ -15,9 +14,9 @@ use crate::{ParsedUri, Resource};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PubkyId {
     z32: String,
-    #[cfg(not(target_arch = "wasm32"))]
-    public_key: pubky::PublicKey,
 }
+
+const ZBASE32_ALPHABET: &str = "ybndrfg8ejkmcpqxot1uwisza345h769";
 
 #[cfg(feature = "openapi")]
 impl PartialSchema for PubkyId {
@@ -30,39 +29,26 @@ impl PartialSchema for PubkyId {
 impl ToSchema for PubkyId {}
 
 impl PubkyId {
+    /// Format only: 52 z-base32 chars whose 4 dangling bits are zero, so the
+    /// string re-encodes to itself. Whether the bytes are a curve point is not
+    /// checked here; that answer differs by target and belongs where keys are used.
     fn validate(s: &str) -> Result<(), String> {
-        // Validate string is a valid Pkarr public key
-        // Should closely resemble the behavior of pkarr::PublicKey::try_from(&str) for the case of 52 chars
-        // https://github.com/pubky/pkarr/blob/72fe80c271c1c1d2293e6a6800f227c570e8d4f5/pkarr/src/keys.rs#L142-L214
-        // We avoid pkarr as a dependency by doing writing our own validation instead.
         if s.len() != 52 {
             return Err("Validation Error: the string is not 52 utf chars".to_string());
         }
-
-        match decode(Alphabet::Z, s) {
-            Some(_) => Ok(()),
-            None => Err("Validation Error: invalid public key encoding".to_string()),
+        // 52 chars = 260 bits = 32 bytes + 4 pad bits: the final char's index
+        // must be a multiple of 16, which leaves exactly 'y' (0) and 'o' (16).
+        if !s.chars().all(|c| ZBASE32_ALPHABET.contains(c))
+            || !matches!(s.chars().last(), Some('y') | Some('o'))
+        {
+            return Err("Validation Error: invalid public key encoding".to_string());
         }
+        Ok(())
     }
 
-    #[cfg(target_arch = "wasm32")]
     pub fn try_from(s: &str) -> Result<Self, String> {
         Self::validate(s)?;
         Ok(Self { z32: s.to_string() })
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn try_from(s: &str) -> Result<Self, String> {
-        // Include the stricter wasm32-specific validation for consistency
-        Self::validate(s)?;
-
-        let public_key =
-            pubky::PublicKey::try_from(s).map_err(|e| format!("Validation Error: {e}"))?;
-
-        Ok(Self {
-            z32: public_key.to_z32(),
-            public_key,
-        })
     }
 
     pub fn to_uri(&self) -> ParsedUri {
@@ -72,23 +58,18 @@ impl PubkyId {
         }
     }
 
-    /// Returns the cached public key.
-    ///
-    /// This is infallible on native targets because the key was validated
-    /// during `PubkyId` construction and cached.
+    /// Converts to a public key on demand. A format-valid id need not be a
+    /// curve point, so this can fail; hostile input must never panic a consumer.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn to_public_key(&self) -> pubky::PublicKey {
-        self.public_key.clone()
+    pub fn to_public_key(&self) -> Result<pubky::PublicKey, String> {
+        pubky::PublicKey::try_from(self.z32.as_str()).map_err(|e| format!("Validation Error: {e}"))
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl From<pubky::PublicKey> for PubkyId {
     fn from(pk: pubky::PublicKey) -> Self {
-        Self {
-            z32: pk.to_z32(),
-            public_key: pk,
-        }
+        Self { z32: pk.to_z32() }
     }
 }
 
@@ -259,12 +240,12 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    fn test_to_public_key_is_infallible_for_valid_pubky_id() {
+    fn test_to_public_key_succeeds_for_a_real_key() {
         let keypair = Keypair::random();
         let expected_public_key = keypair.public_key();
         let pubky_id = PubkyId::from(expected_public_key.clone());
 
-        let converted_public_key = pubky_id.to_public_key();
+        let converted_public_key = pubky_id.to_public_key().unwrap();
 
         assert_eq!(converted_public_key, expected_public_key);
     }
@@ -330,5 +311,42 @@ mod tests {
         let deserialized: PubkyId = serde_json::from_str(&json).unwrap();
 
         assert_eq!(original, deserialized);
+    }
+
+    fn zbase32_oracle(s: &str) -> bool {
+        base32::decode(base32::Alphabet::Z, s).map(|b| base32::encode(base32::Alphabet::Z, &b))
+            == Some(s.to_string())
+    }
+
+    #[test]
+    fn pubky_id_format_table() {
+        let ok = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        assert!(PubkyId::try_from(ok).is_ok());
+        let flipped_last = format!("{}b", &ok[..51]);
+        for bad in [
+            ok.to_uppercase(),
+            ok[..51].to_string(),
+            format!("{ok}y"),
+            format!("{}0", &ok[..51]),
+            flipped_last,
+        ] {
+            assert!(PubkyId::try_from(&bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn pubky_id_validation_equals_the_reencode_oracle() {
+        let ok = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        for s in [
+            ok.to_string(),
+            format!("{}b", &ok[..51]),
+            format!("{}o", &ok[..51]),
+            ok.to_uppercase(),
+            "y".repeat(52),
+            "9".repeat(52),
+        ] {
+            let expected = s.len() == 52 && zbase32_oracle(&s);
+            assert_eq!(PubkyId::try_from(&s).is_ok(), expected, "{s}");
+        }
     }
 }

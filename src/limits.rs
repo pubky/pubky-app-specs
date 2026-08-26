@@ -1,6 +1,8 @@
 //! Validation limits for pubky-social-specs data models.
 //!
 //! These constants are the single source of truth for client-side validation.
+//! Every `*_max_length` counts Unicode code points; the one byte-denominated cap is
+//! `bookmark_target_uri_max_bytes`.
 //!
 //! # Examples
 //! Serialize the bundled limits for client consumption.
@@ -17,13 +19,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationLimits {
-    /// Maximum blob/file size in bytes.
-    ///
-    /// Chosen to cap user storage per upload and align with homeserver limits.
-    pub max_blob_size_bytes: usize,
-    /// Maximum file size in bytes.
-    ///
-    /// Kept in sync with blob validation since files are blob-backed.
+    /// Maximum media file size in bytes, aligned with the homeserver upload cap.
     pub max_file_size_bytes: usize,
     /// Minimum number of characters for tag labels.
     pub tag_label_min_length: usize,
@@ -37,8 +33,8 @@ pub struct ValidationLimits {
     pub user_name_max_length: usize,
     /// Maximum bio length in characters.
     pub user_bio_max_length: usize,
-    /// Maximum image URL length in characters.
-    pub user_image_url_max_length: usize,
+    /// Maximum length of any image URL field: the profile image and cover images.
+    pub image_url_max_length: usize,
     /// Maximum number of profile links.
     pub user_links_max_count: usize,
     /// Maximum link title length in characters.
@@ -47,21 +43,29 @@ pub struct ValidationLimits {
     pub user_link_url_max_length: usize,
     /// Maximum status length in characters.
     pub user_status_max_length: usize,
-    /// Maximum character count for short posts.
-    pub post_short_content_max_length: usize,
-    /// Maximum character count for long posts.
-    pub post_long_content_max_length: usize,
+    /// Maximum content length of a note (the short post kind).
+    pub post_note_content_max_length: usize,
+    /// Maximum article title length in characters.
+    pub article_title_max_length: usize,
+    /// Maximum article body length in characters.
+    pub article_body_max_length: usize,
+    /// Maximum length of the raw article envelope string, checked before it is parsed.
+    pub article_content_max_length: usize,
     /// Maximum number of attachments per post.
     pub post_attachments_max_count: usize,
-    /// Maximum length for attachment URLs.
-    pub post_attachment_url_max_length: usize,
+    /// Maximum length of an attachment's alt text.
+    pub attachment_alt_max_length: usize,
+    /// Maximum length of an attachment's display name.
+    pub attachment_name_max_length: usize,
+    /// Maximum length of any reference URI field (parent, embed, lock, attachment, tag target).
+    pub reference_uri_max_length: usize,
     /// Allowed protocols for attachment URLs.
     pub post_allowed_attachment_protocols: &'static [&'static str],
     /// Maximum scalar count (`chars().count()`, not bytes) for the JSON
     /// envelope content of a Collection post. Sized to hold a
     /// max-population envelope (100 canonical post URIs at 94 chars each,
-    /// plus name, description, cover_image (up to 200 chars), JSON
-    /// overhead, and headroom for additive future fields).
+    /// plus name, description, cover_image, JSON overhead, and headroom for
+    /// additive future fields).
     pub collection_content_max_length: usize,
     /// Minimum character count for a Collection name. The validator rejects
     /// whitespace-only names separately, then counts the full string length.
@@ -73,46 +77,47 @@ pub struct ValidationLimits {
     pub collection_description_max_length: usize,
     /// Maximum number of items (attachment URIs) per Collection.
     pub collection_items_max_count: usize,
-    /// Minimum file name length in characters.
-    pub file_name_min_length: usize,
-    /// Maximum file name length in characters.
-    pub file_name_max_length: usize,
-    /// Maximum file src length in characters.
-    pub file_src_max_length: usize,
     /// Maximum number of tags allowed in a feed.
     pub feed_tags_max_count: usize,
+    /// Maximum feed name length in characters.
+    pub feed_name_max_length: usize,
     /// Maximum length of a feed icon name in characters.
     pub feed_icon_max_length: usize,
+    /// Maximum UTF-8 byte length of a bookmark target that still fits the
+    /// reversible filename form; longer targets use the overflow form.
+    pub bookmark_target_uri_max_bytes: usize,
 }
 
 /// All validation limits in a single bundle.
 pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
-    max_blob_size_bytes: 100 * (1 << 20), // 100 MB cap aligned with homeserver limits.
-    max_file_size_bytes: 100 * (1 << 20), // Kept in sync with blob validation.
+    max_file_size_bytes: 100 * (1 << 20), // 100 MB cap aligned with homeserver limits.
     tag_label_min_length: 1,
     tag_label_max_length: 20,
     tag_invalid_chars: &[',', ':', ' ', '\t', '\n', '\r'],
     user_name_min_length: 3,
     user_name_max_length: 50,
     user_bio_max_length: 160,
-    user_image_url_max_length: 300,
+    image_url_max_length: 300,
     user_links_max_count: 5,
     user_link_title_max_length: 100,
     user_link_url_max_length: 300,
     user_status_max_length: 50,
-    post_short_content_max_length: 2000,
-    post_long_content_max_length: 50_000,
+    post_note_content_max_length: 2000,
+    article_title_max_length: 100,
+    article_body_max_length: 50_000,
+    article_content_max_length: 52_000,
     post_attachments_max_count: 10,
-    post_attachment_url_max_length: 200,
+    attachment_alt_max_length: 1000,
+    attachment_name_max_length: 255,
+    reference_uri_max_length: 1024,
     post_allowed_attachment_protocols: &["pubky", "http", "https"],
     collection_content_max_length: 40_000,
     collection_name_min_length: 1,
     collection_name_max_length: 100,
     collection_description_max_length: 500,
     collection_items_max_count: 100,
-    file_name_min_length: 1,
-    file_name_max_length: 255,
-    file_src_max_length: 1024,
     feed_tags_max_count: 5,
+    feed_name_max_length: 100,
     feed_icon_max_length: 50,
+    bookmark_target_uri_max_bytes: 187,
 };
