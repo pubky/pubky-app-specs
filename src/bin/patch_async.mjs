@@ -47,7 +47,7 @@ export default async function init() {
   // Detect environment and load WASM accordingly
   if (typeof window !== 'undefined') {
     // Browser environment - use fetch with relative path
-    const response = await fetch('./pubky_app_specs_bg.wasm');
+    const response = await fetch('./pubky_social_specs_bg.wasm');
     if (!response.ok) {
       throw new Error(\`Failed to fetch WASM: \${response.status} \${response.statusText}\`);
     }
@@ -60,7 +60,7 @@ export default async function init() {
     
     // Get current directory of this module
     const currentDir = path.dirname(url.fileURLToPath(import.meta.url));
-    const wasmPath = path.join(currentDir, 'pubky_app_specs_bg.wasm');
+    const wasmPath = path.join(currentDir, 'pubky_social_specs_bg.wasm');
     
     wasmBytes = fs.readFileSync(wasmPath);
   }
@@ -91,10 +91,10 @@ const patchedWithAsync = patched
 await writeFile(path.join(__dirname, `../../pkg/index.js`), patchedWithAsync 
   + "\nglobalThis['pubky'] = imports\n"  // Make imports available globally as 'pubky'
   + "// Re-export enums so Next.js can statically import them\n"
-  + "export const PubkyAppPostKind  = imports.PubkyAppPostKind;\n"   // Export enum for named imports
-  + "export const PubkyAppFeedLayout = imports.PubkyAppFeedLayout;\n" // Export enum for named imports  
-  + "export const PubkyAppFeedReach  = imports.PubkyAppFeedReach;\n"  // Export enum for named imports
-  + "export const PubkyAppFeedSort   = imports.PubkyAppFeedSort;\n"); // Export enum for named imports
+  + "export const PubkySocialPostKind  = imports.PubkySocialPostKind;\n"   // Export enum for named imports
+  + "export const PubkySocialFeedLayout = imports.PubkySocialFeedLayout;\n" // Export enum for named imports  
+  + "export const PubkySocialFeedReach  = imports.PubkySocialFeedReach;\n"  // Export enum for named imports
+  + "export const PubkySocialFeedSort   = imports.PubkySocialFeedSort;\n"); // Export enum for named imports
 
 // Move outside of nodejs
 await Promise.all([".js", ".d.ts", "_bg.wasm"].map(suffix =>

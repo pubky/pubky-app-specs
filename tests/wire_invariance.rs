@@ -2,11 +2,12 @@
 //! changes a serde attribute fails here before it reaches a homeserver.
 #![cfg(not(target_arch = "wasm32"))]
 
-use pubky_app_specs::{
-    PubkyAppBlob, PubkyAppBookmark, PubkyAppCollectionContent, PubkyAppCollectionLayout,
-    PubkyAppFeed, PubkyAppFeedConfig, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort,
-    PubkyAppFile, PubkyAppFollow, PubkyAppLastRead, PubkyAppMute, PubkyAppPost, PubkyAppPostEmbed,
-    PubkyAppPostKind, PubkyAppTag, PubkyAppUser, PubkyAppUserLink,
+use pubky_social_specs::{
+    PubkySocialBlob, PubkySocialBookmark, PubkySocialCollectionContent,
+    PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
+    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow,
+    PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialPostEmbed,
+    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink,
 };
 use serde::Serialize;
 
@@ -17,12 +18,12 @@ fn json<T: Serialize>(v: &T) -> String {
     serde_json::to_string(v).unwrap()
 }
 
-fn user() -> PubkyAppUser {
-    PubkyAppUser::new(
+fn user() -> PubkySocialUser {
+    PubkySocialUser::new(
         "Alice".into(),
         Some("bio".into()),
         Some(format!("pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG")),
-        Some(vec![PubkyAppUserLink::new(
+        Some(vec![PubkySocialUserLink::new(
             "site".into(),
             "https://example.com".into(),
         )]),
@@ -30,14 +31,14 @@ fn user() -> PubkyAppUser {
     )
 }
 
-fn post_full() -> PubkyAppPost {
-    PubkyAppPost::new_with_lock(
+fn post_full() -> PubkySocialPost {
+    PubkySocialPost::new_with_lock(
         "hello".into(),
-        PubkyAppPostKind::Short,
+        PubkySocialPostKind::Short,
         Some(format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG")),
-        Some(PubkyAppPostEmbed {
+        Some(PubkySocialPostEmbed {
             uri: format!("pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G"),
-            kind: PubkyAppPostKind::Short,
+            kind: PubkySocialPostKind::Short,
         }),
         Some(vec![format!(
             "pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG"
@@ -46,12 +47,12 @@ fn post_full() -> PubkyAppPost {
     )
 }
 
-fn post_minimal() -> PubkyAppPost {
-    PubkyAppPost::new("hello".into(), PubkyAppPostKind::Long, None, None, None)
+fn post_minimal() -> PubkySocialPost {
+    PubkySocialPost::new("hello".into(), PubkySocialPostKind::Long, None, None, None)
 }
 
-fn tag() -> PubkyAppTag {
-    let mut t = PubkyAppTag::new(
+fn tag() -> PubkySocialTag {
+    let mut t = PubkySocialTag::new(
         format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"),
         "rust".into(),
     );
@@ -59,49 +60,49 @@ fn tag() -> PubkyAppTag {
     t
 }
 
-fn bookmark() -> PubkyAppBookmark {
-    let mut b = PubkyAppBookmark::new(format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"));
+fn bookmark() -> PubkySocialBookmark {
+    let mut b = PubkySocialBookmark::new(format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"));
     b.created_at = TS;
     b
 }
 
-fn follow() -> PubkyAppFollow {
-    let mut f = PubkyAppFollow::new();
+fn follow() -> PubkySocialFollow {
+    let mut f = PubkySocialFollow::new();
     f.created_at = TS;
     f
 }
 
-fn mute() -> PubkyAppMute {
-    let mut m = PubkyAppMute::new();
+fn mute() -> PubkySocialMute {
+    let mut m = PubkySocialMute::new();
     m.created_at = TS;
     m
 }
 
-fn feed_config() -> PubkyAppFeedConfig {
-    PubkyAppFeedConfig {
+fn feed_config() -> PubkySocialFeedConfig {
+    PubkySocialFeedConfig {
         tags: Some(vec!["rust".into()]),
         domain_tags: Some(vec!["dev".into()]),
-        reach: PubkyAppFeedReach::Wot,
-        layout: PubkyAppFeedLayout::Columns,
-        sort: PubkyAppFeedSort::Recent,
-        content: Some(PubkyAppPostKind::Short),
+        reach: PubkySocialFeedReach::Wot,
+        layout: PubkySocialFeedLayout::Columns,
+        sort: PubkySocialFeedSort::Recent,
+        content: Some(PubkySocialPostKind::Short),
     }
 }
 
-fn feed_with_icon() -> PubkyAppFeed {
-    let mut f = PubkyAppFeed::new(feed_config(), "Rust".into(), "code".into());
+fn feed_with_icon() -> PubkySocialFeed {
+    let mut f = PubkySocialFeed::new(feed_config(), "Rust".into(), "code".into());
     f.created_at = TS;
     f
 }
 
-fn feed_legacy() -> PubkyAppFeed {
-    PubkyAppFeed {
-        feed: PubkyAppFeedConfig {
+fn feed_legacy() -> PubkySocialFeed {
+    PubkySocialFeed {
+        feed: PubkySocialFeedConfig {
             tags: None,
             domain_tags: None,
-            reach: PubkyAppFeedReach::All,
-            layout: PubkyAppFeedLayout::List,
-            sort: PubkyAppFeedSort::Popularity,
+            reach: PubkySocialFeedReach::All,
+            layout: PubkySocialFeedLayout::List,
+            sort: PubkySocialFeedSort::Popularity,
             content: None,
         },
         name: "All".into(),
@@ -110,8 +111,8 @@ fn feed_legacy() -> PubkyAppFeed {
     }
 }
 
-fn file() -> PubkyAppFile {
-    let mut f = PubkyAppFile::new(
+fn file() -> PubkySocialFile {
+    let mut f = PubkySocialFile::new(
         "cat.jpg".into(),
         format!("pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG"),
         "image/jpeg".into(),
@@ -121,28 +122,28 @@ fn file() -> PubkyAppFile {
     f
 }
 
-fn blob() -> PubkyAppBlob {
-    PubkyAppBlob::new(vec![1, 2])
+fn blob() -> PubkySocialBlob {
+    PubkySocialBlob::new(vec![1, 2])
 }
 
-fn last_read() -> PubkyAppLastRead {
-    let mut l = PubkyAppLastRead::new();
+fn last_read() -> PubkySocialLastRead {
+    let mut l = PubkySocialLastRead::new();
     l.timestamp = TS;
     l
 }
 
-fn collection_with_layout() -> PubkyAppCollectionContent {
-    PubkyAppCollectionContent {
+fn collection_with_layout() -> PubkySocialCollectionContent {
+    PubkySocialCollectionContent {
         name: "Photos".into(),
         description: Some("mine".into()),
         items: vec![format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG")],
         cover_image: Some(format!("pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG")),
-        layout: Some(PubkyAppCollectionLayout::Visual),
+        layout: Some(PubkySocialCollectionLayout::Visual),
     }
 }
 
-fn collection_legacy() -> PubkyAppCollectionContent {
-    PubkyAppCollectionContent {
+fn collection_legacy() -> PubkySocialCollectionContent {
+    PubkySocialCollectionContent {
         name: "Photos".into(),
         description: None,
         items: vec![],
@@ -151,7 +152,7 @@ fn collection_legacy() -> PubkyAppCollectionContent {
     }
 }
 
-/// Captured from pubky-app-specs 0.8.0 (commit 3eebe18). `PK` stands in for the host key.
+/// Captured from the 0.8.0 crate (commit 3eebe18), before the rename. `PK` stands in for the host key.
 fn pinned() -> Vec<(&'static str, String, &'static str)> {
     vec![
         (

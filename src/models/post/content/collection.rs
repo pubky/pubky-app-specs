@@ -9,17 +9,17 @@ use tsify_next::Tsify;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use super::super::PubkyAppPost;
+use super::super::PubkySocialPost;
 
 /// Creator-chosen default layout for experiencing a collection.
 ///
 /// Unrecognized values deserialize as `Unknown` so future layouts never
-/// invalidate the whole post (same policy as `PubkyAppPostKind`).
+/// invalidate the whole post (same policy as `PubkySocialPostKind`).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
-pub enum PubkyAppCollectionLayout {
+pub enum PubkySocialCollectionLayout {
     Grid,
     List,
     Visual,
@@ -27,7 +27,7 @@ pub enum PubkyAppCollectionLayout {
     Unknown,
 }
 
-impl FromStr for PubkyAppCollectionLayout {
+impl FromStr for PubkySocialCollectionLayout {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -40,7 +40,7 @@ impl FromStr for PubkyAppCollectionLayout {
     }
 }
 
-/// Typed JSON envelope stored in `PubkyAppPost::content` when `kind == Collection`.
+/// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Collection`.
 ///
 /// A collection post curates an ordered list of URIs (via `items`)
 /// under a `name` and optional `description`. The envelope is parsed and validated
@@ -50,7 +50,7 @@ impl FromStr for PubkyAppCollectionLayout {
 /// envelope during validation and is **not** intended to be constructed by
 /// callers directly. It is re-exported publicly (via `lib.rs`) so SDK consumers
 /// can inspect the envelope shape (OpenAPI schema, type definitions), but the
-/// authoritative way to produce a Collection post is to author a `PubkyAppPost`
+/// authoritative way to produce a Collection post is to author a `PubkySocialPost`
 /// with `kind: Collection` and a `content` string that JSON-parses into this
 /// shape.
 ///
@@ -61,7 +61,7 @@ impl FromStr for PubkyAppCollectionLayout {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
-pub struct PubkyAppCollectionContent {
+pub struct PubkySocialCollectionContent {
     /// Display name of the collection. Length bounded by
     /// `VALIDATION_LIMITS.collection_name_{min,max}_length` (unicode scalars).
     /// Whitespace-only names are rejected separately by the validator.
@@ -82,11 +82,11 @@ pub struct PubkyAppCollectionContent {
     pub cover_image: Option<String>,
     /// Creator's preferred default layout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub layout: Option<PubkyAppCollectionLayout>,
+    pub layout: Option<PubkySocialCollectionLayout>,
 }
 
 /// Validates a `kind = Collection` post, including its JSON content envelope.
-pub(crate) fn validate_collection_post(post: &PubkyAppPost) -> Result<(), String> {
+pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
@@ -103,16 +103,17 @@ pub(crate) fn validate_collection_post(post: &PubkyAppPost) -> Result<(), String
             VALIDATION_LIMITS.collection_content_max_length
         ));
     }
-    let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).map_err(|e| {
-        format!(
-            "Validation Error: Collection content must be a valid JSON envelope: {}",
-            e
-        )
-    })?;
+    let envelope: PubkySocialCollectionContent =
+        serde_json::from_str(&post.content).map_err(|e| {
+            format!(
+                "Validation Error: Collection content must be a valid JSON envelope: {}",
+                e
+            )
+        })?;
     validate_collection_envelope(&envelope)
 }
 
-fn validate_collection_envelope(envelope: &PubkyAppCollectionContent) -> Result<(), String> {
+fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Result<(), String> {
     if envelope.name.trim().is_empty() {
         return Err(
             "Validation Error: Collection name must contain non-whitespace characters".into(),
@@ -198,14 +199,14 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{PubkyAppPost, PubkyAppPostEmbed, PubkyAppPostKind};
+    use super::super::super::{PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind};
     use super::*;
     use crate::traits::{TimestampId, Validatable};
 
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
 
     fn collection_envelope_json(name: &str, description: Option<&str>, items: &[String]) -> String {
-        serde_json::to_string(&PubkyAppCollectionContent {
+        serde_json::to_string(&PubkySocialCollectionContent {
             name: name.to_string(),
             description: description.map(|d| d.to_string()),
             items: items.to_vec(),
@@ -218,25 +219,25 @@ mod tests {
         name: &str,
         description: Option<&str>,
         items: Option<Vec<String>>,
-    ) -> PubkyAppPost {
+    ) -> PubkySocialPost {
         let items = items.unwrap_or_default();
-        PubkyAppPost::new(
+        PubkySocialPost::new(
             collection_envelope_json(name, description, &items),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
         )
     }
 
-    fn make_collection_post_with_cover(cover_image: Option<&str>) -> PubkyAppPost {
-        let envelope = PubkyAppCollectionContent {
+    fn make_collection_post_with_cover(cover_image: Option<&str>) -> PubkySocialPost {
+        let envelope = PubkySocialCollectionContent {
             name: "X".to_string(),
             cover_image: cover_image.map(|s| s.to_string()),
             ..Default::default()
         };
         let content = serde_json::to_string(&envelope).expect("envelope serialization");
-        PubkyAppPost::new(content, PubkyAppPostKind::Collection, None, None, None)
+        PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, None)
     }
 
     #[test]
@@ -252,18 +253,18 @@ mod tests {
         );
         let id = post.create_id();
         let blob = serde_json::to_vec(&post).unwrap();
-        let parsed = <PubkyAppPost as Validatable>::try_from(&blob, &id).unwrap();
-        assert_eq!(parsed.kind, PubkyAppPostKind::Collection);
+        let parsed = <PubkySocialPost as Validatable>::try_from(&blob, &id).unwrap();
+        assert_eq!(parsed.kind, PubkySocialPostKind::Collection);
         assert!(parsed.attachments.is_none());
-        let envelope: PubkyAppCollectionContent = serde_json::from_str(&parsed.content).unwrap();
+        let envelope: PubkySocialCollectionContent = serde_json::from_str(&parsed.content).unwrap();
         assert_eq!(envelope.items.len(), 3);
     }
 
     #[test]
     fn test_collection_post_rejects_malformed_envelope() {
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             "this is not JSON".to_string(),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
@@ -425,7 +426,8 @@ mod tests {
         // Distinct from `test_collection_post_rejects_empty_name`, which sends
         // an empty string; this sends a missing key entirely.
         let envelope = r#"{ "description": "no name here" }"#.to_string();
-        let post = PubkyAppPost::new(envelope, PubkyAppPostKind::Collection, None, None, None);
+        let post =
+            PubkySocialPost::new(envelope, PubkySocialPostKind::Collection, None, None, None);
         let id = post.create_id();
         let result = post.validate(Some(&id));
         assert!(result.is_err());
@@ -438,9 +440,9 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_parent() {
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             Some("pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string()),
             None,
             None,
@@ -458,12 +460,12 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_embed() {
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
-            Some(PubkyAppPostEmbed {
-                kind: PubkyAppPostKind::Short,
+            Some(PubkySocialPostEmbed {
+                kind: PubkySocialPostKind::Short,
                 uri: "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
             }),
             None,
@@ -506,17 +508,17 @@ mod tests {
     #[test]
     fn test_collection_post_roundtrip_layout() {
         let envelope_json = r#"{"name":"Photos","layout":"visual"}"#;
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             envelope_json.to_string(),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
         );
         let id = post.create_id();
         assert!(post.validate(Some(&id)).is_ok());
-        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Visual));
+        let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::Visual));
     }
 
     #[test]
@@ -524,17 +526,17 @@ mod tests {
         // Forward-compat: a layout variant from a future spec version must not
         // invalidate the whole post; it degrades to Unknown.
         let envelope_json = r#"{"name":"X","layout":"spiral"}"#;
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             envelope_json.to_string(),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
         );
         let id = post.create_id();
         assert!(post.validate(Some(&id)).is_ok());
-        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Unknown));
+        let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::Unknown));
     }
 
     #[test]
@@ -544,9 +546,9 @@ mod tests {
         // Use a deliberately-fictional canary field name so this test stays
         // meaningful even after real fields land.
         let envelope_json = r#"{"name":"X","_forward_compat_canary":"future-only"}"#;
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             envelope_json.to_string(),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
@@ -673,9 +675,9 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_non_empty_attachments() {
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             Some(vec![
@@ -694,9 +696,9 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_empty_attachments() {
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             Some(vec![]),
@@ -714,9 +716,9 @@ mod tests {
     #[test]
     fn test_collection_post_accepts_missing_items_field() {
         let envelope_json = r#"{"name":"X"}"#;
-        let post = PubkyAppPost::new(
+        let post = PubkySocialPost::new(
             envelope_json.to_string(),
-            PubkyAppPostKind::Collection,
+            PubkySocialPostKind::Collection,
             None,
             None,
             None,
@@ -748,9 +750,9 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn test_postkind_collection_wasm_getter() {
-        let post = PubkyAppPost {
+        let post = PubkySocialPost {
             content: collection_envelope_json("X", None, &[]),
-            kind: PubkyAppPostKind::Collection,
+            kind: PubkySocialPostKind::Collection,
             parent: None,
             embed: None,
             attachments: None,
@@ -765,7 +767,7 @@ mod tests {
         // End-to-end via the JS-facing builder:
         //   PubkySpecsBuilder.createCollectionPost(name, description?, items?, cover_image?, layout?)
         // builds the {name, description} envelope internally, packages it
-        // into a kind=Collection PubkyAppPost, and returns a PostResult
+        // into a kind=Collection PubkySocialPost, and returns a PostResult
         // ready to ship to the homeserver. JS callers don't have to
         // JSON-stringify the envelope themselves.
         use crate::PubkySpecsBuilder;
@@ -784,10 +786,10 @@ mod tests {
             .expect("createCollectionPost should succeed");
 
         let post = result.post();
-        assert_eq!(post.kind, PubkyAppPostKind::Collection);
+        assert_eq!(post.kind, PubkySocialPostKind::Collection);
         assert!(post.attachments.is_none());
-        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content)
-            .expect("Collection content must deserialize as PubkyAppCollectionContent");
+        let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content)
+            .expect("Collection content must deserialize as PubkySocialCollectionContent");
         assert_eq!(envelope.name, "My favorites");
         assert_eq!(envelope.description.as_deref(), Some("Best things"));
         assert_eq!(envelope.items.len(), 1);
@@ -795,6 +797,6 @@ mod tests {
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")
         );
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::List));
+        assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::List));
     }
 }

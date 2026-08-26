@@ -26,15 +26,15 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppFollow {
+pub struct PubkySocialFollow {
     pub created_at: i64,
 }
 
 // #[cfg(target_arch = "wasm32")]
-// impl Json for PubkyAppFollow {}
+// impl Json for PubkySocialFollow {}
 
-impl PubkyAppFollow {
-    /// Creates a new `PubkyAppFollow` instance.
+impl PubkySocialFollow {
+    /// Creates a new `PubkySocialFollow` instance.
     pub fn new() -> Self {
         let created_at = timestamp();
         Self { created_at }
@@ -43,7 +43,7 @@ impl PubkyAppFollow {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppFollow {
+impl PubkySocialFollow {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -56,9 +56,9 @@ impl PubkyAppFollow {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppFollow {}
+impl Json for PubkySocialFollow {}
 
-impl Validatable for PubkyAppFollow {
+impl Validatable for PubkySocialFollow {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the followee ID
         if let Some(id) = id {
@@ -69,7 +69,7 @@ impl Validatable for PubkyAppFollow {
     }
 }
 
-impl HasIdPath for PubkyAppFollow {
+impl HasIdPath for PubkySocialFollow {
     const PATH_SEGMENT: &'static str = "follows/";
 
     fn create_path(pubky_id: &str) -> String {
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let follow = PubkyAppFollow::new();
+        let follow = PubkySocialFollow::new();
         // Check that created_at is recent
         let now = timestamp();
         // within 1 second
@@ -93,20 +93,20 @@ mod tests {
 
     #[test]
     fn test_create_path_with_id() {
-        let path = PubkyAppFollow::create_path("user_id123");
+        let path = PubkySocialFollow::create_path("user_id123");
         assert_eq!(path, "/pub/pubky.app/follows/user_id123");
     }
 
     #[test]
     fn test_validate() {
-        let follow = PubkyAppFollow::new();
+        let follow = PubkySocialFollow::new();
         let result = follow.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
-        let follow = PubkyAppFollow::new();
+        let follow = PubkySocialFollow::new();
         let result = follow.validate(Some("not_a_valid_pubky_id"));
         assert!(result.is_err());
     }
@@ -120,7 +120,7 @@ mod tests {
         "#;
 
         let blob = follow_json.as_bytes();
-        let follow_parsed = <PubkyAppFollow as Validatable>::try_from(
+        let follow_parsed = <PubkySocialFollow as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
         )

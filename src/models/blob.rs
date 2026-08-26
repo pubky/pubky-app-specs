@@ -20,10 +20,10 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppBlob(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
+pub struct PubkySocialBlob(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
 
-impl PubkyAppBlob {
-    /// Creates a new `PubkyAppBlob` instance.
+impl PubkySocialBlob {
+    /// Creates a new `PubkySocialBlob` instance.
     pub fn new(data: Vec<u8>) -> Self {
         Self(data)
     }
@@ -31,7 +31,7 @@ impl PubkyAppBlob {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppBlob {
+impl PubkySocialBlob {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -50,11 +50,11 @@ impl PubkyAppBlob {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppBlob {}
+impl Json for PubkySocialBlob {}
 
-impl HashId for PubkyAppBlob {
+impl HashId for PubkySocialBlob {
     fn get_id_data(&self) -> String {
-        // data string id hashing is not needed for PubkyAppBlob as we hash the entire blob
+        // data string id hashing is not needed for PubkySocialBlob as we hash the entire blob
         "".to_string()
     }
 
@@ -73,7 +73,7 @@ impl HashId for PubkyAppBlob {
     }
 }
 
-impl HasIdPath for PubkyAppBlob {
+impl HasIdPath for PubkySocialBlob {
     const PATH_SEGMENT: &'static str = "blobs/";
 
     fn create_path(id: &str) -> String {
@@ -81,7 +81,7 @@ impl HasIdPath for PubkyAppBlob {
     }
 }
 
-impl Validatable for PubkyAppBlob {
+impl Validatable for PubkySocialBlob {
     fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
         let instance = Self(blob.to_vec());
         instance.validate(Some(id))?;
@@ -113,22 +113,22 @@ mod tests {
 
     #[test]
     fn test_create_id() {
-        let blob = PubkyAppBlob(vec![1, 2]);
+        let blob = PubkySocialBlob(vec![1, 2]);
         let id = blob.create_id();
         assert_eq!(id, "PZBQ010FF079VVZPQG1RNFN6DR");
 
         // Test that same data produces same ID
-        let blob2 = PubkyAppBlob(vec![1, 2]);
+        let blob2 = PubkySocialBlob(vec![1, 2]);
         assert_eq!(blob2.create_id(), id);
 
         // Test that different data produces different ID
-        let blob3 = PubkyAppBlob(vec![1, 2, 3]);
+        let blob3 = PubkySocialBlob(vec![1, 2, 3]);
         assert_ne!(blob3.create_id(), id);
     }
 
     #[test]
     fn test_validate() {
-        let blob = PubkyAppBlob(vec![1, 2, 3]);
+        let blob = PubkySocialBlob(vec![1, 2, 3]);
         let id = blob.create_id();
         let result = blob.validate(Some(&id));
         assert!(result.is_ok());
@@ -141,20 +141,20 @@ mod tests {
     #[test]
     fn test_validate_size_errors() {
         // Test blob at max size (should pass)
-        let max_size_blob = PubkyAppBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes]);
+        let max_size_blob = PubkySocialBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes]);
         let id = max_size_blob.create_id();
         let result = max_size_blob.validate(Some(&id));
         assert!(result.is_ok(), "Blob at max size should be valid");
 
         // Test zero-size blob (should fail)
-        let zero_size_blob = PubkyAppBlob(vec![]);
+        let zero_size_blob = PubkySocialBlob(vec![]);
         let id = zero_size_blob.create_id();
         let result = zero_size_blob.validate(Some(&id));
         assert!(result.is_err(), "Zero-size blob should be invalid");
         assert!(result.unwrap_err().contains("cannot be zero"));
 
         // Test blob exceeding max size (should fail)
-        let oversized_blob = PubkyAppBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes + 1]);
+        let oversized_blob = PubkySocialBlob(vec![0; VALIDATION_LIMITS.max_blob_size_bytes + 1]);
         let id = oversized_blob.create_id();
         let result = oversized_blob.validate(Some(&id));
         assert!(result.is_err());
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_id() {
-        let blob = PubkyAppBlob(vec![1, 2, 3]);
+        let blob = PubkySocialBlob(vec![1, 2, 3]);
         let invalid_id = "INVALIDID";
         let result = blob.validate(Some(invalid_id));
         assert!(result.is_err());
@@ -172,10 +172,10 @@ mod tests {
     #[test]
     fn test_try_from_valid() {
         let blob_data = vec![1, 2, 3, 4, 5];
-        let blob = PubkyAppBlob(blob_data.clone());
+        let blob = PubkySocialBlob(blob_data.clone());
         let id = blob.create_id();
 
-        let result = <PubkyAppBlob as Validatable>::try_from(&blob_data, &id);
+        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, &id);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().0, blob_data);
     }
@@ -185,7 +185,7 @@ mod tests {
         let blob_data = vec![1, 2, 3];
         let invalid_id = "INVALIDID";
 
-        let result = <PubkyAppBlob as Validatable>::try_from(&blob_data, invalid_id);
+        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, invalid_id);
         assert!(result.is_err());
     }
 }

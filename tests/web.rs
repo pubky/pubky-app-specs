@@ -2,10 +2,10 @@
 
 extern crate wasm_bindgen_test;
 use js_sys::Array;
-use pubky_app_specs::traits::{HasIdPath, HasPath};
-use pubky_app_specs::{
-    follow_uri_builder, parse_uri, post_uri_builder, user_uri_builder, PubkyAppFollow,
-    PubkyAppPost, PubkyAppPostKind, PubkyAppUser, PubkyAppUserLink, PubkySpecsBuilder,
+use pubky_social_specs::traits::{HasIdPath, HasPath};
+use pubky_social_specs::{
+    follow_uri_builder, parse_uri, post_uri_builder, user_uri_builder, PubkySocialFollow,
+    PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySocialUserLink, PubkySpecsBuilder,
 };
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::JsValue;
@@ -28,7 +28,9 @@ fn test_create_follow() {
     // Now we can call the Rust getter methods directly:
     assert_eq!(
         meta.path(),
-        PubkyAppFollow::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
+        PubkySocialFollow::create_path(
+            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into()
+        )
     );
     assert_eq!(
         meta.url(),
@@ -53,14 +55,14 @@ fn test_create_user_rust_api() {
     // Prepare links as a JS-compatible array
     let links = Array::new();
     links.push(
-        &to_value(&PubkyAppUserLink {
+        &to_value(&PubkySocialUserLink {
             title: "GitHub".to_string(),
             url: "https://github.com/alice".to_string(),
         })
         .unwrap(),
     );
     links.push(
-        &to_value(&PubkyAppUserLink {
+        &to_value(&PubkySocialUserLink {
             title: "Website".to_string(),
             url: "https://alice.dev".to_string(),
         })
@@ -83,7 +85,7 @@ fn test_create_user_rust_api() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), PubkyAppUser::create_path());
+    assert_eq!(meta.path(), PubkySocialUser::create_path());
     assert_eq!(
         meta.url(),
         user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
@@ -137,7 +139,7 @@ fn test_create_user_with_minimal_data() {
     let user = result.user();
 
     // Validate the meta object
-    assert_eq!(meta.path(), PubkyAppUser::create_path());
+    assert_eq!(meta.path(), PubkySocialUser::create_path());
     assert_eq!(
         meta.url(),
         user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
@@ -166,11 +168,11 @@ fn test_post_from_json() {
     "#;
     // Convert the JSON string into a JsValue.
     let js_value = js_sys::JSON::parse(post_json).expect("Failed to parse JSON string");
-    // Use the new factory method to create a WASM PubkyAppPost.
-    let post = PubkyAppPost::from_json(&js_value).expect("Post should deserialize successfully");
+    // Use the new factory method to create a WASM PubkySocialPost.
+    let post = PubkySocialPost::from_json(&js_value).expect("Post should deserialize successfully");
 
     assert_eq!(post.content, "Hello from JSON!");
-    assert_eq!(post.kind, PubkyAppPostKind::Long);
+    assert_eq!(post.kind, PubkySocialPostKind::Long);
     assert_eq!(post.embed, None);
     assert_eq!(post.attachments, None);
 }

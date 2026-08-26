@@ -23,12 +23,12 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppMute {
+pub struct PubkySocialMute {
     pub created_at: i64,
 }
 
-impl PubkyAppMute {
-    /// Creates a new `PubkyAppMute` instance.
+impl PubkySocialMute {
+    /// Creates a new `PubkySocialMute` instance.
     pub fn new() -> Self {
         let created_at = timestamp();
         Self { created_at }
@@ -37,7 +37,7 @@ impl PubkyAppMute {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppMute {
+impl PubkySocialMute {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -50,9 +50,9 @@ impl PubkyAppMute {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppMute {}
+impl Json for PubkySocialMute {}
 
-impl Validatable for PubkyAppMute {
+impl Validatable for PubkySocialMute {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
         // Validate the muteee ID
         if let Some(id) = id {
@@ -63,7 +63,7 @@ impl Validatable for PubkyAppMute {
     }
 }
 
-impl HasIdPath for PubkyAppMute {
+impl HasIdPath for PubkySocialMute {
     const PATH_SEGMENT: &'static str = "mutes/";
 
     fn create_path(pubky_id: &str) -> String {
@@ -79,7 +79,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let mute = PubkyAppMute::new();
+        let mute = PubkySocialMute::new();
         // Check that created_at is recent
         let now = timestamp();
         assert!(mute.created_at <= now && mute.created_at >= now - 1_000_000);
@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn test_create_path_with_id() {
         let path =
-            PubkyAppMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
+            PubkySocialMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
         assert_eq!(
             path,
             "/pub/pubky.app/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
@@ -98,14 +98,14 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        let mute = PubkyAppMute::new();
+        let mute = PubkySocialMute::new();
         let result = mute.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
-        let mute = PubkyAppMute::new();
+        let mute = PubkySocialMute::new();
         let result = mute.validate(Some("not_a_valid_pubky_id"));
         assert!(result.is_err());
     }
@@ -119,7 +119,7 @@ mod tests {
         "#;
 
         let blob = mute_json.as_bytes();
-        let mute_parsed = <PubkyAppMute as Validatable>::try_from(
+        let mute_parsed = <PubkySocialMute as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
         )

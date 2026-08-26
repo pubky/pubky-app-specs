@@ -1765,28 +1765,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pubky-app-specs"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "base32",
- "blake3",
- "js-sys",
- "mime",
- "pubky",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "tokio",
- "tsify-next",
- "url",
- "utoipa",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
-]
-
-[[package]]
 name = "pubky-common"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1806,6 +1784,28 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "url",
+]
+
+[[package]]
+name = "pubky-social-specs"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "base32",
+ "blake3",
+ "js-sys",
+ "mime",
+ "pubky",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "tokio",
+ "tsify-next",
+ "url",
+ "utoipa",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

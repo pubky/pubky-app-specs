@@ -18,12 +18,12 @@ use utoipa::ToSchema;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkyAppLastRead {
+pub struct PubkySocialLastRead {
     pub timestamp: i64, // Unix epoch time in milliseconds
 }
 
-impl PubkyAppLastRead {
-    /// Creates a new `PubkyAppLastRead` instance.
+impl PubkySocialLastRead {
+    /// Creates a new `PubkySocialLastRead` instance.
     pub fn new() -> Self {
         let timestamp = timestamp() / 1_000; // Convert to milliseconds
         Self { timestamp }
@@ -32,7 +32,7 @@ impl PubkyAppLastRead {
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkyAppLastRead {
+impl PubkySocialLastRead {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
     pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
         Self::import_json(js_value)
@@ -45,9 +45,9 @@ impl PubkyAppLastRead {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Json for PubkyAppLastRead {}
+impl Json for PubkySocialLastRead {}
 
-impl Validatable for PubkyAppLastRead {
+impl Validatable for PubkySocialLastRead {
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
         // Validate timestamp is a positive integer
         if self.timestamp <= 0 {
@@ -57,7 +57,7 @@ impl Validatable for PubkyAppLastRead {
     }
 }
 
-impl HasPath for PubkyAppLastRead {
+impl HasPath for PubkySocialLastRead {
     const PATH_SEGMENT: &'static str = "last_read";
 
     fn create_path() -> String {
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let last_read = PubkyAppLastRead::new();
+        let last_read = PubkySocialLastRead::new();
         let now = timestamp() / 1_000;
         // within 1 second
         assert!(last_read.timestamp <= now && last_read.timestamp >= now - 1_000);
@@ -80,20 +80,20 @@ mod tests {
 
     #[test]
     fn test_create_path() {
-        let path = PubkyAppLastRead::create_path();
+        let path = PubkySocialLastRead::create_path();
         assert_eq!(path, format!("{}{}last_read", PUBLIC_PATH, APP_PATH));
     }
 
     #[test]
     fn test_validate() {
-        let last_read = PubkyAppLastRead::new();
+        let last_read = PubkySocialLastRead::new();
         let result = last_read.validate(None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_timestamp() {
-        let last_read = PubkyAppLastRead { timestamp: -1 };
+        let last_read = PubkySocialLastRead { timestamp: -1 };
         let result = last_read.validate(None);
         assert!(result.is_err());
     }
@@ -107,7 +107,7 @@ mod tests {
         "#;
 
         let blob = last_read_json.as_bytes();
-        let last_read = <PubkyAppLastRead as Validatable>::try_from(blob, "").unwrap();
+        let last_read = <PubkySocialLastRead as Validatable>::try_from(blob, "").unwrap();
         assert_eq!(last_read.timestamp, 1700000000);
     }
 }

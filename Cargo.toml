@@ -1,6 +1,6 @@
 [package]
-name = "pubky-app-specs"
-version = "0.8.0"
+name = "pubky-social-specs"
+version = "1.0.0-alpha.1"
 edition = "2021"
 rust-version = "1.89"
 description = "Pubky.app data models with validation, sanitization, and URI helpers"

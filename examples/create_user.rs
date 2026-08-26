@@ -9,7 +9,7 @@ fn main() {
 use {
     anyhow::Result,
     pubky::{ClientId, Keypair, Pubky, PublicKey},
-    pubky_app_specs::{traits::HasPath, traits::Validatable, PubkyAppUser},
+    pubky_social_specs::{traits::HasPath, traits::Validatable, PubkySocialUser},
     serde_json::to_vec,
 };
 // Replace this with your actual homeserver public key
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
     // Step 4: Create a new user profile
     println!("\nStep 4: Creating a new user profile...");
 
-    let user_profile = PubkyAppUser::new(
+    let user_profile = PubkySocialUser::new(
         "Test User".to_string(), // User display name
         None,                    // Optional fields set to None
         None,
@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
     // Step 5: Write the user profile to the homeserver
     println!("\nStep 5: Writing the user profile to the homeserver...");
 
-    let path = PubkyAppUser::create_path();
+    let path = PubkySocialUser::create_path();
     let content = to_vec(&user_profile)?;
 
     session
@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
 
     let retrieved_content = response.bytes().await?;
 
-    let retrieved_profile = <PubkyAppUser as Validatable>::try_from(&retrieved_content, "")
+    let retrieved_profile = <PubkySocialUser as Validatable>::try_from(&retrieved_content, "")
         .expect("Failed to deserialize the retrieved user profile.");
 
     println!(

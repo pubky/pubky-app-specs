@@ -1,11 +1,11 @@
-//! Validation limits for pubky-app-specs data models.
+//! Validation limits for pubky-social-specs data models.
 //!
 //! These constants are the single source of truth for client-side validation.
 //!
 //! # Examples
 //! Serialize the bundled limits for client consumption.
 //! ```
-//! use pubky_app_specs::VALIDATION_LIMITS;
+//! use pubky_social_specs::VALIDATION_LIMITS;
 //!
 //! let limits_json = serde_json::to_value(&VALIDATION_LIMITS).unwrap();
 //! assert!(limits_json.is_object());

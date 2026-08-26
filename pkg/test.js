@@ -1,4 +1,4 @@
-import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -68,7 +68,7 @@ describe("PubkySpecs Example Objects Tests", () => {
   describe("Post Pubky-app-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(postContent, PubkyAppPostKind.Short);
+      const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Short);
 
       // Test meta properties
       assert.ok(meta.id, "Post should have an ID");
@@ -91,7 +91,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       const { post: replyPost } = specsBuilder.createPost(
         "This is a reply to the first post!",
-        PubkyAppPostKind.Short,
+        PubkySocialPostKind.Short,
         parentPostUriRaw
       );
 
@@ -105,10 +105,10 @@ describe("PubkySpecs Example Objects Tests", () => {
       const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
       assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
 
-      const embed = new PubkyAppPostEmbed(embedUriRaw, PubkyAppPostKind.Video);
+      const embed = new PubkySocialPostEmbed(embedUriRaw, PubkySocialPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
         "This is a repost to random post!",
-        PubkyAppPostKind.Short,
+        PubkySocialPostKind.Short,
         null,
         embed
       );
@@ -139,7 +139,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         () => {
           specsBuilder.createPost(
             "Post with too many attachments",
-            PubkyAppPostKind.Image,
+            PubkySocialPostKind.Image,
             null,
             null,
             attachments
@@ -164,7 +164,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         const postContent = "Visible preview for locked content";
         const { post } = specsBuilder.createPost(
           postContent,
-          PubkyAppPostKind.Long,
+          PubkySocialPostKind.Long,
           null,
           null,
           null,
@@ -178,7 +178,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
 
       it("should create unlocked post when lock is omitted", () => {
-        const { post } = specsBuilder.createPost("Hello", PubkyAppPostKind.Short);
+        const { post } = specsBuilder.createPost("Hello", PubkySocialPostKind.Short);
         const lock = post.lock;
         assert.ok(
           lock === null || lock === undefined,
@@ -192,7 +192,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
 
       it("should deserialize post without lock field as unlocked", () => {
-        const post = PubkyAppPost.fromJson({
+        const post = PubkySocialPost.fromJson({
           content: "Hello World!",
           kind: "short",
           parent: null,
@@ -211,7 +211,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkyAppPostKind.Short,
+              PubkySocialPostKind.Short,
               null,
               null,
               null,
@@ -235,7 +235,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkyAppPostKind.Short,
+              PubkySocialPostKind.Short,
               null,
               null,
               null,

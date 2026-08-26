@@ -1,6 +1,6 @@
-# pubky-app-specs
+# pubky-social-specs
 
-[![npm version](https://img.shields.io/npm/v/pubky-app-specs)](https://www.npmjs.com/package/pubky-app-specs)
+[![npm version](https://img.shields.io/npm/v/pubky-social-specs)](https://www.npmjs.com/package/pubky-social-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 JavaScript and TypeScript bindings for Pubky.app data models, generated from the canonical Rust specs.
@@ -18,17 +18,17 @@ The package initializes WASM automatically, so no manual `.wasm` loading is requ
 ## Installation
 
 ```bash
-npm install pubky-app-specs
+npm install pubky-social-specs
 ```
 
 ```bash
-yarn add pubky-app-specs
+yarn add pubky-social-specs
 ```
 
 ## Quick Start
 
 ```js
-import { PubkyAppPostKind, PubkySpecsBuilder } from "pubky-app-specs";
+import { PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
 
 const pubkyId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const specs = new PubkySpecsBuilder(pubkyId);
@@ -46,7 +46,7 @@ console.log(user.toJson());
 
 const { post, meta: postMeta } = specs.createPost(
   "Hello, Pubky!",
-  PubkyAppPostKind.Short
+  PubkySocialPostKind.Short
 );
 
 console.log(postMeta.url);
@@ -84,7 +84,7 @@ const { last_read, meta } = specs.createLastRead();
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
-For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/example.js).
+For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-social-specs/blob/main/pkg/example.js).
 
 ## URI Helpers
 
@@ -101,7 +101,7 @@ import {
   fileUriBuilder,
   feedUriBuilder,
   parse_uri,
-} from "pubky-app-specs";
+} from "pubky-social-specs";
 
 const userUri = userUriBuilder(pubkyId);
 const postUri = postUriBuilder(pubkyId, "0033SSE3B1FQ0");
@@ -120,7 +120,7 @@ Validation limits are published as JSON so apps can reuse canonical limits witho
 import limits, {
   getValidationLimits,
   validationLimits,
-} from "pubky-app-specs/validationLimits";
+} from "pubky-social-specs/validationLimits";
 
 console.log(validationLimits.userNameMaxLength);
 console.log(limits.postShortContentMaxLength);
@@ -131,7 +131,7 @@ const copy = getValidationLimits();
 For raw JSON imports:
 
 ```js
-import limitsJson from "pubky-app-specs/validationLimits.json";
+import limitsJson from "pubky-social-specs/validationLimits.json";
 
 console.log(limitsJson.postAttachmentsMaxCount);
 ```
@@ -139,7 +139,7 @@ console.log(limitsJson.postAttachmentsMaxCount);
 ## MIME Types
 
 ```js
-import { getValidMimeTypes } from "pubky-app-specs";
+import { getValidMimeTypes } from "pubky-social-specs";
 
 const validMimeTypes = getValidMimeTypes();
 
@@ -150,7 +150,7 @@ if (!validMimeTypes.includes(file.type)) {
 
 ## Specification
 
-See the [full data model specification](https://github.com/pubky/pubky-app-specs/blob/main/SPEC.md) for URI layout, field rules, examples, and validation behavior.
+See the [full data model specification](https://github.com/pubky/pubky-social-specs/blob/main/SPEC.md) for URI layout, field rules, examples, and validation behavior.
 
 ## Building from Source
 
