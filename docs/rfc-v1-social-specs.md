@@ -477,6 +477,10 @@ v0 `pub/pubky.app/feeds/{HashId(serde-json config)}` (public) -> v1
   fragile and not JS-reproducible). Six fixed segments: reach, layout, sort, content filter,
   tags, and domain tags. Two users publishing the same config share an id, so future
   cross-homeserver popularity ranking is additive indexer work.
+- **The id is a write-side guarantee.** A reader recomputes it only when it understands every
+  value in the config. On a value it does not know it accepts the id as written and applies the
+  usual rule (an unknown filter degrades, an unknown reach rejects), so adding a feed value never
+  makes older readers drop the feed.
 - Tracks current v0 (#143): the `wot` and `me` reach values and the optional `domain_tags`
   filter (same folding and cap rules as tags) are part of the v1 model, and `domain_tags`
   participates in the id (two feeds differing only in domain filter are different feeds).
