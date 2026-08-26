@@ -3,9 +3,9 @@ name: Rust (native)
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "v1"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "v1"]
 
 env:
   CARGO_TERM_COLOR: always
