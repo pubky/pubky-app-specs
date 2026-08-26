@@ -150,7 +150,7 @@ if (!validMimeTypes.includes(file.type)) {
 
 ## Specification
 
-The legacy 0.x layout is documented in [`docs/SPEC_V0.md`](https://github.com/pubky/pubky-social-specs/blob/v1/docs/SPEC_V0.md), for reading un-migrated data.
+The 1.x design is in [`docs/rfc-v1-social-specs.md`](https://github.com/pubky/pubky-social-specs/blob/main/docs/rfc-v1-social-specs.md). The legacy 0.x layout is in [`docs/SPEC_V0.md`](https://github.com/pubky/pubky-social-specs/blob/main/docs/SPEC_V0.md), for reading un-migrated data.
 
 ## Building from Source
 

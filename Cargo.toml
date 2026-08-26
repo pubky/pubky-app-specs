@@ -13,7 +13,6 @@ keywords = ["pubky", "pubky-social", "nexus", "social", "watcher"]
 exclude = [
     ".github",
     "pkg",
-    "test",
     "src/bin",
 ]
 
