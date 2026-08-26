@@ -10,12 +10,20 @@
 //!    `#[serde(skip_serializing_if = "Option::is_none")]`, so old data
 //!    reads back cleanly and old readers never see a shape change.
 //!
-//! Every wire enum carries a `#[serde(other)] Unknown` catch-all and an
-//! `is_known()` helper. `Unknown` in an object's PRIMARY enum (for example
-//! `post.kind` or `feed.reach`) fails validation, so consumers skip the
-//! object; `Unknown` in an optional, secondary enum (for example
-//! `feed.content` or `collection.layout`) degrades to "no constraint".
-//! Deserialization itself never fails on an unrecognized variant.
+//! Every enum that appears as a value inside a stored JSON object carries a
+//! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (The URI
+//! parse results `Resource` and `ExtendedParsedUri` are not stored objects
+//! and keep their own shape.) `Unknown` in an object's PRIMARY enum (for
+//! example `post.kind` or `feed.reach`) fails validation, so consumers skip
+//! the object; `Unknown` in an optional, secondary enum (for example
+//! `feed.content` or `collection.layout`) degrades to "no constraint": a
+//! consumer treats it as no filter. Deserialization itself never fails on
+//! an unrecognized variant.
+//!
+//! One known limit: a feed id is still derived from the serialized config,
+//! so on the id-checked read path a feed carrying an unrecognized value
+//! fails its id check. That goes away when feed ids stop being derived
+//! from the serialized config.
 
 use crate::{traits::Validatable, ParsedUri, Resource};
 

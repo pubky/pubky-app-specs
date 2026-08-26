@@ -334,19 +334,18 @@ impl HasIdPath for PubkySocialFeed {
 
 impl Validatable for PubkySocialFeed {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
-        // Validate the feed ID
-        if let Some(id) = id {
-            self.validate_id(id)?;
-        }
+        // Content first, so an unrecognized value is reported as such and not as an id mismatch
+        self.feed.validate(None)?;
 
-        // Validate name
         if self.name.trim().is_empty() {
             return Err("Validation Error: Feed name cannot be empty".into());
         }
 
         validate_feed_icon(&self.icon)?;
 
-        self.feed.validate(None)?;
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         Ok(())
     }

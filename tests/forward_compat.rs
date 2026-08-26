@@ -48,7 +48,23 @@ fn unknown_primary_feed_enum_fails_validation_with_a_clear_message() {
         config("galaxy", "columns", "recent", "null")
     );
     let f: PubkySocialFeed = serde_json::from_str(&feed).unwrap();
-    assert!(f.validate(None).is_err());
+    let err = f.validate(None).unwrap_err();
+    assert!(err.contains("reach") && err.contains("unknown"), "{err}");
+
+    // The id-checked read path reports the unknown value, not an id mismatch.
+    let err =
+        <PubkySocialFeed as Validatable>::try_from(feed.as_bytes(), "8Z8CWH8NVYQY39ZEBFGKQWWEKG")
+            .unwrap_err();
+    assert!(err.contains("reach") && err.contains("unknown"), "{err}");
+}
+
+#[test]
+fn from_str_never_produces_unknown() {
+    assert!("unknown".parse::<PubkySocialFeedReach>().is_err());
+    assert!("unknown".parse::<PubkySocialFeedLayout>().is_err());
+    assert!("unknown".parse::<PubkySocialFeedSort>().is_err());
+    assert!("unknown".parse::<PubkySocialCollectionLayout>().is_err());
+    assert!("unknown".parse::<PubkySocialPostKind>().is_err());
 }
 
 #[test]
