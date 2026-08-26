@@ -19,12 +19,20 @@ use super::super::PubkySocialPost;
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PubkySocialCollectionLayout {
     Grid,
     List,
     Visual,
     #[serde(other)]
     Unknown,
+}
+
+impl PubkySocialCollectionLayout {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 impl FromStr for PubkySocialCollectionLayout {

@@ -1,3 +1,32 @@
+//! # Forward-compatibility contract (permanent)
+//!
+//! Every JSON object stored on a homeserver obeys two rules, forever:
+//!
+//! 1. Never `#[serde(deny_unknown_fields)]`, on any model. Unknown fields
+//!    are ignored on read; a newer writer must never be able to break an
+//!    older reader by adding a field.
+//! 2. Additive fields only. Every field added to a model after it first
+//!    ships MUST be `Option<T>` + `#[serde(default)]` +
+//!    `#[serde(skip_serializing_if = "Option::is_none")]`, so old data
+//!    reads back cleanly and old readers never see a shape change.
+//!
+//! Every enum that appears as a value inside a stored JSON object carries a
+//! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (The URI
+//! parse results `Resource` and `ExtendedParsedUri` are not stored objects
+//! and keep their own shape.) `Unknown` in an object's PRIMARY enum (for
+//! example `post.kind` or `feed.reach`) fails validation, so consumers skip
+//! the object; `Unknown` in an optional, secondary enum (for example
+//! `feed.content` or `collection.layout`) degrades to "no constraint": a
+//! consumer treats it as no filter. Deserialization itself never fails on
+//! an unrecognized variant. The same enums are `#[non_exhaustive]`, so a
+//! variant added later is a minor release: downstream matches must carry a
+//! wildcard arm, which is the same discipline `Unknown` already asks for.
+//!
+//! One known limit: a feed id is still derived from the serialized config,
+//! so on the id-checked read path a feed carrying an unrecognized value
+//! fails its id check. That goes away when feed ids stop being derived
+//! from the serialized config.
+
 use crate::{traits::Validatable, ParsedUri, Resource};
 
 pub mod blob;

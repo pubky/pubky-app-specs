@@ -21,6 +21,7 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedReach {
     Following,
     Followers,
@@ -28,6 +29,15 @@ pub enum PubkySocialFeedReach {
     All,
     Wot,
     Me,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedReach {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Enum representing the layout of the feed.
@@ -35,11 +45,21 @@ pub enum PubkySocialFeedReach {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedLayout {
     Columns,
     Wide,
     Visual,
     List,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedLayout {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Enum representing the sort order of the feed.
@@ -47,9 +67,19 @@ pub enum PubkySocialFeedLayout {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[non_exhaustive]
 pub enum PubkySocialFeedSort {
     Recent,
     Popularity,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PubkySocialFeedSort {
+    /// `false` only for the `Unknown` catch-all a newer writer's value lands in.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
 }
 
 /// Configuration object for the feed.
@@ -200,6 +230,17 @@ impl Validatable for PubkySocialFeedConfig {
     }
 
     fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+        // reach, layout and sort define the feed, so an unknown value rejects it.
+        // An unknown content filter only degrades to "no filter", so it passes.
+        if !self.reach.is_known() {
+            return Err("Validation Error: feed reach is unknown".into());
+        }
+        if !self.layout.is_known() {
+            return Err("Validation Error: feed layout is unknown".into());
+        }
+        if !self.sort.is_known() {
+            return Err("Validation Error: feed sort is unknown".into());
+        }
         validate_tag_list(&self.tags, "tags")?;
         validate_tag_list(&self.domain_tags, "domain_tags")?;
 
@@ -296,19 +337,18 @@ impl HasIdPath for PubkySocialFeed {
 
 impl Validatable for PubkySocialFeed {
     fn validate(&self, id: Option<&str>) -> Result<(), String> {
-        // Validate the feed ID
-        if let Some(id) = id {
-            self.validate_id(id)?;
-        }
+        // Content first, so an unrecognized value is reported as such and not as an id mismatch
+        self.feed.validate(None)?;
 
-        // Validate name
         if self.name.trim().is_empty() {
             return Err("Validation Error: Feed name cannot be empty".into());
         }
 
         validate_feed_icon(&self.icon)?;
 
-        self.feed.validate(None)?;
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
 
         Ok(())
     }
