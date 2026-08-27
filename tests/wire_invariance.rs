@@ -317,7 +317,7 @@ fn every_enum_variant_serializes_as_before() {
 /// The limits table ships to npm as `validationLimits.json`, so its keys are wire too. This is
 /// the 1.0 table: renamed, added and removed rows are deliberate and consumers adopt them with 1.0.
 #[test]
-fn validation_limits_keys_are_unchanged() {
+fn validation_limits_wire_keys_are_pinned() {
     assert_eq!(
         json(&VALIDATION_LIMITS),
         r#"{"maxFileSizeBytes":104857600,"tagLabelMinLength":1,"tagLabelMaxLength":20,"tagInvalidChars":[",",":"," ","\t","\n","\r"],"userNameMinLength":3,"userNameMaxLength":50,"userBioMaxLength":160,"imageUrlMaxLength":300,"userLinksMaxCount":5,"userLinkTitleMaxLength":100,"userLinkUrlMaxLength":300,"userStatusMaxLength":50,"postNoteContentMaxLength":2000,"articleTitleMaxLength":100,"articleBodyMaxLength":50000,"articleContentMaxLength":52000,"postAttachmentsMaxCount":10,"attachmentAltMaxLength":1000,"attachmentNameMaxLength":255,"referenceUriMaxLength":1024,"postAllowedAttachmentProtocols":["pubky","http","https"],"collectionContentMaxLength":40000,"collectionNameMinLength":1,"collectionNameMaxLength":100,"collectionDescriptionMaxLength":500,"collectionItemsMaxCount":100,"feedTagsMaxCount":5,"feedNameMaxLength":100,"feedIconMaxLength":50,"bookmarkTargetUriMaxBytes":187}"#

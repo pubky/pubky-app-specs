@@ -160,4 +160,16 @@ mod tests {
         shuffled.sort_unstable();
         assert_eq!(shuffled, ids);
     }
+
+    #[test]
+    fn validate_id_checks_format_then_time_bounds() {
+        // Exactly the lower bound, canonical: accepted.
+        assert!(Minter.validate_id("00326QR0MQG00").is_ok());
+        // Canonical but far in the future: format passes, the time bound rejects.
+        let err = Minter.validate_id("FZZZZZZZZZZZY").unwrap_err();
+        assert!(err.contains("future"), "{err}");
+        // The O alias fails on format before any time check.
+        let err = Minter.validate_id("O0326QR0MQG00").unwrap_err();
+        assert!(err.contains("Crockford"), "{err}");
+    }
 }

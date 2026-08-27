@@ -1000,7 +1000,7 @@ mod tests {
     fn test_validate_attachments_url_too_long() {
         // Create a URL that exceeds reference_uri_max_length (1024)
         // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
-        // So we need a file ID that makes the total exceed 200
+        // So we need a file ID that makes the total exceed 1024
         let long_file_id = "a".repeat(1100); // This will make total > 1024
         let long_url = format!(
             "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",

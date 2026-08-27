@@ -1,7 +1,7 @@
 //! Validation limits for pubky-social-specs data models.
 //!
 //! These constants are the single source of truth for client-side validation.
-//! Every `*_max_length` counts Unicode code points; the one byte-denominated cap is
+//! Every `*_max_length` counts Unicode code points; the one byte-denominated string cap is
 //! `bookmark_target_uri_max_bytes`.
 //!
 //! # Examples
@@ -43,7 +43,7 @@ pub struct ValidationLimits {
     pub user_link_url_max_length: usize,
     /// Maximum status length in characters.
     pub user_status_max_length: usize,
-    /// Maximum content length of a note (the short post kind).
+    /// Maximum content length of a note and of the media post kinds.
     pub post_note_content_max_length: usize,
     /// Maximum article title length in characters.
     pub article_title_max_length: usize,
@@ -57,7 +57,8 @@ pub struct ValidationLimits {
     pub attachment_alt_max_length: usize,
     /// Maximum length of an attachment's display name.
     pub attachment_name_max_length: usize,
-    /// Maximum length of any reference URI field (parent, embed, lock, attachment, tag target).
+    /// Maximum length of a reference URI field. Applied to lock and attachment URLs today;
+    /// parent, embed and tag targets adopt it with their 1.0 validators.
     pub reference_uri_max_length: usize,
     /// Allowed protocols for attachment URLs.
     pub post_allowed_attachment_protocols: &'static [&'static str],

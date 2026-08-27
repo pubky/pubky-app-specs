@@ -72,22 +72,25 @@ const CROCKFORD_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// byte-for-byte: every char from the canonical uppercase alphabet, and
 /// every dangling (pad) bit zero. Alias spellings (`O` for `0`, lowercase)
 /// would otherwise name the same object under a different homeserver key.
-fn canonical_crockford_value(id: &str, expected_chars: usize) -> Result<u128, String> {
+/// Returns the 5-bit digit of every char; callers check the pad bits on the
+/// last digit and fold only what fits their value type.
+fn canonical_crockford_digits(id: &str, expected_chars: usize) -> Result<Vec<u8>, String> {
     let bytes = id.as_bytes();
     if bytes.len() != expected_chars {
         return Err(format!(
-            "Validation Error: Invalid ID length: must be {expected_chars} characters"
+            "Validation Error: Invalid ID length: must be {expected_chars} ASCII characters"
         ));
     }
-    let mut acc: u128 = 0;
-    for &b in bytes {
-        let val = CROCKFORD_ALPHABET
-            .iter()
-            .position(|&c| c == b)
-            .ok_or("Validation Error: non-canonical Crockford character")?;
-        acc = (acc << 5) | val as u128;
-    }
-    Ok(acc)
+    bytes
+        .iter()
+        .map(|&b| {
+            CROCKFORD_ALPHABET
+                .iter()
+                .position(|&c| c == b)
+                .map(|v| v as u8)
+                .ok_or_else(|| "Validation Error: non-canonical Crockford character".to_string())
+        })
+        .collect()
 }
 
 /// TimestampId: 13 chars, 65 bits, one dangling bit that must be zero
@@ -95,18 +98,19 @@ fn canonical_crockford_value(id: &str, expected_chars: usize) -> Result<u128, St
 /// Returns the decoded microseconds. Canonicality only; time bounds are the
 /// caller's concern.
 pub fn validate_timestamp_id_format(id: &str) -> Result<i64, String> {
-    let acc = canonical_crockford_value(id, 13)?;
-    if acc & 1 != 0 {
+    let digits = canonical_crockford_digits(id, 13)?;
+    if digits[12] & 1 != 0 {
         return Err("Validation Error: non-canonical ID (dangling bit set)".into());
     }
+    let acc = digits.iter().fold(0u128, |acc, &d| (acc << 5) | d as u128);
     Ok((acc >> 1) as u64 as i64)
 }
 
 /// HashId: 26 chars, 130 bits, two dangling bits that must be zero
 /// (equivalently, the final char is one of `0 4 8 C G M R W`).
 pub fn validate_hash_id_format(id: &str) -> Result<(), String> {
-    let acc = canonical_crockford_value(id, 26)?;
-    if acc & 0b11 != 0 {
+    let digits = canonical_crockford_digits(id, 26)?;
+    if digits[25] & 0b11 != 0 {
         return Err("Validation Error: non-canonical ID (dangling bits set)".into());
     }
     Ok(())
@@ -115,22 +119,19 @@ pub fn validate_hash_id_format(id: &str) -> Result<(), String> {
 static LAST_MINTED_MICROS: AtomicI64 = AtomicI64::new(0);
 
 /// Strictly increasing microsecond mint for TimestampId creation. If the
-/// clock has not advanced past the last issued value, issues last + 1. A
-/// burst may run a few microseconds ahead of the wall clock, well inside
-/// the now + 2h validity bound. `timestamp()` stays the raw clock for
-/// `created_at` fields.
+/// clock has not advanced past the last issued value, issues last + 1, so a
+/// burst runs ahead of the wall clock by one microsecond per mint beyond
+/// the clock's rate (in the browser the clock ticks per millisecond). That
+/// stays far inside the now + 2h validity bound. The guard is per process,
+/// or per wasm instance; two tabs each keep their own. `timestamp()` stays
+/// the raw clock for `created_at` fields.
 pub fn mint_timestamp_micros() -> i64 {
     let now = timestamp();
+    let bump = |last: i64| if now > last { now } else { last + 1 };
     let prev = LAST_MINTED_MICROS
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |last| {
-            Some(if now > last { now } else { last + 1 })
-        })
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |last| Some(bump(last)))
         .expect("closure always returns Some");
-    if now > prev {
-        now
-    } else {
-        prev + 1
-    }
+    bump(prev)
 }
 
 /// 2^53 - 1: the largest integer JSON round-trips identically through a JS

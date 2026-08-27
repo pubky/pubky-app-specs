@@ -34,7 +34,7 @@ impl PubkyId {
     /// checked here; that answer differs by target and belongs where keys are used.
     fn validate(s: &str) -> Result<(), String> {
         if s.len() != 52 {
-            return Err("Validation Error: the string is not 52 utf chars".to_string());
+            return Err("Validation Error: the string is not 52 ASCII characters".to_string());
         }
         // 52 chars = 260 bits = 32 bytes + 4 pad bits: the final char's index
         // must be a multiple of 16, which leaves exactly 'y' (0) and 'o' (16).
@@ -141,7 +141,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            "Validation Error: the string is not 52 utf chars"
+            "Validation Error: the string is not 52 ASCII characters"
         );
     }
 
