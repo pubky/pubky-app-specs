@@ -118,17 +118,33 @@ pub fn validate_hash_id_format(id: &str) -> Result<(), String> {
 
 static LAST_MINTED_MICROS: AtomicI64 = AtomicI64::new(0);
 
+/// A clock this far behind the last mint is a correction, not a burst: a
+/// burst would need a million mints to open a one second gap.
+const CLOCK_ROLLBACK_TOLERANCE_MICROS: i64 = 1_000_000;
+
 /// Strictly increasing microsecond mint for TimestampId creation. If the
 /// clock has not advanced past the last issued value, issues last + 1, so a
 /// burst runs ahead of the wall clock by one microsecond per mint beyond
 /// the clock's rate (in the browser the clock ticks per millisecond). That
-/// stays far inside the now + 2h validity bound. The guard is per process,
-/// or per wasm instance; two tabs each keep their own. `timestamp()` stays
-/// the raw clock for `created_at` fields.
+/// stays far inside the now + 2h validity bound. After a clock correction
+/// (the clock lands more than one second behind the last mint) the mint
+/// follows the clock instead; keeping last + 1 there would put every new id
+/// beyond the now + 2h bound until wall time caught up. The guard is per
+/// process, or per wasm instance; two tabs each keep their own.
+/// `timestamp()` stays the raw clock for `created_at` fields.
 pub fn mint_timestamp_micros() -> i64 {
-    let now = timestamp();
-    let bump = |last: i64| if now > last { now } else { last + 1 };
-    let prev = LAST_MINTED_MICROS
+    mint_from(timestamp(), &LAST_MINTED_MICROS)
+}
+
+fn mint_from(now: i64, last_minted: &AtomicI64) -> i64 {
+    let bump = |last: i64| {
+        if now > last || last - now > CLOCK_ROLLBACK_TOLERANCE_MICROS {
+            now
+        } else {
+            last + 1
+        }
+    };
+    let prev = last_minted
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |last| Some(bump(last)))
         .expect("closure always returns Some");
     bump(prev)
@@ -248,6 +264,24 @@ mod tests {
         assert!(validate_safe_json_int(-MAX_SAFE_JSON_INT).is_ok());
         assert!(validate_safe_json_int(MAX_SAFE_JSON_INT + 1).is_err());
         assert!(validate_safe_json_int(i64::MIN).is_err());
+    }
+
+    #[test]
+    fn mint_follows_a_deterministic_clock() {
+        let last = AtomicI64::new(0);
+        let clock = [100, 100, 50, 50, 200, 199, 201];
+        let minted: Vec<i64> = clock.iter().map(|&now| mint_from(now, &last)).collect();
+        assert_eq!(minted, [100, 101, 102, 103, 200, 201, 202]);
+    }
+
+    #[test]
+    fn mint_follows_the_clock_after_a_correction() {
+        let last = AtomicI64::new(5_000_000);
+        assert_eq!(mint_from(1_000_000, &last), 1_000_000);
+        assert_eq!(mint_from(1_000_000, &last), 1_000_001);
+        // A gap inside the tolerance is still treated as a burst.
+        let last = AtomicI64::new(1_500_000);
+        assert_eq!(mint_from(1_000_000, &last), 1_500_001);
     }
 
     #[test]
