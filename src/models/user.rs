@@ -195,7 +195,7 @@ impl Validatable for PubkySocialUser {
             if image.is_empty() {
                 return Err("Validation Error: Image URI cannot be empty".into());
             }
-            if image.chars().count() > VALIDATION_LIMITS.user_image_url_max_length {
+            if image.chars().count() > VALIDATION_LIMITS.image_url_max_length {
                 return Err("Validation Error: Image URI exceeds maximum length".into());
             }
             // Validate URL format
@@ -502,7 +502,7 @@ mod tests {
         let long_status = "b".repeat(VALIDATION_LIMITS.user_status_max_length + 10);
         let long_image = format!(
             "https://example.com/{}.png",
-            "a".repeat(VALIDATION_LIMITS.user_image_url_max_length - 30)
+            "a".repeat(VALIDATION_LIMITS.image_url_max_length - 30)
         );
 
         let user = PubkySocialUser::new(
@@ -549,7 +549,7 @@ mod tests {
                     None,
                     Some(format!(
                         "https://example.com/{}.png",
-                        "a".repeat(VALIDATION_LIMITS.user_image_url_max_length - 20)
+                        "a".repeat(VALIDATION_LIMITS.image_url_max_length - 20)
                     )),
                     None,
                     None,

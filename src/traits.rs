@@ -1,4 +1,4 @@
-use crate::common::{timestamp, validate_crockford_id};
+use crate::common::{mint_timestamp_micros, timestamp, validate_timestamp_id_format};
 use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::de::DeserializeOwned;
@@ -6,8 +6,8 @@ use serde::de::DeserializeOwned;
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
     fn create_id(&self) -> String {
-        // Get current time in microseconds since UNIX epoch
-        let now = timestamp();
+        // Strictly increasing per session, so same-instant mints never share a path
+        let now = mint_timestamp_micros();
 
         // Convert to big-endian bytes
         let bytes = now.to_be_bytes();
@@ -19,11 +19,8 @@ pub trait TimestampId {
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
     /// 13 characters long, and represents a reasonable timestamp.
     fn validate_id(&self, id: &str) -> Result<(), String> {
-        // Structural validation (length, encoding, decoded size)
-        let decoded_bytes = validate_crockford_id(id)?;
-
-        // Convert the decoded bytes to a timestamp in microseconds
-        let timestamp_micros = i64::from_be_bytes(decoded_bytes);
+        // Canonical encoding first, then the time bounds
+        let timestamp_micros = validate_timestamp_id_format(id)?;
 
         // Get current time in microseconds
         let now_micros = timestamp();
@@ -78,7 +75,7 @@ pub trait HashId {
         let half_hash_length = blake3_hash.as_bytes().len() / 2;
         let half_hash = &blake3_hash.as_bytes()[..half_hash_length];
 
-        // Encode the first half of the hash in Base32 using the Z-base32 alphabet
+        // Encode the first half of the hash in Base32 using the Crockford alphabet
         encode(Alphabet::Crockford, half_hash)
     }
 
@@ -137,5 +134,42 @@ pub trait Json: Serialize + DeserializeOwned + Validatable {
         let object = object.sanitize();
         object.validate(None)?;
         Ok(object)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Minter;
+    impl TimestampId for Minter {}
+
+    #[test]
+    fn minted_ids_are_strictly_increasing_and_sort_bytewise_by_time() {
+        let ids: Vec<String> = (0..10_000).map(|_| Minter.create_id()).collect();
+        let micros: Vec<i64> = ids
+            .iter()
+            .map(|id| crate::common::validate_timestamp_id_format(id).unwrap())
+            .collect();
+        assert!(micros.windows(2).all(|w| w[0] < w[1]));
+        assert!(ids.windows(2).all(|w| w[0] < w[1]));
+        // Fixed width and uppercase mean bytewise order (the homeserver's COLLATE "C")
+        // is chronological order, so a reversed LIST is newest-first.
+        let mut shuffled = ids.clone();
+        shuffled.reverse();
+        shuffled.sort_unstable();
+        assert_eq!(shuffled, ids);
+    }
+
+    #[test]
+    fn validate_id_checks_format_then_time_bounds() {
+        // Exactly the lower bound, canonical: accepted.
+        assert!(Minter.validate_id("00326QR0MQG00").is_ok());
+        // Canonical but far in the future: format passes, the time bound rejects.
+        let err = Minter.validate_id("FZZZZZZZZZZZY").unwrap_err();
+        assert!(err.contains("future"), "{err}");
+        // The O alias fails on format before any time check.
+        let err = Minter.validate_id("O0326QR0MQG00").unwrap_err();
+        assert!(err.contains("Crockford"), "{err}");
     }
 }

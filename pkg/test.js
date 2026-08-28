@@ -666,7 +666,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       const mimeTypes = getValidMimeTypes();
       const validMimeType = mimeTypes[0]; // Pick the first valid MIME type
       
-      const { blob, meta: blobMeta } = specsBuilder.createBlob([1, 2, 3, 4]);
+      const { blob, meta: blobMeta } = specsBuilder.createBlob([1, 2]);
+      assert.strictEqual(blobMeta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
       const { file } = specsBuilder.createFile(
         "test-file",
         blobMeta.url,

@@ -328,10 +328,10 @@ impl Validatable for PubkySocialPost {
             if lock_url.trim().is_empty() {
                 return Err("Validation Error: Lock URL cannot be empty".into());
             }
-            if lock_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+            if lock_url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length {
                 return Err(format!(
                     "Validation Error: Lock URL exceeds maximum length (max: {} characters)",
-                    VALIDATION_LIMITS.post_attachment_url_max_length
+                    VALIDATION_LIMITS.reference_uri_max_length
                 ));
             }
             let parsed = Url::parse(lock_url)
@@ -356,15 +356,13 @@ impl Validatable for PubkySocialPost {
 
         // Validate content length based on post kind
         let (max_length, kind_name) = match self.kind {
-            PubkySocialPostKind::Short => {
-                (VALIDATION_LIMITS.post_short_content_max_length, "Short")
-            }
-            PubkySocialPostKind::Long => (VALIDATION_LIMITS.post_long_content_max_length, "Long"),
+            PubkySocialPostKind::Short => (VALIDATION_LIMITS.post_note_content_max_length, "Short"),
+            PubkySocialPostKind::Long => (VALIDATION_LIMITS.article_body_max_length, "Long"),
             PubkySocialPostKind::Image
             | PubkySocialPostKind::Video
             | PubkySocialPostKind::Link
             | PubkySocialPostKind::File => (
-                VALIDATION_LIMITS.post_short_content_max_length,
+                VALIDATION_LIMITS.post_note_content_max_length,
                 "Image/Video/Link/File",
             ),
             PubkySocialPostKind::Collection | PubkySocialPostKind::Unknown => {
@@ -412,10 +410,10 @@ impl Validatable for PubkySocialPost {
                         index
                     ));
                 }
-                if url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+                if url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length {
                     return Err(format!(
                         "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
-                        index, VALIDATION_LIMITS.post_attachment_url_max_length
+                        index, VALIDATION_LIMITS.reference_uri_max_length
                     ));
                 }
                 // Validate URL format and ensure it uses an allowed protocol
@@ -1000,10 +998,10 @@ mod tests {
 
     #[test]
     fn test_validate_attachments_url_too_long() {
-        // Create a URL that exceeds post_attachment_url_max_length (200)
+        // Create a URL that exceeds reference_uri_max_length (1024)
         // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
-        // So we need a file ID that makes the total exceed 200
-        let long_file_id = "a".repeat(150); // This will make total > 200
+        // So we need a file ID that makes the total exceed 1024
+        let long_file_id = "a".repeat(1100); // This will make total > 1024
         let long_url = format!(
             "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
             long_file_id
@@ -1011,10 +1009,10 @@ mod tests {
 
         // Verify the URL is actually too long
         assert!(
-            long_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length,
+            long_url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length,
             "URL length {} should exceed {}",
             long_url.chars().count(),
-            VALIDATION_LIMITS.post_attachment_url_max_length
+            VALIDATION_LIMITS.reference_uri_max_length
         );
 
         let post = PubkySocialPost::new(

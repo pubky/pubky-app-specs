@@ -123,7 +123,7 @@ import limits, {
 } from "pubky-social-specs/validationLimits";
 
 console.log(validationLimits.userNameMaxLength);
-console.log(limits.postShortContentMaxLength);
+console.log(limits.postNoteContentMaxLength);
 
 const copy = getValidationLimits();
 ```

@@ -9,7 +9,11 @@ mod uri;
 // Re-export constants
 pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
 // Re-export common utilities
-pub use common::validate_crockford_id;
+pub use common::{
+    ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace, mint_timestamp_micros,
+    validate_hash_id_format, validate_safe_json_int, validate_timestamp_id_format,
+    FROZEN_WHITESPACE, MAX_SAFE_JSON_INT,
+};
 #[doc(inline)]
 pub use limits::*;
 // Re-export domain types
