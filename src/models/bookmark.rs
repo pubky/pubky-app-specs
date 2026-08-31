@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, HashId, Validatable},
@@ -72,6 +73,7 @@ impl HashId for PubkySocialBookmark {
 }
 
 impl HasIdPath for PubkySocialBookmark {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "bookmarks/";
 
     fn create_path(id: &str) -> String {
@@ -80,7 +82,7 @@ impl HasIdPath for PubkySocialBookmark {
 }
 
 impl Validatable for PubkySocialBookmark {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the bookmark ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -97,6 +99,7 @@ impl Validatable for PubkySocialBookmark {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{post_uri_builder, traits::Validatable};
 
     #[test]
@@ -128,7 +131,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkySocialBookmark::new(post_uri);
         let id = bookmark.create_id();
-        let result = bookmark.validate(Some(&id));
+        let result = bookmark.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -137,7 +140,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkySocialBookmark::new(post_uri);
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(Some(invalid_id));
+        let result = bookmark.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -147,7 +150,7 @@ mod tests {
         let bookmark = PubkySocialBookmark::new(post_uri);
 
         let id = bookmark.create_id();
-        let res = bookmark.validate(Some(&id));
+        let res = bookmark.validate(Some(&id), &PUB_CTX);
         assert!(res
             .unwrap_err()
             .starts_with("Validation Error: Invalid URI format"));
@@ -167,7 +170,8 @@ mod tests {
         let id = bookmark.create_id();
 
         let blob = bookmark_json.as_bytes();
-        let bookmark_parsed = <PubkySocialBookmark as Validatable>::try_from(blob, &id).unwrap();
+        let bookmark_parsed =
+            <PubkySocialBookmark as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);
     }

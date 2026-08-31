@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
@@ -229,7 +230,7 @@ impl Validatable for PubkySocialFeedConfig {
         }
     }
 
-    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // reach, layout and sort define the feed, so an unknown value rejects it.
         // An unknown content filter only degrades to "no filter", so it passes.
         if !self.reach.is_known() {
@@ -328,6 +329,7 @@ impl HashId for PubkySocialFeed {
 }
 
 impl HasIdPath for PubkySocialFeed {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "feeds/";
 
     fn create_path(id: &str) -> String {
@@ -336,9 +338,9 @@ impl HasIdPath for PubkySocialFeed {
 }
 
 impl Validatable for PubkySocialFeed {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Content first, so an unrecognized value is reported as such and not as an id mismatch
-        self.feed.validate(None)?;
+        self.feed.validate(None, &PUB_CTX)?;
 
         if self.name.trim().is_empty() {
             return Err("Validation Error: Feed name cannot be empty".into());
@@ -496,7 +498,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -515,7 +517,7 @@ mod tests {
             "bitcoin".to_string(),
         );
         let invalid_id = "INVALIDID";
-        let result = feed.validate(Some(invalid_id));
+        let result = feed.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -561,7 +563,8 @@ mod tests {
         let feed_id = feed.create_id();
 
         let blob = feed_json.as_bytes();
-        let feed_parsed = <PubkySocialFeed as Validatable>::try_from(blob, &feed_id).unwrap();
+        let feed_parsed =
+            <PubkySocialFeed as Validatable>::try_from(blob, &feed_id, &PUB_CTX).unwrap();
 
         assert_eq!(feed_parsed.name, "My Feed");
         assert_eq!(
@@ -633,7 +636,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("domain_tags"));
     }
@@ -654,7 +657,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid character"));
     }
@@ -682,7 +685,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains(&format!(
             "more than {} tags",
@@ -706,7 +709,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum length"));
     }
@@ -727,7 +730,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("whitespace"));
     }
@@ -748,7 +751,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid character"));
     }
@@ -775,7 +778,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        let result = feed.validate(Some(&feed_id));
+        let result = feed.validate(Some(&feed_id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -831,7 +834,7 @@ mod tests {
             );
             let feed_id = feed.create_id();
 
-            let result = feed.validate(Some(&feed_id));
+            let result = feed.validate(Some(&feed_id), &PUB_CTX);
             assert!(result.is_err(), "Should reject tag: {}", invalid_tag);
             assert!(
                 result.unwrap_err().contains(expected_error),
@@ -862,7 +865,8 @@ mod tests {
         let feed_id = feed.create_id();
 
         let feed_parsed =
-            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id, &PUB_CTX)
+                .unwrap();
         assert_eq!(feed_parsed.icon, Some("code-2".to_string()));
 
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -890,7 +894,8 @@ mod tests {
         let feed_id = feed.create_id();
 
         let feed_parsed =
-            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id, &PUB_CTX)
+                .unwrap();
         assert_eq!(feed_parsed.icon, None);
 
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -916,7 +921,8 @@ mod tests {
         let feed: PubkySocialFeed = serde_json::from_str(feed_json).unwrap();
         let feed_id = feed.create_id();
         let feed_parsed =
-            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id).unwrap();
+            <PubkySocialFeed as Validatable>::try_from(feed_json.as_bytes(), &feed_id, &PUB_CTX)
+                .unwrap();
 
         assert_eq!(feed_parsed.icon, None);
         let serialized = serde_json::to_value(&feed_parsed).unwrap();
@@ -940,7 +946,7 @@ mod tests {
 
         assert_eq!(feed.icon, Some("code-2".to_string()));
         let feed_id = feed.create_id();
-        assert!(feed.validate(Some(&feed_id)).is_ok());
+        assert!(feed.validate(Some(&feed_id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -971,7 +977,7 @@ mod tests {
             );
             let feed_id = feed.create_id();
 
-            let result = feed.validate(Some(&feed_id));
+            let result = feed.validate(Some(&feed_id), &PUB_CTX);
             assert!(result.is_err(), "Should reject icon: {}", invalid_icon);
             assert!(
                 result.unwrap_err().contains(expected_error),
@@ -998,7 +1004,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        assert!(feed.validate(Some(&feed_id)).is_ok());
+        assert!(feed.validate(Some(&feed_id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -1019,7 +1025,7 @@ mod tests {
         );
         let feed_id = feed.create_id();
 
-        assert!(feed.validate(Some(&feed_id)).is_ok());
+        assert!(feed.validate(Some(&feed_id), &PUB_CTX).is_ok());
         assert_eq!(feed.icon, Some("no-such-icon-42".to_string()));
     }
 

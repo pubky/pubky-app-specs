@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, Validatable},
@@ -53,7 +54,7 @@ impl PubkySocialMute {
 impl Json for PubkySocialMute {}
 
 impl Validatable for PubkySocialMute {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the muteee ID
         if let Some(id) = id {
             PubkyId::try_from(id)?;
@@ -64,6 +65,7 @@ impl Validatable for PubkySocialMute {
 }
 
 impl HasIdPath for PubkySocialMute {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "mutes/";
 
     fn create_path(pubky_id: &str) -> String {
@@ -76,6 +78,7 @@ mod tests {
     use super::*;
     use crate::common::timestamp;
     use crate::traits::Validatable;
+    use crate::traits::PUB_CTX;
 
     #[test]
     fn test_new() {
@@ -99,14 +102,17 @@ mod tests {
     #[test]
     fn test_validate() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
+        let result = mute.validate(
+            Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"),
+            &PUB_CTX,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("not_a_valid_pubky_id"));
+        let result = mute.validate(Some("not_a_valid_pubky_id"), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -122,6 +128,7 @@ mod tests {
         let mute_parsed = <PubkySocialMute as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+            &PUB_CTX,
         )
         .unwrap();
 

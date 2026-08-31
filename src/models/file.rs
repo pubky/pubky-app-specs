@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
@@ -110,6 +111,7 @@ impl PubkySocialFile {
 impl TimestampId for PubkySocialFile {}
 
 impl HasIdPath for PubkySocialFile {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "files/";
 
     fn create_path(id: &str) -> String {
@@ -144,7 +146,7 @@ impl Validatable for PubkySocialFile {
         }
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the file ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -194,6 +196,7 @@ impl Validatable for PubkySocialFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{blob_uri_builder, traits::Validatable};
 
     #[test]
@@ -241,7 +244,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(Some(&id));
+        let result = file.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -254,7 +257,7 @@ mod tests {
             1024,
         );
         let invalid_id = "INVALIDID";
-        let result = file.validate(Some(invalid_id));
+        let result = file.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -296,7 +299,7 @@ mod tests {
 
         for (file, expected_error) in test_cases {
             let id = file.create_id();
-            let result = file.validate(Some(&id));
+            let result = file.validate(Some(&id), &PUB_CTX);
             assert!(
                 result.is_err(),
                 "Should reject file with {}",
@@ -317,7 +320,7 @@ mod tests {
             size: 1024,
         };
         let id = file.create_id();
-        let result = file.validate(Some(&id));
+        let result = file.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid src"));
     }
@@ -343,7 +346,7 @@ mod tests {
         let id = file.create_id();
 
         let blob = file_json.as_bytes();
-        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id).unwrap();
+        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");
         assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");

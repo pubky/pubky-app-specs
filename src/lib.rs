@@ -16,6 +16,7 @@ pub use common::{
 };
 #[doc(inline)]
 pub use limits::*;
+pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
 pub use models::blob::PubkySocialBlob;
 pub use models::bookmark::PubkySocialBookmark;

@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
@@ -74,6 +75,7 @@ impl HashId for PubkySocialBlob {
 }
 
 impl HasIdPath for PubkySocialBlob {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "blobs/";
 
     fn create_path(id: &str) -> String {
@@ -82,13 +84,13 @@ impl HasIdPath for PubkySocialBlob {
 }
 
 impl Validatable for PubkySocialBlob {
-    fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
+    fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, String> {
         let instance = Self(blob.to_vec());
-        instance.validate(Some(id))?;
+        instance.validate(Some(id), ctx)?;
         Ok(instance)
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Check if the blob data is empty or exceeds maximum size
         if self.0.is_empty() {
             return Err("Validation Error: Blob size cannot be zero".to_string());
@@ -109,6 +111,7 @@ impl Validatable for PubkySocialBlob {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::traits::{HashId, Validatable};
 
     #[test]
@@ -130,11 +133,11 @@ mod tests {
     fn test_validate() {
         let blob = PubkySocialBlob(vec![1, 2, 3]);
         let id = blob.create_id();
-        let result = blob.validate(Some(&id));
+        let result = blob.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
 
         // Test without ID
-        let result = blob.validate(None);
+        let result = blob.validate(None, &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -143,20 +146,20 @@ mod tests {
         // Test blob at max size (should pass)
         let max_size_blob = PubkySocialBlob(vec![0; VALIDATION_LIMITS.max_file_size_bytes]);
         let id = max_size_blob.create_id();
-        let result = max_size_blob.validate(Some(&id));
+        let result = max_size_blob.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok(), "Blob at max size should be valid");
 
         // Test zero-size blob (should fail)
         let zero_size_blob = PubkySocialBlob(vec![]);
         let id = zero_size_blob.create_id();
-        let result = zero_size_blob.validate(Some(&id));
+        let result = zero_size_blob.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err(), "Zero-size blob should be invalid");
         assert!(result.unwrap_err().contains("cannot be zero"));
 
         // Test blob exceeding max size (should fail)
         let oversized_blob = PubkySocialBlob(vec![0; VALIDATION_LIMITS.max_file_size_bytes + 1]);
         let id = oversized_blob.create_id();
-        let result = oversized_blob.validate(Some(&id));
+        let result = oversized_blob.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum limit"));
     }
@@ -165,7 +168,7 @@ mod tests {
     fn test_validate_invalid_id() {
         let blob = PubkySocialBlob(vec![1, 2, 3]);
         let invalid_id = "INVALIDID";
-        let result = blob.validate(Some(invalid_id));
+        let result = blob.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -175,7 +178,7 @@ mod tests {
         let blob = PubkySocialBlob(blob_data.clone());
         let id = blob.create_id();
 
-        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, &id);
+        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, &id, &PUB_CTX);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().0, blob_data);
     }
@@ -185,7 +188,7 @@ mod tests {
         let blob_data = vec![1, 2, 3];
         let invalid_id = "INVALIDID";
 
-        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, invalid_id);
+        let result = <PubkySocialBlob as Validatable>::try_from(&blob_data, invalid_id, &PUB_CTX);
         assert!(result.is_err());
     }
 }

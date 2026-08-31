@@ -9,7 +9,7 @@ fn main() {
 use {
     anyhow::Result,
     pubky::{ClientId, Keypair, Pubky, PublicKey},
-    pubky_social_specs::{traits::HasPath, traits::Validatable, PubkySocialUser},
+    pubky_social_specs::{traits::HasPath, traits::Validatable, PubkySocialUser, PUB_CTX},
     serde_json::to_vec,
 };
 // Replace this with your actual homeserver public key
@@ -98,8 +98,9 @@ async fn main() -> Result<()> {
 
     let retrieved_content = response.bytes().await?;
 
-    let retrieved_profile = <PubkySocialUser as Validatable>::try_from(&retrieved_content, "")
-        .expect("Failed to deserialize the retrieved user profile.");
+    let retrieved_profile =
+        <PubkySocialUser as Validatable>::try_from(&retrieved_content, "", &PUB_CTX)
+            .expect("Failed to deserialize the retrieved user profile.");
 
     println!(
         "User profile retrieved successfully:\n{}",

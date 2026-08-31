@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
     common::sanitize_url,
     limits::VALIDATION_LIMITS,
@@ -133,6 +134,7 @@ impl PubkySocialUser {
 }
 
 impl HasPath for PubkySocialUser {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "profile.json";
 
     fn create_path() -> String {
@@ -174,7 +176,7 @@ impl Validatable for PubkySocialUser {
         }
     }
 
-    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate name length
         let name_length = self.name.chars().count();
         if !(VALIDATION_LIMITS.user_name_min_length..=VALIDATION_LIMITS.user_name_max_length)
@@ -210,7 +212,7 @@ impl Validatable for PubkySocialUser {
             }
 
             for link in links {
-                link.validate(None)?;
+                link.validate(None, &PUB_CTX)?;
             }
         }
 
@@ -245,7 +247,7 @@ impl Validatable for PubkySocialUserLink {
         PubkySocialUserLink { title, url }
     }
 
-    fn validate(&self, _id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate title
         if self.title.trim().is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());
@@ -357,7 +359,7 @@ mod tests {
             Some("Exploring the decentralized web.".to_string()),
         );
 
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -372,7 +374,7 @@ mod tests {
             None,
         );
 
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -387,7 +389,7 @@ mod tests {
         assert_eq!(user.name.len(), VALIDATION_LIMITS.user_name_max_length + 1);
 
         // Validation should catch the violation
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid name length"));
     }
@@ -414,7 +416,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let user = <PubkySocialUser as Validatable>::try_from(blob, "").unwrap();
+        let user = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX).unwrap();
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist"));
@@ -442,7 +444,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let result = <PubkySocialUser as Validatable>::try_from(blob, "");
+        let result = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX);
 
         // Invalid link URL should cause validation to fail
         assert!(result.is_err());
@@ -459,7 +461,7 @@ mod tests {
         "#;
 
         let blob = user_json.as_bytes();
-        let result = <PubkySocialUser as Validatable>::try_from(blob, "");
+        let result = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX);
 
         // Invalid image URL should cause validation to fail
         assert!(result.is_err());
@@ -491,7 +493,7 @@ mod tests {
         assert_eq!(links[0].url, "invalid_link_url");
 
         // Validation should reject
-        let result = sanitized.validate(None);
+        let result = sanitized.validate(None, &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -559,7 +561,7 @@ mod tests {
         ];
 
         for (user, field_name) in test_cases {
-            let result = user.validate(None);
+            let result = user.validate(None, &PUB_CTX);
             assert!(
                 result.is_err(),
                 "Should reject {} that exceeds maximum length",
@@ -588,7 +590,7 @@ mod tests {
         );
 
         // Validation should catch the violation
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Too many links"));
     }
@@ -606,7 +608,7 @@ mod tests {
             sanitized.title.len(),
             VALIDATION_LIMITS.user_link_title_max_length + 1
         );
-        let result = sanitized.validate(None);
+        let result = sanitized.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum length"));
 
@@ -621,7 +623,7 @@ mod tests {
 
         // Verify URL exceeds limit (accounting for potential normalization)
         if sanitized2.url.chars().count() > VALIDATION_LIMITS.user_link_url_max_length {
-            let result = sanitized2.validate(None);
+            let result = sanitized2.validate(None, &PUB_CTX);
             assert!(
                 result.is_err(),
                 "Expected validation error for URL length {}, max is {}",
@@ -638,7 +640,7 @@ mod tests {
                 url: extremely_long_url,
             };
             let sanitized3 = link3.sanitize();
-            let result = sanitized3.validate(None);
+            let result = sanitized3.validate(None, &PUB_CTX);
             assert!(
                 result.is_err(),
                 "Expected validation error for URL length {}, max is {}",
@@ -656,7 +658,7 @@ mod tests {
         let emoji_name = "Hi👋🏻Bob"; // 7 characters: H, i, 👋, 🏻, B, o, b
         let user = PubkySocialUser::new(emoji_name.to_string(), None, None, None, None);
         assert!(
-            user.validate(None).is_ok(),
+            user.validate(None, &PUB_CTX).is_ok(),
             "Should accept emoji in name (counts chars, not bytes)"
         );
 
@@ -670,7 +672,7 @@ mod tests {
             None,
         );
         assert!(
-            user_with_bio.validate(None).is_ok(),
+            user_with_bio.validate(None, &PUB_CTX).is_ok(),
             "Should accept multi-script Unicode in bio"
         );
 
@@ -683,7 +685,7 @@ mod tests {
         );
         let user_max_emoji = PubkySocialUser::new(max_emoji_name, None, None, None, None);
         assert!(
-            user_max_emoji.validate(None).is_ok(),
+            user_max_emoji.validate(None, &PUB_CTX).is_ok(),
             "Should accept {} emoji characters as name",
             VALIDATION_LIMITS.user_name_max_length
         );
@@ -704,7 +706,7 @@ mod tests {
         assert_eq!(user.image, Some("".to_string()));
 
         // Validation should fail because empty string is not allowed
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -727,7 +729,7 @@ mod tests {
         assert_eq!(user.image, None);
 
         // Validation should pass - image is optional
-        let result = user.validate(None);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_ok());
     }
 }

@@ -7,7 +7,7 @@ use pubky_social_specs::{
     PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
     PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
     PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink,
+    PubkySocialUserLink, PUB_CTX,
 };
 use serde::de::DeserializeOwned;
 
@@ -40,7 +40,7 @@ fn unknown_primary_feed_enum_fails_validation_with_a_clear_message() {
         (config("all", "columns", "random", "null"), "sort"),
     ] {
         let c: PubkySocialFeedConfig = serde_json::from_str(&json).unwrap();
-        let err = c.validate(None).unwrap_err();
+        let err = c.validate(None, &PUB_CTX).unwrap_err();
         assert!(err.contains(field) && err.contains("unknown"), "{err}");
     }
     let feed = format!(
@@ -48,13 +48,16 @@ fn unknown_primary_feed_enum_fails_validation_with_a_clear_message() {
         config("galaxy", "columns", "recent", "null")
     );
     let f: PubkySocialFeed = serde_json::from_str(&feed).unwrap();
-    let err = f.validate(None).unwrap_err();
+    let err = f.validate(None, &PUB_CTX).unwrap_err();
     assert!(err.contains("reach") && err.contains("unknown"), "{err}");
 
     // The id-checked read path reports the unknown value, not an id mismatch.
-    let err =
-        <PubkySocialFeed as Validatable>::try_from(feed.as_bytes(), "8Z8CWH8NVYQY39ZEBFGKQWWEKG")
-            .unwrap_err();
+    let err = <PubkySocialFeed as Validatable>::try_from(
+        feed.as_bytes(),
+        "8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        &PUB_CTX,
+    )
+    .unwrap_err();
     assert!(err.contains("reach") && err.contains("unknown"), "{err}");
 }
 
@@ -72,7 +75,7 @@ fn unknown_secondary_enum_degrades_instead_of_rejecting() {
     let c: PubkySocialFeedConfig =
         serde_json::from_str(&config("all", "columns", "recent", r#""totally-new-kind""#)).unwrap();
     assert_eq!(c.content, Some(PubkySocialPostKind::Unknown));
-    assert_eq!(c.validate(None), Ok(()));
+    assert_eq!(c.validate(None, &PUB_CTX), Ok(()));
 
     let c: PubkySocialCollectionContent =
         serde_json::from_str(r#"{"name":"X","layout":"spiral"}"#).unwrap();

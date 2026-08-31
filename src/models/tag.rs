@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
@@ -78,6 +79,7 @@ impl PubkySocialTag {
 impl Json for PubkySocialTag {}
 
 impl HasIdPath for PubkySocialTag {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "tags/";
 
     fn create_path(id: &str) -> String {
@@ -159,7 +161,7 @@ impl Validatable for PubkySocialTag {
         }
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the tag ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -178,6 +180,7 @@ impl Validatable for PubkySocialTag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{post_uri_builder, traits::Validatable, user_uri_builder, APP_PATH};
 
     #[test]
@@ -288,7 +291,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(Some(&id));
+        let result = tag.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -302,7 +305,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(Some(&id));
+        let result = tag.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         let error_msg = result.unwrap_err();
         assert!(
@@ -322,7 +325,7 @@ mod tests {
         };
 
         let invalid_id = "INVALIDID";
-        let result = tag.validate(Some(invalid_id));
+        let result = tag.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -336,7 +339,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(Some(&id));
+        let result = tag.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -349,7 +352,7 @@ mod tests {
         };
 
         let id = tag.create_id();
-        let result = tag.validate(Some(&id));
+        let result = tag.validate(Some(&id), &PUB_CTX);
         assert!(result
             .unwrap_err()
             .starts_with("Validation Error: Invalid URI format"));
@@ -372,7 +375,8 @@ mod tests {
         let id = PubkySocialTag::new(user_uri.clone(), tag_label.clone()).create_id();
 
         let blob = tag_json.as_bytes();
-        let sanitized_validated_tag = <PubkySocialTag as Validatable>::try_from(blob, &id).unwrap();
+        let sanitized_validated_tag =
+            <PubkySocialTag as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
         assert_eq!(sanitized_validated_tag.uri, user_uri);
         assert_eq!(sanitized_validated_tag.label, "cooltag");
     }
@@ -389,7 +393,7 @@ mod tests {
 
         let id = "D2DV4EZDA03Q3KCRMVGMDYZ8C0";
         let blob = tag_json.as_bytes();
-        let result = <PubkySocialTag as Validatable>::try_from(blob, id);
+        let result = <PubkySocialTag as Validatable>::try_from(blob, id, &PUB_CTX);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -412,7 +416,7 @@ mod tests {
             let sanitized = tag.sanitize();
             assert_eq!(sanitized.label, "cool", "Failed for: {}", label);
             assert!(
-                sanitized.validate(None).is_ok(),
+                sanitized.validate(None, &PUB_CTX).is_ok(),
                 "Should pass after trimming: {}",
                 label
             );
@@ -426,7 +430,7 @@ mod tests {
         };
         let sanitized = tag.sanitize();
         assert_eq!(sanitized.label, "co ol"); // Only leading/trailing whitespace trimmed
-        assert!(sanitized.validate(None).is_err()); // Internal space should fail validation
+        assert!(sanitized.validate(None, &PUB_CTX).is_err()); // Internal space should fail validation
     }
 
     #[test]
@@ -445,7 +449,7 @@ mod tests {
             let tag = PubkySocialTag::new(post_uri.clone(), input.to_string());
             assert_eq!(tag.label, expected, "Failed for input: {}", input);
             assert!(
-                tag.validate(None).is_ok(),
+                tag.validate(None, &PUB_CTX).is_ok(),
                 "Should accept Unicode tag: {}",
                 input
             );
@@ -460,7 +464,7 @@ mod tests {
         );
         let tag = PubkySocialTag::new(post_uri.clone(), max_emoji_tag);
         assert!(
-            tag.validate(None).is_ok(),
+            tag.validate(None, &PUB_CTX).is_ok(),
             "Should accept {} emoji characters as tag",
             VALIDATION_LIMITS.tag_label_max_length
         );

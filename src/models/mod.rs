@@ -27,7 +27,7 @@
 //! fails its id check. That goes away when feed ids stop being derived
 //! from the serialized config.
 
-use crate::{traits::Validatable, ParsedUri, Resource};
+use crate::{traits::Validatable, traits::PUB_CTX, ParsedUri, Resource};
 
 pub mod blob;
 pub mod bookmark;
@@ -72,40 +72,42 @@ impl PubkySocialObject {
         match resource {
             Resource::User => {
                 // For a user, no ID is needed (or you may use an empty string)
-                let user = <PubkySocialUser as Validatable>::try_from(blob, "")?;
+                let user = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX)?;
                 Ok(PubkySocialObject::User(user))
             }
             Resource::Post(post_id) => {
-                let post = <PubkySocialPost as Validatable>::try_from(blob, post_id)?;
+                let post = <PubkySocialPost as Validatable>::try_from(blob, post_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Post(post))
             }
             Resource::Follow(follow_id) => {
                 // Use the follow id from the parsed URI.
-                let follow = <PubkySocialFollow as Validatable>::try_from(blob, follow_id)?;
+                let follow =
+                    <PubkySocialFollow as Validatable>::try_from(blob, follow_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Follow(follow))
             }
             Resource::Mute(muted_id) => {
-                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id)?;
+                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Mute(mute))
             }
             Resource::Bookmark(bookmark_id) => {
-                let bookmark = <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id)?;
+                let bookmark =
+                    <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
-                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id)?;
+                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Tag(tag))
             }
             Resource::File(file_id) => {
-                let file = <PubkySocialFile as Validatable>::try_from(blob, file_id)?;
+                let file = <PubkySocialFile as Validatable>::try_from(blob, file_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::File(file))
             }
             Resource::Blob(blob_id) => {
-                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id)?;
+                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Blob(blob_obj))
             }
             Resource::Feed(feed_id) => {
-                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id)?;
+                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id, &PUB_CTX)?;
                 Ok(PubkySocialObject::Feed(feed))
             }
             Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),

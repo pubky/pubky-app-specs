@@ -196,7 +196,7 @@ impl PubkySpecsBuilder {
 
         // 2) Build user domain object
         let user = PubkySocialUser::new(name, bio, image, links_vec, status);
-        user.validate(None)?; // No ID-based validation for user
+        user.validate(None, &PUB_CTX)?; // No ID-based validation for user
 
         // 3) Create the path and meta
         let path = PubkySocialUser::create_path();
@@ -233,7 +233,7 @@ impl PubkySpecsBuilder {
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
         let feed_id = feed.create_id();
-        feed.validate(Some(&feed_id))?;
+        feed.validate(Some(&feed_id), &PUB_CTX)?;
 
         let path = PubkySocialFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
@@ -255,7 +255,7 @@ impl PubkySpecsBuilder {
     ) -> Result<FileResult, String> {
         let file = PubkySocialFile::new(name, src, content_type, size);
         let file_id = file.create_id();
-        file.validate(Some(&file_id))?;
+        file.validate(Some(&file_id), &PUB_CTX)?;
 
         let path = PubkySocialFile::create_path(&file_id);
         let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
@@ -280,7 +280,7 @@ impl PubkySpecsBuilder {
     ) -> Result<PostResult, String> {
         let post = PubkySocialPost::new_with_lock(content, kind, parent, embed, attachments, lock);
         let post_id = post.create_id();
-        post.validate(Some(&post_id))?;
+        post.validate(Some(&post_id), &PUB_CTX)?;
 
         let path = PubkySocialPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
@@ -302,7 +302,7 @@ impl PubkySpecsBuilder {
 
         // Re-sanitize the post (this should preserve the original created_at timestamp).
         post = post.sanitize();
-        post.validate(Some(&post_id))?;
+        post.validate(Some(&post_id), &PUB_CTX)?;
 
         // Recreate the path and meta using the unchanged ID.
         let path = PubkySocialPost::create_path(&post_id);
@@ -347,7 +347,7 @@ impl PubkySpecsBuilder {
 
         let post = PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, None);
         let post_id = post.create_id();
-        post.validate(Some(&post_id))?;
+        post.validate(Some(&post_id), &PUB_CTX)?;
 
         let path = PubkySocialPost::create_path(&post_id);
         let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
@@ -363,7 +363,7 @@ impl PubkySpecsBuilder {
     pub fn create_tag(&self, uri: String, label: String) -> Result<TagResult, String> {
         let tag = PubkySocialTag::new(uri, label);
         let tag_id = tag.create_id();
-        tag.validate(Some(&tag_id))?;
+        tag.validate(Some(&tag_id), &PUB_CTX)?;
 
         let path = PubkySocialTag::create_path(&tag_id);
         let meta = Meta::from_object(Some(&tag_id), self.pubky_id.clone(), path);
@@ -379,7 +379,7 @@ impl PubkySpecsBuilder {
     pub fn create_bookmark(&self, uri: String) -> Result<BookmarkResult, String> {
         let bookmark = PubkySocialBookmark::new(uri);
         let bookmark_id = bookmark.create_id();
-        bookmark.validate(Some(&bookmark_id))?;
+        bookmark.validate(Some(&bookmark_id), &PUB_CTX)?;
 
         let path = PubkySocialBookmark::create_path(&bookmark_id);
         let meta = Meta::from_object(Some(&bookmark_id), self.pubky_id.clone(), path);
@@ -394,7 +394,7 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createFollow)]
     pub fn create_follow(&self, followee_id: String) -> Result<FollowResult, String> {
         let follow = PubkySocialFollow::new();
-        follow.validate(Some(&followee_id))?; // No ID in follow, so we pass user ID or empty
+        follow.validate(Some(&followee_id), &PUB_CTX)?; // No ID in follow, so we pass user ID or empty
 
         // Path requires the user ID
         let path = PubkySocialFollow::create_path(&followee_id);
@@ -410,7 +410,7 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createMute)]
     pub fn create_mute(&self, mutee_id: String) -> Result<MuteResult, String> {
         let mute = PubkySocialMute::new();
-        mute.validate(Some(&mutee_id))?;
+        mute.validate(Some(&mutee_id), &PUB_CTX)?;
 
         let path = PubkySocialMute::create_path(&mutee_id);
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
@@ -432,7 +432,7 @@ impl PubkySpecsBuilder {
 
         // Generate ID and path
         let id = blob.create_id();
-        blob.validate(Some(&id))?;
+        blob.validate(Some(&id), &PUB_CTX)?;
 
         let path = PubkySocialBlob::create_path(&id);
         let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);

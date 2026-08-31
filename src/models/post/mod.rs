@@ -1,3 +1,4 @@
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::sanitize_url,
     is_pubky_scheme,
@@ -244,6 +245,7 @@ impl PubkySocialPost {
 impl TimestampId for PubkySocialPost {}
 
 impl HasIdPath for PubkySocialPost {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "posts/";
 
     fn create_path(id: &str) -> String {
@@ -285,7 +287,7 @@ impl Validatable for PubkySocialPost {
         }
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the post ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -451,6 +453,7 @@ impl Validatable for PubkySocialPost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
 
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
     use crate::{traits::Validatable, APP_PATH, PUBLIC_PATH};
@@ -595,7 +598,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -610,7 +613,7 @@ mod tests {
         );
 
         let invalid_id = "INVALIDID12345";
-        let result = post.validate(Some(invalid_id));
+        let result = post.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -626,7 +629,7 @@ mod tests {
 
         let id = post.create_id();
         let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id));
+        let result = sanitized.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid parent URI format"));
     }
@@ -646,7 +649,7 @@ mod tests {
 
         let id = post.create_id();
         let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id));
+        let result = sanitized.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid embed URI format"));
     }
@@ -666,7 +669,7 @@ mod tests {
 
         let id = post.create_id();
         let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id));
+        let result = sanitized.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -687,7 +690,7 @@ mod tests {
 
         let id = post.create_id();
         assert_eq!(post.lock.as_deref(), Some(expected_lock.as_str()));
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -702,7 +705,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("must use the pubky:// scheme"));
     }
@@ -719,7 +722,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid lock URL format"));
     }
@@ -739,7 +742,7 @@ mod tests {
         let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
         assert!(post.lock.is_none());
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -754,7 +757,7 @@ mod tests {
             Some("not a url".to_string()),
         );
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid lock URL format"));
     }
@@ -773,7 +776,7 @@ mod tests {
         );
         let id = post.create_id();
         assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -787,7 +790,7 @@ mod tests {
             Some("pubky:lock-id".to_string()),
         );
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("must include a host"));
     }
@@ -803,7 +806,7 @@ mod tests {
             Some("".to_string()),
         );
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_err());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_err());
     }
 
     #[test]
@@ -828,7 +831,7 @@ mod tests {
         .create_id();
 
         let blob = post_json.as_bytes();
-        let post = <PubkySocialPost as Validatable>::try_from(blob, &id).unwrap();
+        let post = <PubkySocialPost as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
 
         assert_eq!(post.content, "Hello World!");
     }
@@ -844,7 +847,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("reserved keyword"));
     }
@@ -873,7 +876,7 @@ mod tests {
         .create_id();
 
         let blob = post_json.as_bytes();
-        let result = <PubkySocialPost as Validatable>::try_from(blob, &id);
+        let result = <PubkySocialPost as Validatable>::try_from(blob, &id, &PUB_CTX);
 
         // Should fail validation because [DELETED] is a reserved keyword
         assert!(result.is_err());
@@ -902,7 +905,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -925,7 +928,7 @@ mod tests {
             );
 
             let id = post.create_id();
-            let result = post.validate(Some(&id));
+            let result = post.validate(Some(&id), &PUB_CTX);
             assert!(result.is_ok(), "Should accept protocol: {}", protocol_url);
         }
     }
@@ -949,7 +952,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Too many attachments"));
     }
@@ -970,7 +973,7 @@ mod tests {
             };
 
             let id = post.create_id();
-            let result = post.validate(Some(&id));
+            let result = post.validate(Some(&id), &PUB_CTX);
             assert!(result.is_err(), "Should reject protocol: {}", invalid_url);
             assert!(result.unwrap_err().contains("protocol"));
         }
@@ -989,7 +992,7 @@ mod tests {
         };
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -1024,7 +1027,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum length"));
     }
@@ -1042,7 +1045,7 @@ mod tests {
         };
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("cannot be empty"));
     }
@@ -1072,7 +1075,7 @@ mod tests {
         assert_eq!(attachments[2], "invalid url"); // Trimmed but preserved
 
         // Validation should reject the invalid URL
-        let result = sanitized.validate(Some(&id));
+        let result = sanitized.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -1097,7 +1100,7 @@ mod tests {
         assert_eq!(attachments.len(), 2);
 
         // Validation should reject the invalid URLs
-        let result = sanitized.validate(Some(&id));
+        let result = sanitized.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -1111,7 +1114,7 @@ mod tests {
             PubkySocialPost::new("".to_string(), PubkySocialPostKind::Short, None, None, None);
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -1133,7 +1136,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(
             result.is_ok(),
             "Post with embed but no content should be valid"
@@ -1154,7 +1157,7 @@ mod tests {
         );
 
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(
             result.is_ok(),
             "Post with attachments but no content should be valid"
@@ -1216,7 +1219,7 @@ mod tests {
             lock: None,
         };
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_lowercase().contains("unknown"),
@@ -1284,7 +1287,7 @@ mod tests {
             lock: None,
         };
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         let err = result.unwrap_err().to_lowercase();
         assert!(

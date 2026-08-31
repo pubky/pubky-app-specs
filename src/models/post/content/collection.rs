@@ -211,6 +211,7 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
 mod tests {
     use super::super::super::{PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind};
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::traits::{TimestampId, Validatable};
 
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
@@ -263,7 +264,7 @@ mod tests {
         );
         let id = post.create_id();
         let blob = serde_json::to_vec(&post).unwrap();
-        let parsed = <PubkySocialPost as Validatable>::try_from(&blob, &id).unwrap();
+        let parsed = <PubkySocialPost as Validatable>::try_from(&blob, &id, &PUB_CTX).unwrap();
         assert_eq!(parsed.kind, PubkySocialPostKind::Collection);
         assert!(parsed.attachments.is_none());
         let envelope: PubkySocialCollectionContent = serde_json::from_str(&parsed.content).unwrap();
@@ -280,7 +281,7 @@ mod tests {
             None,
         );
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -294,7 +295,7 @@ mod tests {
     fn test_collection_post_rejects_empty_name() {
         let post = make_collection_post("", None, None);
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("name"));
     }
@@ -306,7 +307,7 @@ mod tests {
         assert_eq!(oversized.chars().count(), 101);
         let post = make_collection_post(&oversized, None, None);
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("name"));
     }
@@ -317,7 +318,7 @@ mod tests {
         assert_eq!(exactly_100.chars().count(), 100);
         let post = make_collection_post(&exactly_100, None, None);
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -328,7 +329,7 @@ mod tests {
         let post = make_collection_post("    ", None, None);
         let id = post.create_id();
         let err = post
-            .validate(Some(&id))
+            .validate(Some(&id), &PUB_CTX)
             .expect_err("whitespace-only name must fail validation");
         assert!(
             err.contains("whitespace"),
@@ -347,7 +348,7 @@ mod tests {
         let post = make_collection_post(&padded, None, None);
         let id = post.create_id();
         let err = post
-            .validate(Some(&id))
+            .validate(Some(&id), &PUB_CTX)
             .expect_err("101-char padded name must fail max length");
         assert!(
             err.contains("1..=100"),
@@ -360,21 +361,21 @@ mod tests {
         let cover = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/files/0034A0X7NJ52A");
         let post = make_collection_post_with_cover(Some(&cover));
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
     fn test_collection_post_accepts_cover_image_https() {
         let post = make_collection_post_with_cover(Some("https://example.com/cover.png"));
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
     fn test_collection_post_rejects_cover_image_invalid_url() {
         let post = make_collection_post_with_cover(Some("not a url"));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(
             err.contains("cover_image must be a valid URL"),
             "got: {err}"
@@ -385,7 +386,7 @@ mod tests {
     fn test_collection_post_rejects_cover_image_disallowed_protocol() {
         let post = make_collection_post_with_cover(Some("ftp://example.com/cover.png"));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(
             err.contains("cover_image must use one of the allowed protocols"),
             "got: {err}"
@@ -398,7 +399,7 @@ mod tests {
         let too_long = format!("https://example.com/{}", "a".repeat(300));
         let post = make_collection_post_with_cover(Some(&too_long));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("cover_image URL exceeds"), "got: {err}");
     }
 
@@ -407,7 +408,7 @@ mod tests {
         let too_long = "a".repeat(501);
         let post = make_collection_post("X", Some(&too_long), None);
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("description"));
     }
@@ -418,7 +419,7 @@ mod tests {
         // 0..=500 chars allowed).
         let post = make_collection_post("X", Some(""), None);
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -427,7 +428,7 @@ mod tests {
         assert_eq!(exactly_500.chars().count(), 500);
         let post = make_collection_post("X", Some(&exactly_500), None);
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -439,7 +440,7 @@ mod tests {
         let post =
             PubkySocialPost::new(envelope, PubkySocialPostKind::Collection, None, None, None);
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -458,7 +459,7 @@ mod tests {
             None,
         );
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -481,7 +482,7 @@ mod tests {
             None,
         );
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("parent or embed"));
     }
@@ -493,7 +494,7 @@ mod tests {
             .collect();
         let post = make_collection_post("Big list", None, Some(items));
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -503,7 +504,7 @@ mod tests {
             .collect();
         let post = make_collection_post("Too big", None, Some(items));
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("100 items"));
     }
@@ -512,7 +513,7 @@ mod tests {
         // Curators may create a draft and add items later via edits.
         let post = make_collection_post("Drafts", None, None);
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -526,7 +527,7 @@ mod tests {
             None,
         );
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
         let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content).unwrap();
         assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::Visual));
     }
@@ -544,7 +545,7 @@ mod tests {
             None,
         );
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
         let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content).unwrap();
         assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::Unknown));
     }
@@ -565,7 +566,7 @@ mod tests {
         );
         let id = post.create_id();
         assert!(
-            post.validate(Some(&id)).is_ok(),
+            post.validate(Some(&id), &PUB_CTX).is_ok(),
             "unknown envelope fields must be tolerated"
         );
     }
@@ -575,7 +576,7 @@ mod tests {
         let post =
             make_collection_post("X", None, Some(vec!["ftp://example.com/file".to_string()]));
         let id = post.create_id();
-        let result = post.validate(Some(&id));
+        let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Collection item"));
     }
@@ -586,7 +587,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/abc-def-ghi-j");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -597,7 +598,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/extra");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -608,7 +609,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A?foo=bar");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -619,7 +620,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A#frag");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -629,7 +630,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -639,7 +640,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid post id"), "got: {err}");
     }
 
@@ -654,7 +655,7 @@ mod tests {
         );
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid pubky-id"), "got: {err}");
     }
 
@@ -667,7 +668,7 @@ mod tests {
         let uri = format!("pubky://{TEST_PUBKY_ID}/aa/bb/../../pub/pubky.app/posts/0034A0X7NJ52A");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        let err = post.validate(Some(&id)).unwrap_err();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("invalid pubky-id"), "got: {err}");
     }
 
@@ -680,7 +681,7 @@ mod tests {
         assert_eq!(uri.chars().count(), 94);
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -696,7 +697,7 @@ mod tests {
         );
         let id = post.create_id();
         let err = post
-            .validate(Some(&id))
+            .validate(Some(&id), &PUB_CTX)
             .expect_err("Collection with non-empty post.attachments must be rejected");
         assert!(
             err.contains("post.attachments"),
@@ -715,7 +716,7 @@ mod tests {
         );
         let id = post.create_id();
         let err = post
-            .validate(Some(&id))
+            .validate(Some(&id), &PUB_CTX)
             .expect_err("Collection with empty post.attachments must be rejected");
         assert!(
             err.contains("post.attachments"),
@@ -735,7 +736,7 @@ mod tests {
         );
         let id = post.create_id();
         assert!(
-            post.validate(Some(&id)).is_ok(),
+            post.validate(Some(&id), &PUB_CTX).is_ok(),
             "missing `items` field must deserialize as empty list via serde(default)"
         );
     }
@@ -754,7 +755,7 @@ mod tests {
             "envelope at max field sizes must fit under collection_content_max_length"
         );
         let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[cfg(target_arch = "wasm32")]
