@@ -1,8 +1,7 @@
 use crate::{
     traits::{HasIdPath, HasPath},
     PubkyId, PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile,
-    PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag,
-    PubkySocialUser,
+    PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -18,7 +17,6 @@ pub enum Resource {
     File(String),
     Blob(String),
     Feed(String),
-    LastRead,
     #[default]
     Unknown,
 }
@@ -29,7 +27,6 @@ impl fmt::Display for Resource {
         // Use the associated constant for each resource type, trimming any trailing '/'
         let name = match self {
             Resource::User => PubkySocialUser::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::LastRead => PubkySocialLastRead::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Post(_) => PubkySocialPost::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Follow(_) => PubkySocialFollow::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Mute(_) => PubkySocialMute::PATH_SEGMENT.trim_end_matches('/'),
@@ -58,7 +55,7 @@ impl Resource {
             Resource::Blob(id) => Some(id.clone()),
             Resource::Feed(id) => Some(id.clone()),
             // The following variants do not carry an id.
-            Resource::User | Resource::LastRead | Resource::Unknown => None,
+            Resource::User | Resource::Unknown => None,
         }
     }
 }

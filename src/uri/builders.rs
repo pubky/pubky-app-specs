@@ -75,10 +75,3 @@ pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
     let feed_path = PubkySocialFeed::create_path(&feed_id);
     [PROTOCOL, &author_id, &feed_path].concat()
 }
-
-/// Builds a LastRead URI of the form "pubky://<author_id>/pub/pubky.app/last_read"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = lastReadUriBuilder))]
-pub fn last_read_uri_builder(author_id: String) -> String {
-    let last_read_path = [PUBLIC_PATH, APP_PATH, "last_read"].concat();
-    [PROTOCOL, &author_id, &last_read_path].concat()
-}

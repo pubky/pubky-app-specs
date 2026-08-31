@@ -7,9 +7,9 @@ use pubky_social_specs::{
     ExtendedParsedUri, ParsedUri, PubkyId, PubkySocialBlob, PubkySocialBookmark,
     PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
     PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
-    PubkySocialFile, PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost,
-    PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink, Resource, VALIDATION_LIMITS,
+    PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostEmbed,
+    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource,
+    VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
@@ -128,12 +128,6 @@ fn blob() -> PubkySocialBlob {
     PubkySocialBlob::new(vec![1, 2])
 }
 
-fn last_read() -> PubkySocialLastRead {
-    let mut l = PubkySocialLastRead::new();
-    l.timestamp = TS;
-    l
-}
-
 fn collection_with_layout() -> PubkySocialCollectionContent {
     PubkySocialCollectionContent {
         name: "Photos".into(),
@@ -229,11 +223,6 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         ),
         ("blob", json(&blob()), r#"[1,2]"#),
         (
-            "last_read",
-            json(&last_read()),
-            r#"{"timestamp":1727740800000000}"#,
-        ),
-        (
             "collection_with_layout",
             json(&collection_with_layout()),
             r#"{"name":"Photos","description":"mine","items":["pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"],"cover_image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
@@ -291,7 +280,6 @@ fn pinned_variants() -> Vec<(String, &'static str)> {
         (json(&Resource::File("0032SSN7Q4EVG".into())), r#"{"File":"0032SSN7Q4EVG"}"#),
         (json(&Resource::Blob(h.clone())), r#"{"Blob":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::Feed(h)), r#"{"Feed":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
-        (json(&Resource::LastRead), r#""LastRead""#),
         (json(&Resource::Unknown), r#""Unknown""#),
         (json(&K::Short), r#""short""#), (json(&K::Long), r#""long""#), (json(&K::Image), r#""image""#),
         (json(&K::Video), r#""video""#), (json(&K::Link), r#""link""#), (json(&K::File), r#""file""#),

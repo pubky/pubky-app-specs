@@ -156,7 +156,6 @@ result_struct!(FeedResult, feed, PubkySocialFeed);
 result_struct!(TagResult, tag, PubkySocialTag);
 result_struct!(BookmarkResult, bookmark, PubkySocialBookmark);
 result_struct!(MuteResult, mute, PubkySocialMute);
-result_struct!(LastReadResult, last_read, PubkySocialLastRead);
 result_struct!(BlobResult, blob, PubkySocialBlob);
 
 #[wasm_bindgen]
@@ -417,21 +416,6 @@ impl PubkySpecsBuilder {
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
-    }
-
-    // -----------------------------------------------------------------------------
-    // 9. PubkySocialLastRead
-    // -----------------------------------------------------------------------------
-
-    #[wasm_bindgen(js_name = createLastRead)]
-    pub fn create_last_read(&self) -> Result<LastReadResult, String> {
-        let last_read = PubkySocialLastRead::new();
-        last_read.validate(None)?;
-
-        let path = PubkySocialLastRead::create_path();
-        let meta = Meta::from_object(None, self.pubky_id.clone(), path);
-
-        Ok(LastReadResult { last_read, meta })
     }
 
     // -----------------------------------------------------------------------------

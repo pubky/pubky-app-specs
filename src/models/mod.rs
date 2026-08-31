@@ -34,7 +34,6 @@ pub mod bookmark;
 pub mod feed;
 pub mod file;
 pub mod follow;
-pub mod last_read;
 pub mod mute;
 pub mod post;
 pub mod tag;
@@ -42,7 +41,7 @@ pub mod user;
 
 use super::{
     PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow,
-    PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
+    PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 
 /// A unified enum wrapping all PubkySocial objects.
@@ -57,7 +56,6 @@ pub enum PubkySocialObject {
     File(file::PubkySocialFile),
     Blob(blob::PubkySocialBlob),
     Feed(feed::PubkySocialFeed),
-    LastRead(last_read::PubkySocialLastRead),
 }
 
 impl PubkySocialObject {
@@ -110,10 +108,6 @@ impl PubkySocialObject {
                 let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id)?;
                 Ok(PubkySocialObject::Feed(feed))
             }
-            Resource::LastRead => {
-                let last_read = <PubkySocialLastRead as Validatable>::try_from(blob, "")?;
-                Ok(PubkySocialObject::LastRead(last_read))
-            }
             Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),
         }
     }
@@ -123,8 +117,7 @@ impl PubkySocialObject {
 mod tests {
     use crate::{
         blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-        follow_uri_builder, last_read_uri_builder, mute_uri_builder, post_uri_builder,
-        tag_uri_builder, user_uri_builder,
+        follow_uri_builder, mute_uri_builder, post_uri_builder, tag_uri_builder, user_uri_builder,
     };
 
     use super::*;
@@ -379,30 +372,6 @@ mod tests {
                 assert_eq!(feed.name, "My Feed", "Feed name mismatch");
             }
             other => panic!("Expected a Feed object, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_import_last_read() {
-        let uri =
-            last_read_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
-        let last_read_json = r#"{
-            "timestamp": 1627849729
-        }"#;
-        let result = PubkySocialObject::from_uri(uri, last_read_json.as_bytes());
-        assert!(
-            result.is_ok(),
-            "Expected a successful import for last_read, got error: {:?}",
-            result.err()
-        );
-        match result.unwrap() {
-            PubkySocialObject::LastRead(last_read) => {
-                assert_eq!(
-                    last_read.timestamp, 1627849729,
-                    "LastRead timestamp mismatch"
-                );
-            }
-            other => panic!("Expected a LastRead object, got {:?}", other),
         }
     }
 

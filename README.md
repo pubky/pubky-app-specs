@@ -69,7 +69,6 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |
 | `PubkySocialBlob`      | Raw binary file data                     |
-| `PubkySocialLastRead`  | Last-read notification timestamp         |
 
 ## Specification
 

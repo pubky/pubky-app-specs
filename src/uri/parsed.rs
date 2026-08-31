@@ -1,8 +1,8 @@
 use crate::{
     traits::{HasIdPath, HasPath},
     PubkyId, PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile,
-    PubkySocialFollow, PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialTag,
-    PubkySocialUser, APP_PATH, PROTOCOL,
+    PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser, APP_PATH,
+    PROTOCOL,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -21,7 +21,6 @@ impl ParsedUri {
     pub fn try_to_uri_str(&self) -> Result<String, String> {
         let path = match &self.resource {
             Resource::User => PubkySocialUser::create_path(),
-            Resource::LastRead => PubkySocialLastRead::create_path(),
             Resource::Post(id) => PubkySocialPost::create_path(id),
             Resource::Follow(id) => PubkySocialFollow::create_path(id.as_ref()),
             Resource::Mute(id) => PubkySocialMute::create_path(id.as_ref()),
@@ -65,7 +64,6 @@ fn resource_from_segments(segments: &[String]) -> Result<Resource, String> {
         [] => Ok(Resource::Unknown),
         [segment] => Ok(match segment.as_str() {
             s if s == PubkySocialUser::PATH_SEGMENT.trim_end_matches('/') => Resource::User,
-            s if s == PubkySocialLastRead::PATH_SEGMENT.trim_end_matches('/') => Resource::LastRead,
             _ => Resource::Unknown,
         }),
         [res_type, id, ..] if !id.is_empty() => {
@@ -102,8 +100,7 @@ impl TryFrom<String> for ParsedUri {
 mod tests {
     use crate::{
         blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-        follow_uri_builder, last_read_uri_builder, mute_uri_builder, post_uri_builder,
-        tag_uri_builder, user_uri_builder,
+        follow_uri_builder, mute_uri_builder, post_uri_builder, tag_uri_builder, user_uri_builder,
     };
 
     use super::*;
@@ -160,15 +157,6 @@ mod tests {
         let parsed_uri_from_pubky_id = user_id.to_uri();
         assert_eq!(parsed_uri_from_pubky_id.user_id, user_id);
         assert_eq!(parsed_uri_from_pubky_id.resource, Resource::User);
-    }
-
-    #[test]
-    fn test_valid_last_read_uri() {
-        // A valid last_read URI ends with last_read.
-        let uri = last_read_uri_builder(USER_ID.into());
-        let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid last_read URI");
-        assert_eq!(parsed.user_id, PubkyId::try_from(USER_ID).unwrap());
-        assert_eq!(parsed.resource, Resource::LastRead);
     }
 
     #[test]
@@ -313,20 +301,6 @@ mod tests {
             .try_to_uri_str()
             .expect("Failed to convert to URI string");
         assert_eq!(original_uri, reconstructed_uri, "User URI roundtrip failed");
-    }
-
-    #[test]
-    fn test_last_read_uri_roundtrip() {
-        let original_uri = last_read_uri_builder(USER_ID.into());
-        let parsed =
-            ParsedUri::try_from(original_uri.clone()).expect("Failed to parse last_read URI");
-        let reconstructed_uri = parsed
-            .try_to_uri_str()
-            .expect("Failed to convert to URI string");
-        assert_eq!(
-            original_uri, reconstructed_uri,
-            "LastRead URI roundtrip failed"
-        );
     }
 
     #[test]

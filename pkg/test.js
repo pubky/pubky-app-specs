@@ -454,24 +454,6 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("LastRead Pubky-social-specs", () => {
-    it("should create last_read with correct properties", () => {
-      const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead(RIO);
-
-      // Test meta properties
-      assert.ok(lastReadMeta.url, "LastRead should have a URL");
-      const lastReadChunks = lastReadMeta.url.split("/")
-      assert.strictEqual(lastReadChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(lastReadChunks[5], "last_read", "URL should contain last_read path");
-      assert.strictEqual(lastReadChunks.length, 6, "URL should have 6 segments");
-
-      // Test last_read content
-      const lastReadJson = last_read.toJson();
-      assert.ok(lastReadJson.timestamp, "LastRead should have timestamp");
-      assert.ok(typeof lastReadJson.timestamp === "number", "timestamp should be a number");
-    });
-  });
-
   describe("Blob/File Pubky-social-specs", () => {
     it("should create blob with correct properties", () => {
       const length = 8

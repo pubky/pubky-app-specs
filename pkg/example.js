@@ -8,7 +8,6 @@ import {
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
-  lastReadUriBuilder,
   blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
@@ -218,7 +217,7 @@ field("Size", `${file.toJson().size} bytes`);
 field("Source", file.toJson().src);
 
 // =============================================================================
-// 5. Feeds & LastRead
+// 5. Feeds
 // =============================================================================
 header("FEEDS & LAST READ");
 
@@ -258,11 +257,6 @@ field("Reach", wotFeed.toJson().feed.reach);
 field("Domain Tags", wotFeed.toJson().feed.domain_tags.join(", "));
 console.log();
 
-// LastRead
-console.log(`  ${c.yellow}▸ Last Read Marker${c.reset}`);
-const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead();
-field("URL", lastReadMeta.url);
-field("Timestamp", new Date(last_read.toJson().timestamp / 1000).toISOString());
 
 // =============================================================================
 // 6. URI Builders
@@ -275,7 +269,6 @@ const uris = [
   ["Follow", followUriBuilder(OTTO, RIO)],
   ["Tag", tagUriBuilder(OTTO, tagMeta.id)],
   ["Mute", muteUriBuilder(OTTO, RIO)],
-  ["LastRead", lastReadUriBuilder(OTTO)],
   ["Blob", blobUriBuilder(OTTO, blobMeta.id)],
   ["File", fileUriBuilder(OTTO, fileMeta.id)],
   ["Feed", feedUriBuilder(OTTO, feedMeta.id)],

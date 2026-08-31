@@ -25,7 +25,6 @@ pub use models::feed::{
 };
 pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
-pub use models::last_read::PubkySocialLastRead;
 pub use models::mute::PubkySocialMute;
 pub use models::post::{
     PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialPost,
@@ -38,9 +37,8 @@ pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{
     base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-    follow_uri_builder, is_pubky_scheme, last_read_uri_builder, mute_uri_builder, post_uri_builder,
-    tag_uri_builder, try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri,
-    PubkyPath, Resource,
+    follow_uri_builder, is_pubky_scheme, mute_uri_builder, post_uri_builder, tag_uri_builder,
+    try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri, PubkyPath, Resource,
 };
 
 // Our WASM module

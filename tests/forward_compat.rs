@@ -5,9 +5,9 @@
 use pubky_social_specs::{
     traits::Validatable, PubkySocialBookmark, PubkySocialCollectionContent,
     PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
-    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow,
-    PubkySocialLastRead, PubkySocialMute, PubkySocialPost, PubkySocialPostEmbed,
-    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink,
+    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
+    PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
+    PubkySocialUserLink,
 };
 use serde::de::DeserializeOwned;
 
@@ -197,5 +197,4 @@ fn every_json_wire_type_ignores_unknown_fields() {
     reads_with_unknown_field::<PubkySocialFile>(&format!(
         r#"{{"name":"cat.jpg","created_at":1727740800000000,"src":"pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG","content_type":"image/jpeg","size":1234}}"#
     ));
-    reads_with_unknown_field::<PubkySocialLastRead>(r#"{"timestamp":1727740800000000}"#);
 }
