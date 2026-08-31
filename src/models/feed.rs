@@ -1,10 +1,11 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
     models::tag::{sanitize_tag_label, validate_tag_label},
     traits::{HasIdPath, HashId, Validatable},
-    PubkySocialPostKind, APP_PATH, PUBLIC_PATH,
+    PubkySocialPostKind,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -333,7 +334,7 @@ impl HasIdPath for PubkySocialFeed {
     const PATH_SEGMENT: &'static str = "feeds/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
     }
 }
 

@@ -1,9 +1,9 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -83,7 +83,7 @@ impl HasIdPath for PubkySocialTag {
     const PATH_SEGMENT: &'static str = "tags/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
     }
 }
 
@@ -181,13 +181,13 @@ impl Validatable for PubkySocialTag {
 mod tests {
     use super::*;
     use crate::traits::PUB_CTX;
-    use crate::{post_uri_builder, traits::Validatable, user_uri_builder, APP_PATH};
+    use crate::{post_uri_builder, traits::Validatable, user_uri_builder};
 
     #[test]
     fn test_label_id() {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         // Precomputed earlier
-        let tag_id = "CBYS8P6VJPHC5XXT4WDW26662W";
+        let tag_id = "KGQV0AN2WFM2C4V8NF2RZPMQM8";
         // Create new tag
         let tag = PubkySocialTag {
             uri: post_uri.clone(),
@@ -254,7 +254,7 @@ mod tests {
         };
 
         let expected_id = tag.create_id();
-        let expected_path = format!("{}{}tags/{}", PUBLIC_PATH, APP_PATH, expected_id);
+        let expected_path = format!("/pub/social/v1/tags/{}.json", expected_id);
         let path = PubkySocialTag::create_path(&expected_id);
 
         assert_eq!(path, expected_path);

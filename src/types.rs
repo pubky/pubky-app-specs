@@ -54,6 +54,7 @@ impl PubkyId {
     pub fn to_uri(&self) -> ParsedUri {
         ParsedUri {
             user_id: self.clone(),
+            visibility: crate::Visibility::Public,
             resource: Resource::User,
         }
     }

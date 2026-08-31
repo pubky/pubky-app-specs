@@ -1,4 +1,4 @@
-use crate::{common::validate_timestamp_id_format, limits::VALIDATION_LIMITS, types::PubkyId};
+use crate::limits::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
@@ -184,7 +184,7 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
 }
 
 /// Strict canonical post-URI check for Collection items. Accepts only the
-/// exact form `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>`.
+/// exact form `pubky://<pubky-id>/pub/social/v1/posts/<post-id>`.
 ///
 /// Deliberately avoids `Url::parse`: it silently strips userinfo and collapses
 /// `..` path segments, smuggling non-canonical strings past a parse-and-recheck
@@ -192,19 +192,14 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
 /// (52-char z-base-32) and `validate_timestamp_id_format` (13-char Crockford) enforces
 /// the canonical 94-char form structurally.
 fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
-    const PREFIX: &str = "pubky://";
-    const MIDDLE: &str = "/pub/pubky.app/posts/";
-    let rest = uri
-        .strip_prefix(PREFIX)
-        .ok_or_else(|| format!("must start with pubky://: {uri}"))?;
-    let (host, post_id) = rest
-        .split_once(MIDDLE)
-        .ok_or_else(|| format!("must be a canonical post URI: {uri}"))?;
-    PubkyId::try_from(host).map_err(|e| format!("invalid pubky-id in host: {e}"))?;
-    validate_timestamp_id_format(post_id)
-        .map(|_| ())
-        .map_err(|e| format!("invalid post id: {e}"))?;
-    Ok(())
+    // A canonical versionless post reference; the reference-tier widening comes with the
+    // collection rework.
+    let parsed = crate::ParsedUri::try_from(uri)
+        .map_err(|e| format!("must be a canonical post URI: {e}"))?;
+    match parsed.resource {
+        crate::Resource::Post { version: None, .. } => Ok(()),
+        _ => Err(format!("must be a versionless post reference: {uri}")),
+    }
 }
 
 #[cfg(test)]
@@ -257,9 +252,9 @@ mod tests {
             "AI papers",
             Some("Best stuff"),
             Some(vec![
-                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A"),
-                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52E"),
-                format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52C"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52E"),
+                format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52C"),
             ]),
         );
         let id = post.create_id();
@@ -454,7 +449,7 @@ mod tests {
         let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
             PubkySocialPostKind::Collection,
-            Some("pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string()),
+            Some("pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string()),
             None,
             None,
         );
@@ -477,7 +472,7 @@ mod tests {
             None,
             Some(PubkySocialPostEmbed {
                 kind: PubkySocialPostKind::Short,
-                uri: "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
+                uri: "pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
             }),
             None,
         );
@@ -490,7 +485,7 @@ mod tests {
     #[test]
     fn test_collection_post_accepts_100_items() {
         let items: Vec<String> = (0..100)
-            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:012X}0", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/{:012X}0", i))
             .collect();
         let post = make_collection_post("Big list", None, Some(items));
         let id = post.create_id();
@@ -500,7 +495,7 @@ mod tests {
     #[test]
     fn test_collection_post_rejects_101_items() {
         let items: Vec<String> = (0..101)
-            .map(|i| format!("pubky://userA/pub/pubky.app/posts/{:013}", i))
+            .map(|i| format!("pubky://userA/pub/social/v1/posts/{:013}", i))
             .collect();
         let post = make_collection_post("Too big", None, Some(items));
         let id = post.create_id();
@@ -584,64 +579,64 @@ mod tests {
     #[test]
     fn test_collection_post_rejects_post_uri_with_invalid_post_id() {
         // 13 chars but not valid Crockford: contains hyphens which aren't in the alphabet.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/abc-def-ghi-j");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/abc-def-ghi-j");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("versionless post reference"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_extra_path_segment() {
         // Extra segment lands inside the post-id slot, failing the 13-char
         // Crockford check.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/extra");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/extra");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("versionless post reference"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_query_string() {
         // Query string lands inside the post-id slot and fails the Crockford
         // check (`?` and `=` aren't in the alphabet, and the length is wrong).
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A?foo=bar");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A?foo=bar");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_fragment() {
         // Same as the query-string case: `#` and the fragment body land in the
         // post-id slot and fail Crockford.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A#frag");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A#frag");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_trailing_slash() {
         // A trailing slash bloats the post-id past 13 chars.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A/");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_empty_post_id() {
         // Empty post-id segment fails the 13-char Crockford check.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid post id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
@@ -651,12 +646,12 @@ mod tests {
         // validator keeps the `JUNK@` in the host slot, failing the 52-char
         // PubkyId length check.
         let uri = format!(
-            "pubky://AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A"
+            "pubky://AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"
         );
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid pubky-id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
@@ -665,19 +660,19 @@ mod tests {
         // which would smuggle a non-canonical raw path past a parse-and-recheck
         // approach. The strict validator splits the raw string, so the extra
         // segments land in the host slot and fail PubkyId.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/aa/bb/../../pub/pubky.app/posts/0034A0X7NJ52A");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/aa/bb/../../pub/social/v1/posts/0034A0X7NJ52A");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("invalid pubky-id"), "got: {err}");
+        assert!(err.contains("canonical post URI"), "got: {err}");
     }
 
     #[test]
     fn test_collection_post_accepts_canonical_max_length_uri() {
         // Success-side boundary: the longest valid canonical post URI is
-        // pubky://<52-char-pubky-id>/pub/pubky.app/posts/<13-char-crockford>
+        // pubky://<52-char-pubky-id>/pub/social/v1/posts/<13-char-crockford>
         // which is exactly 94 chars. Validator must accept this.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A");
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A");
         assert_eq!(uri.chars().count(), 94);
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
@@ -692,7 +687,7 @@ mod tests {
             None,
             None,
             Some(vec![
-                "pubky://userA/pub/pubky.app/posts/0034A0X7NJ52A".to_string()
+                "pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string()
             ]),
         );
         let id = post.create_id();
@@ -745,7 +740,7 @@ mod tests {
     fn test_collection_post_envelope_at_max_size() {
         // 100 distinct valid pubky post URIs (max-count). Each exactly 94 chars.
         let items: Vec<String> = (0..VALIDATION_LIMITS.collection_items_max_count)
-            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/{:012X}0", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/{:012X}0", i))
             .collect();
         let max_name = "a".repeat(VALIDATION_LIMITS.collection_name_max_length);
         let max_desc = "b".repeat(VALIDATION_LIMITS.collection_description_max_length);
@@ -789,7 +784,7 @@ mod tests {
                 "My favorites".to_string(),
                 Some("Best things".to_string()),
                 Some(vec![
-                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
+                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
                 ]),
                 Some("https://example.com/cover.png".to_string()),
                 Some("list".to_string()),

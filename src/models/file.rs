@@ -1,9 +1,9 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use mime::Mime;
 use serde::{Deserialize, Serialize};
@@ -115,7 +115,7 @@ impl HasIdPath for PubkySocialFile {
     const PATH_SEGMENT: &'static str = "files/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
     }
 }
 
@@ -208,7 +208,7 @@ mod tests {
             1024,
         );
         assert_eq!(file.name, "example.png");
-        assert_eq!(file.src, "pubky://user_id/pub/pubky.app/blobs/id");
+        assert_eq!(file.src, "pubky://user_id/pub/social/v1/blobs/id");
         assert_eq!(file.content_type, "image/png");
         assert_eq!(file.size, 1024);
         // Check that created_at is recent
@@ -228,10 +228,10 @@ mod tests {
         let path = PubkySocialFile::create_path(&file_id);
 
         // Check if the path starts with the expected prefix
-        let prefix = format!("{}{}files/", PUBLIC_PATH, APP_PATH);
+        let prefix = "/pub/social/v1/files/".to_string();
         assert!(path.starts_with(&prefix));
 
-        let expected_path_len = prefix.len() + file_id.len();
+        let expected_path_len = prefix.len() + file_id.len() + ".json".len();
         assert_eq!(path.len(), expected_path_len);
     }
 

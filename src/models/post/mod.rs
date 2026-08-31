@@ -1,10 +1,11 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::sanitize_url,
     is_pubky_scheme,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
-    APP_PATH, PROTOCOL, PUBLIC_PATH,
+    PROTOCOL,
 };
 
 pub mod content;
@@ -249,7 +250,7 @@ impl HasIdPath for PubkySocialPost {
     const PATH_SEGMENT: &'static str = "posts/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}/{id}.json", Self::PATH_SEGMENT))
     }
 }
 
@@ -456,7 +457,7 @@ mod tests {
     use crate::traits::PUB_CTX;
 
     const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
-    use crate::{traits::Validatable, APP_PATH, PUBLIC_PATH};
+    use crate::traits::Validatable;
 
     #[test]
     fn test_create_id() {
@@ -502,10 +503,11 @@ mod tests {
         let path = PubkySocialPost::create_path(&post_id);
 
         // Check if the path starts with the expected prefix
-        let prefix = format!("{}{}posts/", PUBLIC_PATH, APP_PATH);
+        let prefix = "/pub/social/v1/posts/".to_string();
         assert!(path.starts_with(&prefix));
 
-        let expected_path_len = prefix.len() + post_id.len();
+        // posts/{id}/{id}.json: the first version reuses the post id
+        let expected_path_len = prefix.len() + post_id.len() * 2 + "/".len() + ".json".len();
         assert_eq!(path.len(), expected_path_len);
     }
 

@@ -8,7 +8,9 @@ mod types;
 mod uri;
 
 // Re-export constants
-pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
+pub use constants::{
+    epoch_segment, social_path, PROTOCOL, SOCIAL_EPOCH, SOCIAL_NAMESPACE, VERSION,
+};
 // Re-export common utilities
 pub use canonicalize::{canonicalize_pubky_uri, canonicalize_target, canonicalize_web_uri};
 pub use common::{
@@ -41,7 +43,7 @@ pub use types::PubkyId;
 pub use uri::{
     base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
     follow_uri_builder, is_pubky_scheme, mute_uri_builder, post_uri_builder, tag_uri_builder,
-    try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri, PubkyPath, Resource,
+    user_uri_builder, ParsedUri, Resource, Visibility,
 };
 
 // Our WASM module

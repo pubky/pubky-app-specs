@@ -1,9 +1,9 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
     common::sanitize_url,
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -138,7 +138,7 @@ impl HasPath for PubkySocialUser {
     const PATH_SEGMENT: &'static str = "profile.json";
 
     fn create_path() -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT].concat()
+        social_path(Self::ROOT, Self::PATH_SEGMENT)
     }
 }
 
@@ -275,7 +275,6 @@ impl Validatable for PubkySocialUserLink {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
-    use crate::{APP_PATH, PUBLIC_PATH};
 
     #[test]
     fn test_new() {
@@ -310,7 +309,7 @@ mod tests {
     #[test]
     fn test_create_path() {
         let path = PubkySocialUser::create_path();
-        assert_eq!(path, format!("{}{}profile.json", PUBLIC_PATH, APP_PATH));
+        assert_eq!(path, "/pub/social/v1/profile.json");
     }
 
     #[test]

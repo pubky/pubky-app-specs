@@ -1,8 +1,9 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, Validatable},
-    PubkyId, APP_PATH, PUBLIC_PATH,
+    PubkyId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +76,10 @@ impl HasIdPath for PubkySocialFollow {
     const PATH_SEGMENT: &'static str = "follows/";
 
     fn create_path(pubky_id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
+        social_path(
+            Self::ROOT,
+            &format!("{}{pubky_id}.json", Self::PATH_SEGMENT),
+        )
     }
 }
 
@@ -97,7 +101,7 @@ mod tests {
     #[test]
     fn test_create_path_with_id() {
         let path = PubkySocialFollow::create_path("user_id123");
-        assert_eq!(path, "/pub/pubky.app/follows/user_id123");
+        assert_eq!(path, "/pub/social/v1/follows/user_id123.json");
     }
 
     #[test]

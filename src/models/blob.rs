@@ -1,8 +1,8 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use base32::{encode, Alphabet};
 use blake3::Hasher;
@@ -79,7 +79,7 @@ impl HasIdPath for PubkySocialBlob {
     const PATH_SEGMENT: &'static str = "blobs/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}", Self::PATH_SEGMENT))
     }
 }
 

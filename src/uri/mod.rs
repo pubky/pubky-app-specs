@@ -6,9 +6,7 @@
 //! - **Parse (structure)** — [`try_parse_pubky_path`] / [`PubkyPath`] (advanced)
 
 mod builders;
-mod extended;
 mod parsed;
-mod path;
 mod resource;
 mod scheme;
 
@@ -19,12 +17,10 @@ pub use builders::{
 };
 
 // Strict
-pub use parsed::ParsedUri;
+pub use parsed::{ParsedUri, Visibility};
 pub use resource::Resource;
 
 // Extended
-pub use extended::ExtendedParsedUri;
 
 // Structure (advanced)
-pub use path::{try_parse_pubky_path, PubkyPath};
 pub use scheme::is_pubky_scheme;

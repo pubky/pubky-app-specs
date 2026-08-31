@@ -105,7 +105,7 @@ console.log();
 // Repost with embed
 console.log(`  ${c.yellow}▸ Repost with Embed${c.reset}`);
 const embed = new PubkySocialPostEmbed(
-  `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`,
+  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`,
   PubkySocialPostKind.Video
 );
 const { post: repost, meta: repostMeta } = specsBuilder.createPost(
@@ -127,8 +127,8 @@ const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilde
   null,
   null,
   [
-    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ52G`,
-    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
+    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
+    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`,
   ]
 );
 field("ID", postWithAttachmentsMeta.id);
@@ -158,7 +158,7 @@ header("SOCIAL ACTIONS");
 // Bookmark
 console.log(`  ${c.yellow}▸ Bookmark${c.reset}`);
 const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
-  `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
 );
 field("ID", bookmarkMeta.id);
 field("URI", bookmark.toJson().uri);
@@ -174,7 +174,7 @@ console.log();
 // Tag
 console.log(`  ${c.yellow}▸ Tag${c.reset}`);
 const { tag, meta: tagMeta } = specsBuilder.createTag(
-  `pubky://${OTTO}/pub/pubky.app/profile.json`,
+  `pubky://${OTTO}/pub/social/v1/profile.json`,
   "developer"
 );
 field("ID", tagMeta.id);

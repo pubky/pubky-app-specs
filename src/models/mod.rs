@@ -27,7 +27,7 @@
 //! fails its id check. That goes away when feed ids stop being derived
 //! from the serialized config.
 
-use crate::{traits::Validatable, traits::PUB_CTX, ParsedUri, Resource};
+use crate::{traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
 
 pub mod blob;
 pub mod bookmark;
@@ -63,52 +63,72 @@ impl PubkySocialObject {
     /// this function returns the fully formed PubkySocialObject.
     pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {
         let parsed_uri = ParsedUri::try_from(uri.as_ref())?;
-        Self::from_resource(&parsed_uri.resource, blob)
+        let ctx = ValidationCtx {
+            root: parsed_uri.visibility.root(),
+        };
+        Self::from_resource(&parsed_uri.resource, blob, &ctx)
     }
 
     /// Given a Resource and a blob (raw data from the homeserver),
     /// this function returns the fully formed PubkySocialObject.
-    pub fn from_resource(resource: &Resource, blob: &[u8]) -> Result<Self, String> {
+    /// Deliberately wildcard-free: a `Resource` variant added later fails here at compile
+    /// time instead of silently becoming an error case.
+    pub fn from_resource(
+        resource: &Resource,
+        blob: &[u8],
+        ctx: &ValidationCtx,
+    ) -> Result<Self, String> {
         match resource {
             Resource::User => {
-                // For a user, no ID is needed (or you may use an empty string)
-                let user = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX)?;
+                let user = <PubkySocialUser as Validatable>::try_from(blob, "", ctx)?;
                 Ok(PubkySocialObject::User(user))
             }
-            Resource::Post(post_id) => {
-                let post = <PubkySocialPost as Validatable>::try_from(blob, post_id, &PUB_CTX)?;
+            Resource::Post {
+                id,
+                version: Some(_),
+                ..
+            } => {
+                let post = <PubkySocialPost as Validatable>::try_from(blob, id, ctx)?;
                 Ok(PubkySocialObject::Post(post))
             }
+            Resource::Post { version: None, .. } => {
+                Err("a versionless post reference is never a stored object".to_string())
+            }
             Resource::Follow(follow_id) => {
-                // Use the follow id from the parsed URI.
-                let follow =
-                    <PubkySocialFollow as Validatable>::try_from(blob, follow_id, &PUB_CTX)?;
+                let follow = <PubkySocialFollow as Validatable>::try_from(blob, follow_id, ctx)?;
                 Ok(PubkySocialObject::Follow(follow))
             }
             Resource::Mute(muted_id) => {
-                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id, &PUB_CTX)?;
+                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id, ctx)?;
                 Ok(PubkySocialObject::Mute(mute))
             }
             Resource::Bookmark(bookmark_id) => {
                 let bookmark =
-                    <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id, &PUB_CTX)?;
+                    <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id, ctx)?;
                 Ok(PubkySocialObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
-                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id, &PUB_CTX)?;
+                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id, ctx)?;
                 Ok(PubkySocialObject::Tag(tag))
             }
-            Resource::File(file_id) => {
-                let file = <PubkySocialFile as Validatable>::try_from(blob, file_id, &PUB_CTX)?;
+            Resource::File(raw) => {
+                let id = raw.strip_suffix(".json").unwrap_or(raw);
+                let file = <PubkySocialFile as Validatable>::try_from(blob, id, ctx)?;
                 Ok(PubkySocialObject::File(file))
             }
             Resource::Blob(blob_id) => {
-                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id, &PUB_CTX)?;
+                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id, ctx)?;
                 Ok(PubkySocialObject::Blob(blob_obj))
             }
             Resource::Feed(feed_id) => {
-                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id, &PUB_CTX)?;
+                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id, ctx)?;
                 Ok(PubkySocialObject::Feed(feed))
+            }
+            Resource::Foreign { .. } => {
+                Err("a foreign namespace is not a social object".to_string())
+            }
+            Resource::UnsupportedVersion { .. } => {
+                Err("an unsupported epoch is a skip, not an object".to_string())
             }
             Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),
         }
@@ -117,6 +137,7 @@ impl PubkySocialObject {
 
 #[cfg(test)]
 mod tests {
+    use crate::traits::{HasIdPath, HashId};
     use crate::{
         blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
         follow_uri_builder, mute_uri_builder, post_uri_builder, tag_uri_builder, user_uri_builder,
@@ -158,9 +179,10 @@ mod tests {
 
     #[test]
     fn test_import_post() {
-        let uri = post_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "0032SSN7Q4EVG".into(),
+        // The storage path: a versionless reference is never a stored object.
+        let uri = format!(
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo{}",
+            post::PubkySocialPost::create_path("0032SSN7Q4EVG")
         );
         let post_json = r#"{
             "content": "Hello World!",
@@ -236,9 +258,14 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
+        let bookmark_id = bookmark::PubkySocialBookmark {
+            uri: post_uri.clone(),
+            created_at: 0,
+        }
+        .create_id();
         let uri = bookmark_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "8Z8CWH8NVYQY39ZEBFGKQWWEKG".into(),
+            bookmark_id,
         );
         let bookmark_json = format!(
             r#"{{
@@ -267,9 +294,15 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
+        let tag_id = tag::PubkySocialTag {
+            uri: post_uri.clone(),
+            label: "cool".to_string(),
+            created_at: 0,
+        }
+        .create_id();
         let uri = tag_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "86805FC1CSFZD4W6HZ09S24QWG".into(),
+            tag_id,
         );
         let tag_json = format!(
             r#"{{
@@ -380,7 +413,7 @@ mod tests {
     #[test]
     fn test_import_unknown_resource() {
         let uri =
-            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/ID";
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/unknown/ID";
         let json = r#"{}"#;
         let result = PubkySocialObject::from_uri(uri, json.as_bytes());
         assert!(

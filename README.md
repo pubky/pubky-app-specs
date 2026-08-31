@@ -28,7 +28,7 @@ use serde_json::to_vec;
 
 // Create a user profile
 let user = PubkySocialUser::new("Alice".into(), None, None, None, None);
-let path = PubkySocialUser::create_path(); // /pub/pubky.app/profile.json
+let path = PubkySocialUser::create_path(); // /pub/social/v1/profile.json
 let json = to_vec(&user).unwrap();
 
 // Parse and validate JSON from storage

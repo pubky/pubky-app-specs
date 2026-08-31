@@ -1,8 +1,9 @@
+use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, Validatable},
-    PubkyId, APP_PATH, PUBLIC_PATH,
+    PubkyId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -69,7 +70,10 @@ impl HasIdPath for PubkySocialMute {
     const PATH_SEGMENT: &'static str = "mutes/";
 
     fn create_path(pubky_id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
+        social_path(
+            Self::ROOT,
+            &format!("{}{pubky_id}.json", Self::PATH_SEGMENT),
+        )
     }
 }
 
@@ -95,7 +99,7 @@ mod tests {
             PubkySocialMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
         assert_eq!(
             path,
-            "/pub/pubky.app/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+            "/pub/social/v1/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo.json"
         );
     }
 

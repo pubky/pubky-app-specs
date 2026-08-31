@@ -41,7 +41,7 @@ const { user, meta: userMeta } = specs.createUser(
   "active"
 );
 
-console.log(userMeta.url); // pubky://.../pub/pubky.app/profile.json
+console.log(userMeta.url); // pubky://.../pub/social/v1/profile.json
 console.log(user.toJson());
 
 const { post, meta: postMeta } = specs.createPost(
