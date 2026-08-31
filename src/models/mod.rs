@@ -12,7 +12,7 @@
 //!
 //! Every enum that appears as a value inside a stored JSON object carries a
 //! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (The URI
-//! parse results `Resource` and `ExtendedParsedUri` are not stored objects
+//! parse result `Resource` is not a stored objects
 //! and keep their own shape.) `Unknown` in an object's PRIMARY enum (for
 //! example `post.kind` or `feed.reach`) fails validation, so consumers skip
 //! the object; `Unknown` in an optional, secondary enum (for example

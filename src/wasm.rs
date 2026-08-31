@@ -443,12 +443,15 @@ impl PubkySpecsBuilder {
 
 /// This object represents the result of parsing a Pubky URI. It contains:
 /// - `user_id`: the parsed user ID as a string.
+/// - `visibility`: "public" or "private", the root the path lives under.
 /// - `resource`: a string representing the kind of resource (derived from internal `Resource` enum Display).
 /// - `resource_id`: an optional resource identifier (if applicable).
 #[wasm_bindgen]
 pub struct ParsedUriResult {
     #[wasm_bindgen(skip)]
     user_id: String,
+    #[wasm_bindgen(skip)]
+    visibility: String,
     #[wasm_bindgen(skip)]
     resource: String,
     #[wasm_bindgen(skip)]
@@ -461,6 +464,12 @@ impl ParsedUriResult {
     #[wasm_bindgen(getter)]
     pub fn user_id(&self) -> String {
         self.user_id.clone()
+    }
+
+    /// Returns the visibility: "public" or "private".
+    #[wasm_bindgen(getter)]
+    pub fn visibility(&self) -> String {
+        self.visibility.clone()
     }
 
     /// Returns the resource kind.
@@ -508,7 +517,7 @@ pub fn get_valid_mime_types() -> Vec<JsValue> {
 /// # Parameters
 ///
 /// - `uri`: A string slice representing the Pubky URI. The URI should follow the format:
-///   `pubky://<user_id>/pub/pubky.app/<resource>[/<id>]`.
+///   `pubky://<user_id>/{pub|priv}/social/v1/<resource-path>`.
 ///
 /// # Returns
 ///
@@ -525,7 +534,7 @@ pub fn get_valid_mime_types() -> Vec<JsValue> {
 /// import { parse_uri } from "pubky-social-specs";
 ///
 /// try {
-///   const result = parse_uri("pubky://user123/pub/pubky.app/posts/abc123");
+///   const result = parse_uri("pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG");
 ///   console.log(result.user_id);        // e.g. "user123"
 ///   console.log(result.resource);    // e.g. "posts"
 ///   console.log(result.resource_id);      // e.g. "abc123" or null
@@ -540,6 +549,10 @@ pub fn parse_uri(uri: &str) -> Result<ParsedUriResult, String> {
 
     // Build and return the strongly typed result.
     Ok(ParsedUriResult {
+        visibility: match parsed.visibility {
+            crate::Visibility::Public => "public".to_string(),
+            crate::Visibility::Private => "private".to_string(),
+        },
         user_id: parsed.user_id.to_string(),
         resource: parsed.resource.to_string(),
         resource_id: parsed.resource.id(),

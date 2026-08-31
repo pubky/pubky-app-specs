@@ -127,12 +127,12 @@ impl PubkySocialPostEmbed {
 }
 
 /// Represents raw post in homeserver with content and kind
-/// URI: /pub/pubky.app/posts/:post_id
+/// URI: /pub/social/v1/posts/:post_id
 /// Where post_id is CrockfordBase32 encoding of timestamp
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/posts/00321FCW75ZFY`
+/// `/pub/social/v1/posts/00321FCW75ZFY`
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

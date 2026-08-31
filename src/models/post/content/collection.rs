@@ -186,19 +186,19 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
 /// Strict canonical post-URI check for Collection items. Accepts only the
 /// exact form `pubky://<pubky-id>/pub/social/v1/posts/<post-id>`.
 ///
-/// Deliberately avoids `Url::parse`: it silently strips userinfo and collapses
-/// `..` path segments, smuggling non-canonical strings past a parse-and-recheck
-/// approach. Splitting the raw string and delegating to `PubkyId::try_from`
-/// (52-char z-base-32) and `validate_timestamp_id_format` (13-char Crockford) enforces
-/// the canonical 94-char form structurally.
+/// Delegates to the parser: the canonicalizer owns the reject set, and only a public,
+/// versionless post reference passes. The reference-tier widening comes with the collection
+/// rework.
 fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
     // A canonical versionless post reference; the reference-tier widening comes with the
     // collection rework.
     let parsed = crate::ParsedUri::try_from(uri)
         .map_err(|e| format!("must be a canonical post URI: {e}"))?;
-    match parsed.resource {
-        crate::Resource::Post { version: None, .. } => Ok(()),
-        _ => Err(format!("must be a versionless post reference: {uri}")),
+    match (parsed.visibility, parsed.resource) {
+        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => Ok(()),
+        _ => Err(format!(
+            "must be a public, versionless post reference: {uri}"
+        )),
     }
 }
 
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_accepts_cover_image_pubky_uri() {
-        let cover = format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/files/0034A0X7NJ52A");
+        let cover = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/files/0034A0X7NJ52A");
         let post = make_collection_post_with_cover(Some(&cover));
         let id = post.create_id();
         assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
@@ -588,8 +588,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_extra_path_segment() {
-        // Extra segment lands inside the post-id slot, failing the 13-char
-        // Crockford check.
+        // An extra segment makes it a storage-shaped path, not a reference.
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/extra");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
@@ -610,8 +609,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_rejects_post_uri_with_fragment() {
-        // Same as the query-string case: `#` and the fragment body land in the
-        // post-id slot and fail Crockford.
+        // `#` is rejected by the canonicalizer before any dispatch.
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A#frag");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
@@ -652,6 +650,16 @@ mod tests {
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("canonical post URI"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_private_item_reference() {
+        // Items are public references; a private post cannot be curated publicly yet.
+        let uri = format!("pubky://{TEST_PUBKY_ID}/priv/social/v1/posts/0034A0X7NJ52A");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+        assert!(err.contains("public"), "got: {err}");
     }
 
     #[test]

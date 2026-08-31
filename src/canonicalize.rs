@@ -1,8 +1,9 @@
-//! The engine-free URI canonicalizers. Every `pubky://` validation site routes through
-//! [`canonicalize_pubky_uri`], so the accept and reject sets cannot drift between the parser
-//! and field validation. No `url::Url` here or in the parser: an engine parser repairs junk
-//! into acceptance (userinfo stripped, `..` collapsed, query and fragment ignored) and its
-//! behavior cannot be pinned across versions.
+//! The engine-free URI canonicalizers. The parser and the collection item check route through
+//! [`canonicalize_pubky_uri`] today; the model reference fields still sit on their v0 `url::Url`
+//! validation and move here with their own changes, field by field, because re-wiring a hashed
+//! field re-ids data. No `url::Url` here or in the parser: an engine parser repairs junk into
+//! acceptance (userinfo stripped, `..` collapsed, query and fragment ignored) and its behavior
+//! cannot be pinned across versions.
 
 use crate::common::{code_point_len, frozen_trim, is_frozen_whitespace};
 use crate::limits::VALIDATION_LIMITS;
@@ -43,7 +44,13 @@ pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
             return Err(());
         }
         for c in seg.chars() {
-            if c == '%' || c == '?' || c == '#' || c.is_ascii_control() || is_frozen_whitespace(c) {
+            if c == '%'
+                || c == '?'
+                || c == '#'
+                || c == '\\'
+                || c.is_ascii_control()
+                || is_frozen_whitespace(c)
+            {
                 return Err(());
             }
         }

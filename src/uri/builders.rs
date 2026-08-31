@@ -33,35 +33,35 @@ pub fn post_uri_builder(author_id: String, post_id: String) -> String {
     [PROTOCOL, &author_id, &post_path].concat()
 }
 
-/// Builds a Follow URI of the form "pubky://<author_id>/pub/social/v1/follows/<follow_id>"
+/// Builds a Follow URI of the form "pubky://<author_id>/pub/social/v1/follows/<follow_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = followUriBuilder))]
 pub fn follow_uri_builder(author_id: String, follow_id: String) -> String {
     let follow_path = PubkySocialFollow::create_path(&follow_id);
     [PROTOCOL, &author_id, &follow_path].concat()
 }
 
-/// Builds a Mute URI of the form "pubky://<author_id>/pub/social/v1/mutes/<mute_id>"
+/// Builds a Mute URI of the form "pubky://<author_id>/pub/social/v1/mutes/<mute_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = muteUriBuilder))]
 pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
     let mute_path = PubkySocialMute::create_path(&mute_id);
     [PROTOCOL, &author_id, &mute_path].concat()
 }
 
-/// Builds a Bookmark URI of the form "pubky://<author_id>/pub/social/v1/bookmarks/<bookmark_id>"
+/// Builds a Bookmark URI of the form "pubky://<author_id>/pub/social/v1/bookmarks/<bookmark_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = bookmarkUriBuilder))]
 pub fn bookmark_uri_builder(author_id: String, bookmark_id: String) -> String {
     let bookmark_path = PubkySocialBookmark::create_path(&bookmark_id);
     [PROTOCOL, &author_id, &bookmark_path].concat()
 }
 
-/// Builds a Tag URI of the form "pubky://<author_id>/pub/social/v1/tags/<tag_id>"
+/// Builds a Tag URI of the form "pubky://<author_id>/pub/social/v1/tags/<tag_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = tagUriBuilder))]
 pub fn tag_uri_builder(author_id: String, tag_id: String) -> String {
     let tag_path = PubkySocialTag::create_path(&tag_id);
     [PROTOCOL, &author_id, &tag_path].concat()
 }
 
-/// Builds a File URI of the form "pubky://<author_id>/pub/social/v1/files/<file_id>"
+/// Builds a File URI of the form "pubky://<author_id>/pub/social/v1/files/<file_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fileUriBuilder))]
 pub fn file_uri_builder(author_id: String, file_id: String) -> String {
     let file_path = PubkySocialFile::create_path(&file_id);
@@ -75,7 +75,7 @@ pub fn blob_uri_builder(author_id: String, blob_id: String) -> String {
     [PROTOCOL, &author_id, &blob_path].concat()
 }
 
-/// Builds a Feed URI of the form "pubky://<author_id>/pub/social/v1/feeds/<feed_id>"
+/// Builds a Feed URI of the form "pubky://<author_id>/pub/social/v1/feeds/<feed_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = feedUriBuilder))]
 pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
     let feed_path = PubkySocialFeed::create_path(&feed_id);

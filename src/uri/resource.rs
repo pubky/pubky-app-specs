@@ -27,7 +27,7 @@ pub enum Resource {
     Mute(PubkyId),
     Bookmark(String),
     Tag(String),
-    /// The RAW leaf, extension included; `id()` returns the stripped id.
+    /// The stripped id. The media collapse re-decides the payload when extensions vary.
     File(String),
     /// v0-shaped raw bytes under the v1 epoch; the media collapse removes it.
     Blob(String),
@@ -75,7 +75,7 @@ impl Resource {
             Resource::Mute(id) => Some(id.to_string()),
             Resource::Bookmark(id) => Some(id.clone()),
             Resource::Tag(id) => Some(id.clone()),
-            Resource::File(raw) => Some(raw.strip_suffix(".json").unwrap_or(raw).to_string()),
+            Resource::File(id) => Some(id.clone()),
             Resource::Blob(id) => Some(id.clone()),
             Resource::Feed(id) => Some(id.clone()),
             Resource::User

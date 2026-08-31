@@ -16,11 +16,11 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver bookmark with id
-/// URI: /pub/pubky.app/bookmarks/:bookmark_id
+/// URI: /pub/social/v1/bookmarks/:bookmark_id
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
+/// `/pub/social/v1/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]

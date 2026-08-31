@@ -219,7 +219,7 @@ field("Source", file.toJson().src);
 // =============================================================================
 // 5. Feeds
 // =============================================================================
-header("FEEDS & LAST READ");
+header("FEEDS");
 
 // Feed
 console.log(`  ${c.yellow}▸ Custom Feed${c.reset}`);
@@ -256,7 +256,6 @@ field("ID", wotFeedMeta.id);
 field("Reach", wotFeed.toJson().feed.reach);
 field("Domain Tags", wotFeed.toJson().feed.domain_tags.join(", "));
 console.log();
-
 
 // =============================================================================
 // 6. URI Builders

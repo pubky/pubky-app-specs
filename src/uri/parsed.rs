@@ -40,9 +40,17 @@ impl ParsedUri {
     pub fn try_to_uri_str(&self) -> Result<String, String> {
         let root = self.visibility.root();
         let leaf = match &self.resource {
-            Resource::User => PubkySocialUser::PATH_SEGMENT.to_string(),
+            Resource::User => {
+                if root == Root::Priv {
+                    return Err("the profile lives under the public root".to_string());
+                }
+                PubkySocialUser::PATH_SEGMENT.to_string()
+            }
             Resource::Post { id, version, label } => match (version, label) {
-                (None, _) => format!("posts/{id}"),
+                (None, Some(_)) => {
+                    return Err("a label without a version cannot be spelled".to_string())
+                }
+                (None, None) => format!("posts/{id}"),
                 (Some(v), None) => format!("posts/{id}/{v}.json"),
                 (Some(v), Some(l)) => format!("posts/{id}/{v}-{l}.json"),
             },
@@ -50,7 +58,7 @@ impl ParsedUri {
             Resource::Mute(pk) => format!("mutes/{pk}.json"),
             Resource::Bookmark(id) => format!("bookmarks/{id}.json"),
             Resource::Tag(id) => format!("tags/{id}.json"),
-            Resource::File(raw) => format!("files/{raw}"),
+            Resource::File(id) => format!("files/{id}.json"),
             Resource::Blob(id) => format!("blobs/{id}"),
             Resource::Feed(id) => format!("feeds/{id}.json"),
             Resource::Foreign {
@@ -102,6 +110,8 @@ fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)> {
     Some((version.to_string(), label))
 }
 
+/// Time bounds never run here: parser verdicts must not depend on the wall clock. The
+/// object validator bounds the post id when the object is read.
 fn dispatch(root: Root, rest: &[&str]) -> Resource {
     match (root, rest) {
         (Root::Pub, ["profile.json"]) => Resource::User,
@@ -124,7 +134,7 @@ fn dispatch(root: Root, rest: &[&str]) -> Resource {
         // v0-shaped media at this stage: a metadata JSON keyed by TimestampId. The media
         // collapse replaces this arm with the hash + known-extension strip.
         (_, ["files", leaf]) => match leaf.strip_suffix(".json") {
-            Some(id) if validate_timestamp_id_format(id).is_ok() => Resource::File((*leaf).into()),
+            Some(id) if validate_timestamp_id_format(id).is_ok() => Resource::File(id.into()),
             _ => Resource::Unknown,
         },
         (Root::Pub, ["blobs", id]) if validate_hash_id_format(id).is_ok() => {
@@ -190,16 +200,24 @@ impl TryFrom<&str> for ParsedUri {
         };
         let resource = match segments.get(1) {
             None => Resource::Unknown,
-            Some(&ns) if ns != SOCIAL_NAMESPACE => Resource::Foreign {
-                namespace: ns.to_string(),
-                version: segments.get(2).map(|s| s.to_string()),
-                rest: segments
-                    .get(3..)
-                    .unwrap_or(&[])
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            },
+            Some(&ns) if ns != SOCIAL_NAMESPACE => {
+                // A namespace SHOULD carry an epoch as its second segment; surface it only
+                // when it is epoch-shaped, otherwise the segment stays in `rest`.
+                let (version, rest_from) = match segments.get(2) {
+                    Some(&e) if is_epoch_segment(e) => (Some(e.to_string()), 3),
+                    _ => (None, 2),
+                };
+                Resource::Foreign {
+                    namespace: ns.to_string(),
+                    version,
+                    rest: segments
+                        .get(rest_from..)
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
+                }
+            }
             Some(_) => match segments.get(2) {
                 None => Resource::Unknown,
                 Some(&e) if e == epoch_segment() => {
@@ -296,8 +314,8 @@ mod tests {
             (p(&format!("/pub/social/v1/mutes/{HOST}.json")), Some((Public, Resource::Mute(pk())))),
             (p(&format!("/pub/social/v1/bookmarks/{H26}.json")), Some((Public, Resource::Bookmark(H26.into())))),
             // v0-shaped media under the epoch (collapsed later)
-            (p(&format!("/pub/social/v1/files/{TS}.json")), Some((Public, Resource::File(format!("{TS}.json"))))),
-            (p(&format!("/priv/social/v1/files/{TS}.json")), Some((Private, Resource::File(format!("{TS}.json"))))),
+            (p(&format!("/pub/social/v1/files/{TS}.json")), Some((Public, Resource::File(TS.into())))),
+            (p(&format!("/priv/social/v1/files/{TS}.json")), Some((Private, Resource::File(TS.into())))),
             (p(&format!("/pub/social/v1/blobs/{H26}")), Some((Public, Resource::Blob(H26.into())))),
             (p(&format!("/priv/social/v1/blobs/{H26}")), Some((Private, Resource::Unknown))),
             // Feeds are dual-root already
@@ -314,10 +332,10 @@ mod tests {
             (p("/pub/social"), Some((Public, Resource::Unknown))),
             (p("/pub"), Some((Public, Resource::Unknown))),
             // Foreign namespaces
-            (p(&format!("/pub/pubky.app/posts/{TS}")), Some((Public, Resource::Foreign { namespace: "pubky.app".into(), version: Some("posts".into()), rest: vec![TS.into()] }))),
+            (p(&format!("/pub/pubky.app/posts/{TS}")), Some((Public, Resource::Foreign { namespace: "pubky.app".into(), version: None, rest: vec!["posts".into(), TS.into()] }))),
             (p("/priv/app.pubky/v1/settings.json"), Some((Private, Resource::Foreign { namespace: "app.pubky".into(), version: Some("v1".into()), rest: vec!["settings.json".into()] }))),
             (p("/priv/app.pubky/v1/last_read.json"), Some((Private, Resource::Foreign { namespace: "app.pubky".into(), version: Some("v1".into()), rest: vec!["last_read.json".into()] }))),
-            (p("/pub/日本語/データ"), Some((Public, Resource::Foreign { namespace: "日本語".into(), version: Some("データ".into()), rest: vec![] }))),
+            (p("/pub/日本語/データ"), Some((Public, Resource::Foreign { namespace: "日本語".into(), version: None, rest: vec!["データ".into()] }))),
             // Hard errors
             (p("/dav/social/v1/profile.json"), None),
             (format!("Pubky://{HOST}/pub/social/v1/profile.json"), None),
@@ -334,6 +352,24 @@ mod tests {
             (p("/pub/social/v1/tags/a b.json"), None),
             (p("/pub/social/v1/tags/a\u{3000}b.json"), None),
             (p("/pub/social/v1/tags/a\u{0009}b.json"), None),
+            (p("/pub/a\\b"), None),
+            (format!("pubky://{}/pub/social/v1/profile.json", HOST.to_uppercase()), None),
+            (p("/priv/social/v1/profile.json"), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/follows/{HOST}.json")), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/mutes/{HOST}.json")), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/bookmarks/{H26}.json")), Some((Private, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/files/{H26}.json")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/blobs/{H26}.json")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/feeds/{H26}")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/posts/{TS}/{TS2}.json.json")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/posts/{TS}/.json")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/posts/{TS}/{TS2}--a.json")), Some((Public, post(TS, Some(TS2), Some("-a"))))),
+            (p(&format!("/pub/social/v1/posts/{TS}/{TS2}-a-.json")), Some((Public, post(TS, Some(TS2), Some("a-"))))),
+            (p(&format!("/pub/social/v1/posts/{TS}/{TS2}-2col-9.json")), Some((Public, post(TS, Some(TS2), Some("2col-9"))))),
+            (p(&format!("/pub/social/v0/posts/{TS}")), Some((Public, Resource::UnsupportedVersion { version: "v0".into() }))),
+            (p(&format!("/pub/social/v01/posts/{TS}")), Some((Public, Resource::UnsupportedVersion { version: "v01".into() }))),
+            (p("/pub/social/v/x"), Some((Public, Resource::Unknown))),
+            (p("/pub/x"), Some((Public, Resource::Foreign { namespace: "x".into(), version: None, rest: vec![] }))),
         ]
     }
 
@@ -364,6 +400,9 @@ mod tests {
                 Resource::User => {
                     // Bare-host inputs cannot string-round-trip to profile.json; the value must.
                     let emitted = parsed.try_to_uri_str().unwrap();
+                    if input.contains("profile.json") {
+                        assert_eq!(emitted, crate::canonicalize_pubky_uri(&input).unwrap());
+                    }
                     let reparsed = ParsedUri::try_from(emitted.as_str()).unwrap();
                     assert_eq!(reparsed, parsed, "{input}");
                 }
@@ -428,10 +467,7 @@ mod tests {
     fn display_and_id() {
         assert_eq!(post(TS, Some(TS2), Some("x")).to_string(), "posts");
         assert_eq!(post(TS, Some(TS2), Some("x")).id(), Some(TS.to_string()));
-        assert_eq!(
-            Resource::File(format!("{TS}.json")).id(),
-            Some(TS.to_string())
-        );
+        assert_eq!(Resource::File(TS.into()).id(), Some(TS.to_string()));
         assert_eq!(
             Resource::Foreign {
                 namespace: "x".into(),

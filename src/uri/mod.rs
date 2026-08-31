@@ -1,9 +1,9 @@
 //! URI parsing and construction for `pubky://` paths.
 //!
 //! - **Build** — `*_uri_builder` functions
-//! - **Parse (strict)** — [`ParsedUri`] for `pubky.app` spec paths
-//! - **Parse (extended)** — [`ExtendedParsedUri`] for ingest (cross-app tags)
-//! - **Parse (structure)** — [`try_parse_pubky_path`] / [`PubkyPath`] (advanced)
+//! - **Build**: the `*_uri_builder` helpers assemble canonical URIs.
+//! - **Parse**: [`ParsedUri`] classifies a path into visibility and resource.
+//! - **Scheme**: [`is_pubky_scheme`] is the one string check shared with callers.
 
 mod builders;
 mod parsed;
@@ -19,8 +19,6 @@ pub use builders::{
 // Strict
 pub use parsed::{ParsedUri, Visibility};
 pub use resource::Resource;
-
-// Extended
 
 // Structure (advanced)
 pub use scheme::is_pubky_scheme;

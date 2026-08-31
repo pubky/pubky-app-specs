@@ -17,11 +17,11 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver tag with id
-/// URI: /pub/pubky.app/tags/:tag_id
+/// URI: /pub/social/v1/tags/:tag_id
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
+/// `/pub/social/v1/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]

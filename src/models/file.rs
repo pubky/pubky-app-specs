@@ -49,7 +49,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 ];
 
 /// Represents a file uploaded by the user.
-/// URI: /pub/pubky.app/files/:file_id
+/// URI: /pub/social/v1/files/:file_id
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

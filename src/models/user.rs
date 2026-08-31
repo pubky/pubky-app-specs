@@ -16,7 +16,7 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-/// URI: /pub/pubky.app/profile.json
+/// URI: /pub/social/v1/profile.json
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

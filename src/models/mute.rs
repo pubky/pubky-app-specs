@@ -16,11 +16,11 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver Mute object with timestamp
-/// URI: /pub/pubky.app/mutes/:user_id
+/// URI: /pub/social/v1/mutes/:user_id.json
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
+/// `/pub/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

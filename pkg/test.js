@@ -77,6 +77,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
       assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
       assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
+      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
 
       // Test post content
       const postJson = post.toJson();
@@ -276,6 +277,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
         assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
         assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
+      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
 
         const postJson = post.toJson();
         assert.strictEqual(postJson.kind, "collection", "Post kind should be collection");

@@ -1,5 +1,5 @@
 use crate::constants::social_path;
-use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
@@ -339,9 +339,9 @@ impl HasIdPath for PubkySocialFeed {
 }
 
 impl Validatable for PubkySocialFeed {
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Content first, so an unrecognized value is reported as such and not as an id mismatch
-        self.feed.validate(None, &PUB_CTX)?;
+        self.feed.validate(None, ctx)?;
 
         if self.name.trim().is_empty() {
             return Err("Validation Error: Feed name cannot be empty".into());
@@ -411,6 +411,7 @@ impl FromStr for PubkySocialFeedSort {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{limits::VALIDATION_LIMITS, traits::Validatable};
 
     fn feed_config(

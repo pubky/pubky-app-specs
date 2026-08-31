@@ -32,7 +32,7 @@ let path = PubkySocialUser::create_path(); // /pub/social/v1/profile.json
 let json = to_vec(&user).unwrap();
 
 // Parse and validate JSON from storage
-let profile = PubkySocialUser::try_from(&json, "").unwrap();
+let profile = PubkySocialUser::try_from(&json, "", &PUB_CTX).unwrap();
 ```
 
 For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/pubky/pubky-social-specs/blob/main/examples/create_user.rs).
