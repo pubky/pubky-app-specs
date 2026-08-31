@@ -1,3 +1,4 @@
+mod canonicalize;
 mod common;
 mod constants;
 pub mod limits;
@@ -9,6 +10,7 @@ mod uri;
 // Re-export constants
 pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
 // Re-export common utilities
+pub use canonicalize::{canonicalize_pubky_uri, canonicalize_target, canonicalize_web_uri};
 pub use common::{
     ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace, mint_timestamp_micros,
     validate_hash_id_format, validate_safe_json_int, validate_timestamp_id_format,
