@@ -194,8 +194,16 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
     // collection rework.
     let parsed = crate::ParsedUri::try_from(uri)
         .map_err(|e| format!("must be a canonical post URI: {e}"))?;
-    match (parsed.visibility, parsed.resource) {
-        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => Ok(()),
+    match (parsed.visibility, &parsed.resource) {
+        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => {
+            // The stored string is not rewritten, so it must already BE the canonical
+            // spelling: a fixed point of the parser's own emitter (rejects the short form).
+            if parsed.try_to_uri_str().as_deref() == Ok(uri) {
+                Ok(())
+            } else {
+                Err(format!("must be spelled in canonical form: {uri}"))
+            }
+        }
         _ => Err(format!(
             "must be a public, versionless post reference: {uri}"
         )),
@@ -650,6 +658,16 @@ mod tests {
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("canonical post URI"), "got: {err}");
+    }
+
+    #[test]
+    fn test_collection_post_rejects_short_form_item_spelling() {
+        // The short form parses, but the stored string must be the canonical spelling.
+        let uri = format!("pubky{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A");
+        let post = make_collection_post("X", None, Some(vec![uri]));
+        let id = post.create_id();
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+        assert!(err.contains("canonical form"), "got: {err}");
     }
 
     #[test]
