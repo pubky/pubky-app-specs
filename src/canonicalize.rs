@@ -44,13 +44,7 @@ pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
             return Err(());
         }
         for c in seg.chars() {
-            if c == '%'
-                || c == '?'
-                || c == '#'
-                || c == '\\'
-                || c.is_ascii_control()
-                || is_frozen_whitespace(c)
-            {
+            if c == '%' || c == '?' || c == '#' || c.is_ascii_control() || is_frozen_whitespace(c) {
                 return Err(());
             }
         }

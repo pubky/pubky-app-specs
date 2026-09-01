@@ -121,7 +121,7 @@ pub const PUB_CTX: ValidationCtx = ValidationCtx { root: Root::Pub };
 pub type ValidationError = String;
 
 pub trait Validatable: Sized + DeserializeOwned {
-    fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, String> {
+    fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
         instance.validate(Some(id), ctx)?;

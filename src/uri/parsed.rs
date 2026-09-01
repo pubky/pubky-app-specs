@@ -35,8 +35,11 @@ pub struct ParsedUri {
 }
 
 impl ParsedUri {
-    /// Rebuilds the canonical URI string. Round-trips every parser-produced value; `Unknown`
-    /// and `UnsupportedVersion` cannot be spelled honestly and return `Err`.
+    /// Rebuilds the canonical URI string, and refuses any value the grammar cannot produce:
+    /// the emitted string is reparsed and must classify back to the same value, so a
+    /// hand-built or deserialized `ParsedUri` with a wrong root, a malformed id or an
+    /// unspeakable shape returns `Err` instead of a lying string. `Unknown` and
+    /// `UnsupportedVersion` cannot be spelled at all.
     pub fn try_to_uri_str(&self) -> Result<String, String> {
         let root = self.visibility.root();
         let leaf = match &self.resource {
@@ -72,7 +75,7 @@ impl ParsedUri {
                 }
                 segs.extend(rest.iter().cloned());
                 let path = ["/", root.segment(), "/", &segs.join("/")].concat();
-                return Ok([PROTOCOL, self.user_id.as_ref(), &path].concat());
+                return self.verify_emitted([PROTOCOL, self.user_id.as_ref(), &path].concat());
             }
             Resource::UnsupportedVersion { .. } => {
                 return Err("an unsupported epoch does not carry its path".to_string())
@@ -80,7 +83,16 @@ impl ParsedUri {
             Resource::Unknown => return Err("Cannot convert Unknown resource to URI".to_string()),
         };
         let path = social_path(root, &leaf);
-        Ok([PROTOCOL, self.user_id.as_ref(), &path].concat())
+        let out = [PROTOCOL, self.user_id.as_ref(), &path].concat();
+        self.verify_emitted(out)
+    }
+
+    /// The single validation boundary for emitted strings: reparse and compare.
+    fn verify_emitted(&self, out: String) -> Result<String, String> {
+        match ParsedUri::try_from(out.as_str()) {
+            Ok(reparsed) if reparsed == *self => Ok(out),
+            _ => Err(format!("value cannot be spelled canonically: {out}")),
+        }
     }
 }
 
@@ -112,6 +124,12 @@ fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)> {
 
 /// Time bounds never run here: parser verdicts must not depend on the wall clock. The
 /// object validator bounds the post id when the object is read.
+///
+/// Adding a resource touches SIX surfaces the compiler will not connect for you: this
+/// dispatch (pattern, root, `.json` strip, id check), the emitter leaf in `try_to_uri_str`,
+/// `Display` and `id()` in `resource.rs`, `from_resource` in `models/mod.rs`, the builder in
+/// `builders.rs`, and the model's `create_path`. The emit-reparse boundary and the
+/// `every_speakable_value_round_trips` test catch a mismatch; add your vectors to both tables.
 fn dispatch(root: Root, rest: &[&str]) -> Resource {
     match (root, rest) {
         (Root::Pub, ["profile.json"]) => Resource::User,
@@ -250,7 +268,7 @@ mod tests {
     use super::*;
     use crate::models::{post::PubkySocialPost, user::PubkySocialUser};
     use crate::traits::{HasIdPath, HasPath, PUB_CTX};
-    use crate::uri::builders::{base_uri_builder, post_uri_builder};
+    use crate::uri::builders::{list_prefix_builder, post_uri_builder};
     use crate::PubkySocialObject;
 
     const HOST: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
@@ -321,7 +339,7 @@ mod tests {
             // Feeds are dual-root already
             (p(&format!("/pub/social/v1/feeds/{H26}.json")), Some((Public, Resource::Feed(H26.into())))),
             (p(&format!("/priv/social/v1/feeds/{H26}.json")), Some((Private, Resource::Feed(H26.into())))),
-            // Gone or reserved leaves
+            // Gone or reserved leaves (classify Unknown, never error)
             (p("/pub/social/v1/last_read.json"), Some((Public, Resource::Unknown))),
             (p("/priv/social/v1/settings.json"), Some((Private, Resource::Unknown))),
             (p("/priv/social/v1/_migrated.json"), Some((Private, Resource::Unknown))),
@@ -336,7 +354,7 @@ mod tests {
             (p("/priv/app.pubky/v1/settings.json"), Some((Private, Resource::Foreign { namespace: "app.pubky".into(), version: Some("v1".into()), rest: vec!["settings.json".into()] }))),
             (p("/priv/app.pubky/v1/last_read.json"), Some((Private, Resource::Foreign { namespace: "app.pubky".into(), version: Some("v1".into()), rest: vec!["last_read.json".into()] }))),
             (p("/pub/日本語/データ"), Some((Public, Resource::Foreign { namespace: "日本語".into(), version: None, rest: vec!["データ".into()] }))),
-            // Hard errors
+            // Hard errors: only canonicalization failures and an unknown root
             (p("/dav/social/v1/profile.json"), None),
             (format!("Pubky://{HOST}/pub/social/v1/profile.json"), None),
             (format!("https://{HOST}/pub/social/v1/profile.json"), None),
@@ -352,7 +370,13 @@ mod tests {
             (p("/pub/social/v1/tags/a b.json"), None),
             (p("/pub/social/v1/tags/a\u{3000}b.json"), None),
             (p("/pub/social/v1/tags/a\u{0009}b.json"), None),
-            (p("/pub/a\\b"), None),
+            (format!("pubky://{}b", &HOST[..51]), None),
+            (p("/pub/social/v1/posts/0032SSN7Q4EVD"), Some((Public, Resource::Unknown))),
+            (p("/pub/social/v1/tags/8Z8CWH8NVYQY39ZEBFGKQWWEKZ.json"), Some((Public, Resource::Unknown))),
+            (p("/pub/social/v1/posts/_x"), Some((Public, Resource::Unknown))),
+            (p("/pub/social/v1/tags/_a.json"), Some((Public, Resource::Unknown))),
+            (p("/pub/acme/a*b(1)~"), Some((Public, Resource::Foreign { namespace: "acme".into(), version: None, rest: vec!["a*b(1)~".into()] }))),
+(p("/pub/acme/a\\b"), Some((Public, Resource::Foreign { namespace: "acme".into(), version: None, rest: vec!["a\\b".into()] }))),
             (format!("pubky://{}/pub/social/v1/profile.json", HOST.to_uppercase()), None),
             (p("/priv/social/v1/profile.json"), Some((Private, Resource::Unknown))),
             (p(&format!("/priv/social/v1/follows/{HOST}.json")), Some((Private, Resource::Unknown))),
@@ -431,6 +455,116 @@ mod tests {
         }
     }
 
+    /// The two-hard-error-class rule as a property: any grammar-safe path under a valid root
+    /// classifies Ok, whatever the classification is.
+    #[test]
+    fn any_safe_path_classifies() {
+        let pool = [
+            "a",
+            "posts",
+            "social",
+            "v1",
+            "v2",
+            "_x",
+            "\u{65e5}\u{672c}",
+            "a-b",
+            "x.json",
+            "~",
+            "(1)",
+            "a*b",
+            "a\\b",
+            "0032SSN7Q4EVG",
+        ];
+        for root in ["pub", "priv"] {
+            for seg_a in pool {
+                assert!(ParsedUri::try_from(p(&format!("/{root}/{seg_a}")).as_str()).is_ok());
+                for seg_b in pool {
+                    assert!(
+                        ParsedUri::try_from(p(&format!("/{root}/{seg_a}/{seg_b}")).as_str())
+                            .is_ok()
+                    );
+                }
+            }
+        }
+        // And only the two classes may error: a bad root errs whatever follows.
+        for seg in pool {
+            assert!(ParsedUri::try_from(p(&format!("/dav/{seg}")).as_str()).is_err());
+        }
+    }
+
+    /// One value of every speakable variant: emitted, reparsed, equal.
+    #[test]
+    fn every_speakable_value_round_trips() {
+        let values = [
+            (Visibility::Public, Resource::User),
+            (Visibility::Public, post(TS, None, None)),
+            (Visibility::Private, post(TS, Some(TS2), Some("hello"))),
+            (Visibility::Public, Resource::Follow(pk())),
+            (Visibility::Public, Resource::Mute(pk())),
+            (Visibility::Public, Resource::Bookmark(H26.into())),
+            (Visibility::Public, Resource::Tag(H26.into())),
+            (Visibility::Private, Resource::File(TS.into())),
+            (Visibility::Public, Resource::Blob(H26.into())),
+            (Visibility::Private, Resource::Feed(H26.into())),
+            (
+                Visibility::Public,
+                Resource::Foreign {
+                    namespace: "acme".into(),
+                    version: Some("v3".into()),
+                    rest: vec!["x.json".into()],
+                },
+            ),
+        ];
+        for (visibility, resource) in values {
+            let value = ParsedUri {
+                user_id: pk(),
+                visibility,
+                resource,
+            };
+            let emitted = value.try_to_uri_str().unwrap();
+            assert_eq!(ParsedUri::try_from(emitted.as_str()).unwrap(), value);
+        }
+    }
+
+    /// Hand-built and deserialized values the grammar cannot produce are refused, not spelled.
+    #[test]
+    fn unspeakable_values_are_refused() {
+        let cases = [
+            (Visibility::Private, Resource::User),
+            (Visibility::Private, Resource::Tag(H26.into())),
+            (Visibility::Public, Resource::Tag("bad".into())),
+            (Visibility::Public, post(TS, None, Some("orphan"))),
+            (Visibility::Public, post(TS, Some("nope"), None)),
+            (Visibility::Public, post(TS, Some(TS2), Some("Bad_Label"))),
+            (Visibility::Private, Resource::Blob(H26.into())),
+        ];
+        for (i, (visibility, resource)) in cases.into_iter().enumerate() {
+            let value = ParsedUri {
+                user_id: pk(),
+                visibility,
+                resource,
+            };
+            assert!(value.try_to_uri_str().is_err(), "case {i} was spelled");
+        }
+        // Through serde, the way real callers build impossible values.
+        let json = format!(
+            r#"{{"user_id":"{HOST}","visibility":"public","resource":{{"Post":{{"id":"{TS}","version":null,"label":"x"}}}}}}"#
+        );
+        let value: ParsedUri = serde_json::from_str(&json).unwrap();
+        assert!(value.try_to_uri_str().is_err());
+        // A Foreign whose spelling would reclassify: an epoch-shaped first rest segment.
+        let value = ParsedUri {
+            user_id: pk(),
+            visibility: Visibility::Public,
+            resource: Resource::Foreign {
+                namespace: "acme".into(),
+                version: None,
+                rest: vec!["v1".into(), "y".into()],
+            },
+        };
+        assert!(value.try_to_uri_str().is_err());
+    }
+
     #[test]
     fn versionless_reference_is_never_a_stored_object() {
         let err =
@@ -458,7 +592,7 @@ mod tests {
             format!("pubky://{HOST}/pub/social/v1/posts/{TS}")
         );
         assert_eq!(
-            base_uri_builder(HOST.into()),
+            list_prefix_builder(HOST.into()),
             format!("pubky://{HOST}/pub/social/v1/")
         );
     }

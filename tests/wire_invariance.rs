@@ -1,4 +1,4 @@
-//! Serialized bytes of every v0 wire model, pinned as literals so a rename or refactor that
+//! Serialized bytes of every retained wire model, pinned as literals so a rename or refactor that
 //! changes a serde attribute fails here before it reaches a homeserver. Captured from the 0.8.0
 //! crate (commit 3eebe18), before the rename. `{PK}` stands in for the host key.
 #![cfg(not(target_arch = "wasm32"))]

@@ -9,9 +9,10 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-/// The public v1 LIST prefix: "pubky://<user_id>/pub/social/v1/".
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = baseUriBuilder))]
-pub fn base_uri_builder(user_id: String) -> String {
+/// The public v1 LIST prefix, "pubky://<user_id>/pub/social/v1/". NOT a URI: the trailing
+/// slash is deliberate and the parser rejects it; use it only as a LIST or capability prefix.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = listPrefixBuilder))]
+pub fn list_prefix_builder(user_id: String) -> String {
     let prefix = social_path(Root::Pub, "");
     [PROTOCOL, &user_id, &prefix].concat()
 }
