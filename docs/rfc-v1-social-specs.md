@@ -787,7 +787,8 @@ Canonicalization is raw string work, byte-level, with no engine URL parser anywh
   A `@` or `:` anywhere in the host is invalid (no userinfo, no port).
 - **Path segments** (split on `/`): reject an empty segment (this covers trailing slashes and
   `//`), `.`, `..`, and any segment containing `%`, `?`, `#`, an ASCII control character, or a
-  frozen-whitespace code point. There is NO percent-decoding, NO case folding, and NO segment
+  frozen-whitespace code point. `\\` is permitted: `pubky://` is not a browser special scheme,
+  so nothing rewrites it, and it is never a separator in any pubky context. There is NO percent-decoding, NO case folding, and NO segment
   normalization: what is stored is what was written.
 - A bare host (`pubky://<host>`) is valid and canonical.
 
