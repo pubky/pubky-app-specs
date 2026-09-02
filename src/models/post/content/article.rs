@@ -45,6 +45,13 @@ pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String
         format!("Validation Error: Article content must be a valid JSON envelope: {e}")
     })?;
     check_extra_keys(&envelope.extra, &["title", "body", "cover_image"])?;
+    // Other controls escape to six characters and would break the two-to-one envelope bound
+    let is_control = |c: char| c.is_ascii_control() && !matches!(c, '\t' | '\n' | '\r');
+    if envelope.title.chars().any(is_control) || envelope.body.chars().any(is_control) {
+        return Err(
+            "Validation Error: Article text must not contain control characters other than tab, newline and carriage return".into(),
+        );
+    }
     if frozen_trim(&envelope.title).is_empty() {
         return Err(
             "Validation Error: Article title must contain non-whitespace characters".into(),
@@ -148,6 +155,13 @@ mod tests {
             Some("https://example.com/c.png")
         ))
         .is_ok());
+    }
+
+    #[test]
+    fn control_characters_reject() {
+        assert!(err(&article("t", "a\u{0}b", None)).contains("control"));
+        assert!(err(&article("t\u{1b}", "b", None)).contains("control"));
+        assert!(validate(&article("t", "a\tb\r\nc", None)).is_ok());
     }
 
     #[test]
