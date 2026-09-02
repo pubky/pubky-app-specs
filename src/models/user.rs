@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
-    common::sanitize_url,
+    common::{code_point_len, frozen_trim, sanitize_url},
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
 };
@@ -32,6 +32,13 @@ pub struct PubkySocialUser {
     pub links: Option<Vec<PubkySocialUserLink>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
+    /// Members this version does not know, preserved member-for-member on rewrite so an
+    /// older client never drops a newer client's data. Opaque: never validated, never
+    /// written by builders. Deliberate extensions live under the reserved `ext` member and
+    /// are hostile input until the extension's own rules have checked them.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for PubkySocialUser {
@@ -42,6 +49,7 @@ impl Default for PubkySocialUser {
             image: None,
             links: None,
             status: None,
+            extra: Default::default(),
         }
         .sanitize()
     }
@@ -95,6 +103,13 @@ pub struct PubkySocialUserLink {
     pub title: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub url: String,
+    /// Members this version does not know, preserved member-for-member on rewrite so an
+    /// older client never drops a newer client's data. Opaque: never validated, never
+    /// written by builders. Deliberate extensions live under the reserved `ext` member and
+    /// are hostile input until the extension's own rules have checked them.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -128,6 +143,7 @@ impl PubkySocialUser {
             image,
             links,
             status,
+            extra: Default::default(),
         }
         .sanitize()
     }
@@ -144,23 +160,14 @@ impl HasPath for PubkySocialUser {
 
 impl Validatable for PubkySocialUser {
     fn sanitize(self) -> Self {
-        // Sanitize name: trim whitespace only
-        let mut name = self.name.trim().to_string();
-
-        // We use username keyword `[DELETED]` for a user whose `profile.json` has been deleted
-        // Therefore this is not a valid username.
-        if name == *"[DELETED]" {
-            name = "anonymous".to_string(); // default username
-        }
-
-        // Sanitize bio: trim whitespace only
-        let bio = self.bio.map(|b| b.trim().to_string());
+        let name = frozen_trim(&self.name).to_string();
+        let bio = self.bio.map(|b| frozen_trim(&b).to_string());
 
         // Sanitize image URL
         let image = self.image.map(|i| sanitize_url(&i));
 
         // Sanitize status: trim whitespace only
-        let status = self.status.map(|s| s.trim().to_string());
+        let status = self.status.map(|s| frozen_trim(&s).to_string());
 
         // Sanitize links: sanitize each link, validation handles format
         let links = self
@@ -173,12 +180,15 @@ impl Validatable for PubkySocialUser {
             image,
             links,
             status,
+            extra: self.extra,
         }
     }
 
     fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+        self.validate_size()?;
+
         // Validate name length
-        let name_length = self.name.chars().count();
+        let name_length = code_point_len(&self.name);
         if !(VALIDATION_LIMITS.user_name_min_length..=VALIDATION_LIMITS.user_name_max_length)
             .contains(&name_length)
         {
@@ -187,7 +197,7 @@ impl Validatable for PubkySocialUser {
 
         // Validate bio length
         if let Some(bio) = &self.bio {
-            if bio.chars().count() > VALIDATION_LIMITS.user_bio_max_length {
+            if code_point_len(bio) > VALIDATION_LIMITS.user_bio_max_length {
                 return Err("Validation Error: Bio exceeds maximum length".into());
             }
         }
@@ -197,7 +207,7 @@ impl Validatable for PubkySocialUser {
             if image.is_empty() {
                 return Err("Validation Error: Image URI cannot be empty".into());
             }
-            if image.chars().count() > VALIDATION_LIMITS.image_url_max_length {
+            if code_point_len(image) > VALIDATION_LIMITS.image_url_max_length {
                 return Err("Validation Error: Image URI exceeds maximum length".into());
             }
             // Validate URL format
@@ -218,7 +228,7 @@ impl Validatable for PubkySocialUser {
 
         // Validate status length
         if let Some(status) = &self.status {
-            if status.chars().count() > VALIDATION_LIMITS.user_status_max_length {
+            if code_point_len(status) > VALIDATION_LIMITS.user_status_max_length {
                 return Err("Validation Error: Status exceeds maximum length".into());
             }
         }
@@ -232,35 +242,38 @@ impl PubkySocialUserLink {
     /// Creates a new `PubkySocialUserLink` instance and sanitizes it.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
-        Self { title, url }.sanitize()
+        Self {
+            title,
+            url,
+            extra: Default::default(),
+        }
+        .sanitize()
     }
 }
 
 impl Validatable for PubkySocialUserLink {
     fn sanitize(self) -> Self {
-        // Sanitize title: trim whitespace only
-        let title = self.title.trim().to_string();
-
-        // Sanitize URL
-        let url = sanitize_url(&self.url);
-
-        PubkySocialUserLink { title, url }
+        PubkySocialUserLink {
+            title: frozen_trim(&self.title).to_string(),
+            url: sanitize_url(&self.url),
+            extra: self.extra,
+        }
     }
 
     fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate title
-        if self.title.trim().is_empty() {
+        if frozen_trim(&self.title).is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());
         }
-        if self.title.chars().count() > VALIDATION_LIMITS.user_link_title_max_length {
+        if code_point_len(&self.title) > VALIDATION_LIMITS.user_link_title_max_length {
             return Err("Validation Error: Link title exceeds maximum length".into());
         }
 
         // Validate URL
-        if self.url.trim().is_empty() {
+        if frozen_trim(&self.url).is_empty() {
             return Err("Validation Error: Link URL cannot be empty".into());
         }
-        if self.url.chars().count() > VALIDATION_LIMITS.user_link_url_max_length {
+        if code_point_len(&self.url) > VALIDATION_LIMITS.user_link_url_max_length {
             return Err("Validation Error: Link URL exceeds maximum length".into());
         }
 
@@ -286,10 +299,12 @@ mod tests {
                 PubkySocialUserLink {
                     title: "GitHub".to_string(),
                     url: "https://github.com/alice".to_string(),
+                    extra: Default::default(),
                 },
                 PubkySocialUserLink {
                     title: "Website".to_string(),
                     url: "https://alice.dev".to_string(),
+                    extra: Default::default(),
                 },
             ]),
             Some("Exploring the decentralized web.".to_string()),
@@ -304,6 +319,56 @@ mod tests {
         );
         assert!(user.links.is_some());
         assert_eq!(user.links.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_deleted_literal_is_an_ordinary_name() {
+        let blob = br#"{"name":"[DELETED]"}"#;
+        let user = <PubkySocialUser as Validatable>::try_from(blob, "", &PUB_CTX).unwrap();
+        assert_eq!(user.name, "[DELETED]");
+    }
+
+    #[test]
+    fn test_unknown_members_survive_rewrite() {
+        let json = r#"{"name":"Alice","links":[{"title":"t","url":"https://a.b/","rel":"me"}],"ext":{"badge":1}}"#;
+        let user: PubkySocialUser = serde_json::from_str(json).unwrap();
+        let out: serde_json::Value = serde_json::to_value(&user).unwrap();
+        assert_eq!(out["ext"]["badge"], 1);
+        assert_eq!(out["links"][0]["rel"], "me");
+        assert_eq!(out["name"], "Alice");
+    }
+
+    #[test]
+    fn test_size_cap() {
+        let cap = VALIDATION_LIMITS.object_max_bytes;
+        let blob = |len: usize| {
+            // Compact and complete, so the reserialized form has the same length
+            let head =
+                r#"{"name":"Alice","bio":null,"image":null,"links":null,"status":null,"pad":""#;
+            let mut s = head.to_string();
+            s.push_str(&"a".repeat(len - head.len() - 2));
+            s.push_str(r#""}"#);
+            assert_eq!(s.len(), len);
+            s.into_bytes()
+        };
+        assert!(<PubkySocialUser as Validatable>::try_from(&blob(cap), "", &PUB_CTX).is_ok());
+        let err =
+            <PubkySocialUser as Validatable>::try_from(&blob(cap + 1), "", &PUB_CTX).unwrap_err();
+        assert!(err.contains("exceeds"), "{err}");
+    }
+
+    #[test]
+    fn test_frozen_trim_and_code_points() {
+        let user = PubkySocialUser::new(
+            "\u{3000}Alice\u{3000}".to_string(),
+            Some("\u{1F600}".repeat(VALIDATION_LIMITS.user_bio_max_length)),
+            None,
+            None,
+            Some("\u{200B}ok".to_string()),
+        );
+        assert_eq!(user.name, "Alice");
+        assert_eq!(user.status.as_deref(), Some("\u{200B}ok"));
+        assert!(user.validate(None, &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -322,10 +387,12 @@ mod tests {
                 PubkySocialUserLink {
                     title: " GitHub ".to_string(),
                     url: " https://github.com/alice ".to_string(),
+                    extra: Default::default(),
                 },
                 PubkySocialUserLink {
                     title: "Website".to_string(),
                     url: "  https://example.com  ".to_string(),
+                    extra: Default::default(),
                 },
             ]),
             Some("  Exploring the decentralized web.  ".to_string()),
@@ -477,8 +544,10 @@ mod tests {
             links: Some(vec![PubkySocialUserLink {
                 title: "Test".to_string(),
                 url: "  invalid_link_url  ".to_string(),
+                extra: Default::default(),
             }]),
             status: None,
+            extra: Default::default(),
         };
 
         let sanitized = user.sanitize();
@@ -577,6 +646,7 @@ mod tests {
             links.push(PubkySocialUserLink {
                 title: format!("Link {}", i),
                 url: format!("https://example.com/{}", i),
+                extra: Default::default(),
             });
         }
 
@@ -601,6 +671,7 @@ mod tests {
         let link = PubkySocialUserLink {
             title: long_title.clone(),
             url: "https://example.com".to_string(),
+            extra: Default::default(),
         };
         let sanitized = link.sanitize();
         assert_eq!(
@@ -617,6 +688,7 @@ mod tests {
         let link2 = PubkySocialUserLink {
             title: "Test".to_string(),
             url: very_long_url,
+            extra: Default::default(),
         };
         let sanitized2 = link2.sanitize();
 
@@ -637,6 +709,7 @@ mod tests {
             let link3 = PubkySocialUserLink {
                 title: "Test".to_string(),
                 url: extremely_long_url,
+                extra: Default::default(),
             };
             let sanitized3 = link3.sanitize();
             let result = sanitized3.validate(None, &PUB_CTX);

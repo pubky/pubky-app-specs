@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::sanitize_url,
+    common::{code_point_len, frozen_trim},
     is_pubky_scheme,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
@@ -14,9 +14,6 @@ pub use content::{PubkySocialCollectionContent, PubkySocialCollectionLayout};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use url::Url;
-
-// Reserved keyword used by the system to mark deleted posts with relationships
-const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -134,7 +131,7 @@ impl PubkySocialPostEmbed {
 ///
 /// `/pub/social/v1/posts/00321FCW75ZFY`
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialPost {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
@@ -150,6 +147,13 @@ pub struct PubkySocialPost {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<String>,
+    /// Members this version does not know, preserved member-for-member on rewrite so an
+    /// older client never drops a newer client's data. Opaque: never validated, never
+    /// written by builders. Deliberate extensions live under the reserved `ext` member and
+    /// are hostile input until the extension's own rules have checked them.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -238,6 +242,7 @@ impl PubkySocialPost {
             embed,
             attachments,
             lock,
+            extra: Default::default(),
         };
         post.sanitize()
     }
@@ -255,36 +260,13 @@ impl HasIdPath for PubkySocialPost {
 }
 
 impl Validatable for PubkySocialPost {
+    const MAX_BYTES: usize = VALIDATION_LIMITS.post_max_bytes;
+
     fn sanitize(self) -> Self {
-        // Sanitize content: trim whitespace only
-        let content = self.content.trim().to_string();
-
-        // Sanitize parent URI if present
-        let parent = self.parent.map(|uri_str| sanitize_url(&uri_str));
-
-        // Sanitize embed if present
-        let embed = self.embed.map(|e| PubkySocialPostEmbed {
-            kind: e.kind,
-            uri: sanitize_url(&e.uri),
-        });
-
-        // Sanitize attachments
-        let attachments = self.attachments.map(|attachments_vec| {
-            attachments_vec
-                .into_iter()
-                .map(|url_str| sanitize_url(&url_str))
-                .collect()
-        });
-
-        let lock = self.lock.map(|uri_str| sanitize_url(&uri_str));
-
+        // Trim is the only documented canonicalization here; references pass through verbatim
         PubkySocialPost {
-            content,
-            kind: self.kind,
-            parent,
-            embed,
-            attachments,
-            lock,
+            content: frozen_trim(&self.content).to_string(),
+            ..self
         }
     }
 
@@ -293,20 +275,15 @@ impl Validatable for PubkySocialPost {
         if let Some(id) = id {
             self.validate_id(id)?;
         }
+        self.validate_size()?;
 
         // Validate that post has meaningful content (at least one of: content, embed, or attachments)
-        if self.content.trim().is_empty() && self.embed.is_none() && self.attachments.is_none() {
+        if frozen_trim(&self.content).is_empty()
+            && self.embed.is_none()
+            && self.attachments.is_none()
+        {
             return Err(
                 "Validation Error: Post must have content, an embed, or attachments".into(),
-            );
-        }
-
-        // We use content keyword `[DELETED]` for deleted posts from a homeserver that still have relationships
-        // placed by other users (replies, tags, etc). This content is exactly matched by the client to apply effects to deleted content.
-        // Placing posts with content `[DELETED]` is not allowed.
-        if self.content == RESERVED_CONTENT_DELETED {
-            return Err(
-                "Validation Error: Content cannot be the reserved keyword '[DELETED]'".into(),
             );
         }
 
@@ -328,10 +305,10 @@ impl Validatable for PubkySocialPost {
         // Lock servers live on the Pubky network, so the URL must be `pubky://`
         // with a host; the length cap is shared with attachment URLs.
         if let Some(ref lock_url) = self.lock {
-            if lock_url.trim().is_empty() {
+            if frozen_trim(lock_url).is_empty() {
                 return Err("Validation Error: Lock URL cannot be empty".into());
             }
-            if lock_url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length {
+            if code_point_len(lock_url) > VALIDATION_LIMITS.reference_uri_max_length {
                 return Err(format!(
                     "Validation Error: Lock URL exceeds maximum length (max: {} characters)",
                     VALIDATION_LIMITS.reference_uri_max_length
@@ -373,7 +350,7 @@ impl Validatable for PubkySocialPost {
             }
         };
 
-        if self.content.chars().count() > max_length {
+        if code_point_len(&self.content) > max_length {
             return Err(format!(
                 "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
                 kind_name, max_length
@@ -407,13 +384,13 @@ impl Validatable for PubkySocialPost {
             }
 
             for (index, url) in attachments.iter().enumerate() {
-                if url.trim().is_empty() {
+                if frozen_trim(url).is_empty() {
                     return Err(format!(
                         "Validation Error: Attachment URL at index {} cannot be empty",
                         index
                     ));
                 }
-                if url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length {
+                if code_point_len(url) > VALIDATION_LIMITS.reference_uri_max_length {
                     return Err(format!(
                         "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
                         index, VALIDATION_LIMITS.reference_uri_max_length
@@ -513,80 +490,35 @@ mod tests {
 
     #[test]
     fn test_sanitize() {
-        let content = "  This is a test post with extra whitespace   ".to_string();
+        let content = "\u{3000}  This is a test post with extra whitespace  \u{3000}".to_string();
+        let parent = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string();
         let post = PubkySocialPost::new(
             content.clone(),
             PubkySocialPostKind::Short,
-            Some("  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string()),
-            Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Link,
-                uri: "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(),
-            }),
-            Some(vec![
-                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(), // Should be trimmed
-            ]),
-        );
-
-        let sanitized_post = post.sanitize();
-        assert_eq!(sanitized_post.content, content.trim());
-
-        // Parent URI should be trimmed
-        assert!(sanitized_post.parent.is_some());
-        let parent = sanitized_post.parent.unwrap();
-        assert!(!parent.starts_with("  "));
-        assert!(!parent.ends_with("  "));
-        assert!(parent.starts_with("pubky://"));
-
-        // Embed URI should be trimmed
-        assert!(sanitized_post.embed.is_some());
-        let embed = sanitized_post.embed.unwrap();
-        assert!(!embed.uri.starts_with("  "));
-        assert!(!embed.uri.ends_with("  "));
-        assert!(embed.uri.starts_with("pubky://"));
-
-        // Attachments should be trimmed
-        assert!(sanitized_post.attachments.is_some());
-        let attachments = sanitized_post.attachments.unwrap();
-        assert_eq!(attachments.len(), 2);
-        assert!(attachments[0].starts_with("pubky://"));
-        assert!(attachments[1].starts_with("pubky://"));
-        // Check that whitespace was trimmed
-        assert!(!attachments[1].starts_with("  pubky://"));
-        assert!(!attachments[1].ends_with("  "));
-    }
-
-    #[test]
-    fn test_sanitize_trims_parent_and_embed() {
-        let valid_parent_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string();
-        let valid_embed_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string();
-
-        let post = PubkySocialPost::new(
-            "Test content".to_string(),
-            PubkySocialPostKind::Short,
-            Some(valid_parent_uri.clone()),
-            Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Link,
-                uri: valid_embed_uri.clone(),
-            }),
+            Some(parent.clone()),
+            None,
             None,
         );
 
         let sanitized_post = post.sanitize();
+        assert_eq!(
+            sanitized_post.content,
+            "This is a test post with extra whitespace"
+        );
+        // References are never rewritten; validation rejects a padded one
+        assert_eq!(sanitized_post.parent.as_deref(), Some(parent.as_str()));
+    }
 
-        // Check that parent URI was trimmed and normalized
-        assert!(sanitized_post.parent.is_some());
-        let parent = sanitized_post.parent.unwrap();
-        assert!(!parent.starts_with("  "));
-        assert!(!parent.ends_with("  "));
-        assert!(parent.starts_with("pubky://"));
-
-        // Check that embed URI was trimmed and normalized
-        assert!(sanitized_post.embed.is_some());
-        let embed = sanitized_post.embed.unwrap();
-        assert!(!embed.uri.starts_with("  "));
-        assert!(!embed.uri.ends_with("  "));
-        assert!(embed.uri.starts_with("pubky://"));
+    #[test]
+    fn test_sanitize_keeps_zero_width_space() {
+        let post = PubkySocialPost::new(
+            "\u{200B}hello\u{200B}".to_string(),
+            PubkySocialPostKind::Short,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(post.content, "\u{200B}hello\u{200B}");
     }
 
     #[test]
@@ -839,50 +771,105 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_reserved_keyword() {
-        let post = PubkySocialPost::new(
-            "[DELETED]".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("reserved keyword"));
-    }
-
-    #[test]
-    fn test_try_from_invalid_content() {
-        let content = "[DELETED]".to_string();
-        let post_json = format!(
-            r#"{{
-                "content": "{}",
-                "kind": "short",
-                "parent": null,
-                "embed": null,
-                "attachments": null
-            }}"#,
-            content
-        );
-
+    fn test_deleted_literal_is_ordinary_content() {
+        let post_json = r#"{"content":"[DELETED]","kind":"short","parent":null,"embed":null,"attachments":null}"#;
         let id = PubkySocialPost::new(
-            content.clone(),
+            "x".to_string(),
             PubkySocialPostKind::Short,
             None,
             None,
             None,
         )
         .create_id();
+        let post = <PubkySocialPost as Validatable>::try_from(post_json.as_bytes(), &id, &PUB_CTX)
+            .expect("no reserved literal in v1");
+        assert_eq!(post.content, "[DELETED]");
+    }
 
-        let blob = post_json.as_bytes();
-        let result = <PubkySocialPost as Validatable>::try_from(blob, &id, &PUB_CTX);
+    #[test]
+    fn test_unknown_members_survive_rewrite() {
+        let post_json = r#"{"content":"hello","kind":"short","parent":null,"embed":null,"attachments":null,"ext":{"badge":1},"later":"field"}"#;
+        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.extra.len(), 2);
+        let out: serde_json::Value = serde_json::to_value(&post).unwrap();
+        assert_eq!(out["ext"]["badge"], 1);
+        assert_eq!(out["later"], "field");
+        assert_eq!(out["content"], "hello");
+    }
 
-        // Should fail validation because [DELETED] is a reserved keyword
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("reserved keyword"));
+    #[test]
+    fn test_empty_extra_emits_nothing() {
+        let post = PubkySocialPost::new(
+            "hello".to_string(),
+            PubkySocialPostKind::Short,
+            None,
+            None,
+            None,
+        );
+        let out = serde_json::to_string(&post).unwrap();
+        assert!(!out.contains("extra"), "{out}");
+        assert!(out.ends_with(r#""attachments":null}"#), "{out}");
+    }
+
+    fn padded_blob(len: usize) -> Vec<u8> {
+        let head = r#"{"content":"x","kind":"short","parent":null,"embed":null,"attachments":null,"pad":""#;
+        let tail = r#""}"#;
+        let mut blob = head.to_string();
+        blob.push_str(&"a".repeat(len - head.len() - tail.len()));
+        blob.push_str(tail);
+        assert_eq!(blob.len(), len);
+        blob.into_bytes()
+    }
+
+    #[test]
+    fn test_size_cap_is_checked_before_parsing() {
+        let id = PubkySocialPost::new(
+            "x".to_string(),
+            PubkySocialPostKind::Short,
+            None,
+            None,
+            None,
+        )
+        .create_id();
+        let cap = VALIDATION_LIMITS.post_max_bytes;
+        assert!(
+            <PubkySocialPost as Validatable>::try_from(&padded_blob(cap), &id, &PUB_CTX).is_ok()
+        );
+        let err = <PubkySocialPost as Validatable>::try_from(&padded_blob(cap + 1), &id, &PUB_CTX)
+            .unwrap_err();
+        assert!(err.contains("exceeds"), "{err}");
+        assert!(!err.contains("expected"), "not a parse error: {err}");
+    }
+
+    #[test]
+    fn test_size_cap_applies_to_built_objects() {
+        let mut post = PubkySocialPost::new(
+            "x".to_string(),
+            PubkySocialPostKind::Short,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        post.extra.insert(
+            "pad".into(),
+            serde_json::Value::String("a".repeat(VALIDATION_LIMITS.post_max_bytes)),
+        );
+        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+        assert!(err.contains("exceeds"), "{err}");
+    }
+
+    #[test]
+    fn test_content_length_counts_code_points() {
+        let post = PubkySocialPost::new(
+            "\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length),
+            PubkySocialPostKind::Short,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -972,6 +959,7 @@ mod tests {
                 embed: None,
                 attachments: Some(vec![invalid_url.to_string()]),
                 lock: None,
+                extra: Default::default(),
             };
 
             let id = post.create_id();
@@ -991,6 +979,7 @@ mod tests {
             embed: None,
             attachments: Some(vec!["not a valid url".to_string()]),
             lock: None,
+            extra: Default::default(),
         };
 
         let id = post.create_id();
@@ -1044,6 +1033,7 @@ mod tests {
             embed: None,
             attachments: Some(vec!["   ".to_string()]), // Whitespace only
             lock: None,
+            extra: Default::default(),
         };
 
         let id = post.create_id();
@@ -1063,7 +1053,7 @@ mod tests {
             Some(vec![
                 "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
                 "https://example.com/file.jpg".to_string(),
-                "  invalid url  ".to_string(), // Should be trimmed but preserved
+                "  invalid url  ".to_string(), // Preserved verbatim
             ]),
         );
 
@@ -1074,7 +1064,7 @@ mod tests {
         assert_eq!(attachments.len(), 3); // All URLs should be preserved
         assert!(attachments[0].starts_with("pubky://"));
         assert!(attachments[1].starts_with("https://"));
-        assert_eq!(attachments[2], "invalid url"); // Trimmed but preserved
+        assert_eq!(attachments[2], "  invalid url  ");
 
         // Validation should reject the invalid URL
         let result = sanitized.validate(Some(&id), &PUB_CTX);
@@ -1219,6 +1209,7 @@ mod tests {
             embed: None,
             attachments: None,
             lock: None,
+            extra: Default::default(),
         };
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
@@ -1287,6 +1278,7 @@ mod tests {
             }),
             attachments: None,
             lock: None,
+            extra: Default::default(),
         };
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
@@ -1309,6 +1301,7 @@ mod tests {
             embed: None,
             attachments: None,
             lock: None,
+            extra: Default::default(),
         };
         assert_eq!(post.kind(), "Unknown");
     }

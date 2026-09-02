@@ -58,6 +58,7 @@ fn test_create_user_rust_api() {
         &to_value(&PubkySocialUserLink {
             title: "GitHub".to_string(),
             url: "https://github.com/alice".to_string(),
+            extra: Default::default(),
         })
         .unwrap(),
     );
@@ -65,6 +66,7 @@ fn test_create_user_rust_api() {
         &to_value(&PubkySocialUserLink {
             title: "Website".to_string(),
             url: "https://alice.dev".to_string(),
+            extra: Default::default(),
         })
         .unwrap(),
     );
