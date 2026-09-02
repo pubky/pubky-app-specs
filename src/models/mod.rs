@@ -9,6 +9,16 @@
 //!    ships MUST be `Option<T>` + `#[serde(default)]` +
 //!    `#[serde(skip_serializing_if = "Option::is_none")]`, so old data
 //!    reads back cleanly and old readers never see a shape change.
+//! 3. Unknown members are preserved, not only tolerated. Every wire model
+//!    carries a flattened `extra` map that a read-modify-write carries
+//!    through untouched, so an older client never drops a newer client's
+//!    data. It is opaque: never validated, never written by builders.
+//!    Deliberate extensions live under the reserved `ext` member and are
+//!    hostile input until the extension's own rules have checked them.
+//! 4. One total size cap per object (`Validatable::MAX_BYTES`), checked on
+//!    the raw bytes before parsing and on the serialized bytes in
+//!    `validate`. It bounds the open-ended `extra` without counting newer
+//!    known fields against the extension budget.
 //!
 //! Every enum that appears as a value inside a stored JSON object carries a
 //! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (The URI

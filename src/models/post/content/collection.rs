@@ -789,6 +789,7 @@ mod tests {
             embed: None,
             attachments: None,
             lock: None,
+            extra: Default::default(),
         };
         assert_eq!(post.kind(), "Collection");
     }
