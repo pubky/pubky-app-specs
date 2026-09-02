@@ -6,7 +6,9 @@ use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, Va
 
 pub mod content;
 
-pub use content::{PubkySocialCollectionContent, PubkySocialCollectionLayout};
+pub use content::{
+    PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionLayout,
+};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
@@ -379,9 +381,7 @@ impl Validatable for PubkySocialPost {
         }
 
         match self.kind {
-            PubkySocialPostKind::Article => {
-                self.check_content_length(VALIDATION_LIMITS.article_body_max_length)
-            }
+            PubkySocialPostKind::Article => content::article::validate_article_post(self),
             PubkySocialPostKind::Note
             | PubkySocialPostKind::Image
             | PubkySocialPostKind::Video
@@ -405,6 +405,33 @@ impl Validatable for PubkySocialPost {
 }
 
 impl PubkySocialPost {
+    /// Builds the article envelope, serializes it into `content` and wraps it in a
+    /// `kind = Article` post. Infallible like `new`; callers validate before writing.
+    pub fn create_article_post(
+        title: String,
+        body: String,
+        cover_image: Option<String>,
+        parent: Option<String>,
+        embed: Option<String>,
+        attachments: Vec<PubkySocialAttachment>,
+    ) -> Self {
+        let envelope = PubkySocialArticleContent {
+            title: frozen_trim(&title).to_string(),
+            body,
+            cover_image,
+            extra: Default::default(),
+        };
+        let content =
+            serde_json::to_string(&envelope).expect("a string-only envelope always serializes");
+        Self::new(
+            content,
+            PubkySocialPostKind::Article,
+            parent,
+            embed,
+            attachments,
+        )
+    }
+
     fn check_content_length(&self, max: usize) -> Result<(), ValidationError> {
         if code_point_len(&self.content) > max {
             return Err(format!(

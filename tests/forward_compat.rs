@@ -3,11 +3,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    traits::Validatable, PubkySocialAttachment, PubkySocialBookmark, PubkySocialCollectionContent,
-    PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
-    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
-    PubkySocialPost, PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink,
-    PUB_CTX,
+    traits::Validatable, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialBookmark,
+    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
+    PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
+    PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, PUB_CTX,
 };
 use serde::de::DeserializeOwned;
 
@@ -182,6 +182,7 @@ fn every_json_wire_type_ignores_unknown_fields() {
     );
     reads_with_unknown_field::<PubkySocialAttachment>(&format!(r#"{{"uri":"{post_uri}"}}"#));
     reads_with_unknown_field::<PubkySocialCollectionContent>(r#"{"name":"Photos","items":[]}"#);
+    reads_with_unknown_field::<PubkySocialArticleContent>(r#"{"title":"t","body":"b"}"#);
     reads_with_unknown_field::<PubkySocialTag>(&format!(
         r#"{{"uri":"{post_uri}","label":"rust","created_at":1727740800000000}}"#
     ));
