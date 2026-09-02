@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
-    common::{code_point_len, frozen_trim, sanitize_url},
+    common::{check_extra_keys, code_point_len, frozen_trim, sanitize_url},
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
 };
@@ -32,10 +32,7 @@ pub struct PubkySocialUser {
     pub links: Option<Vec<PubkySocialUserLink>>,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
-    /// Members this version does not know, preserved member-for-member on rewrite so an
-    /// older client never drops a newer client's data. Opaque: never validated, never
-    /// written by builders. Deliberate extensions live under the reserved `ext` member and
-    /// are hostile input until the extension's own rules have checked them.
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -103,10 +100,7 @@ pub struct PubkySocialUserLink {
     pub title: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub url: String,
-    /// Members this version does not know, preserved member-for-member on rewrite so an
-    /// older client never drops a newer client's data. Opaque: never validated, never
-    /// written by builders. Deliberate extensions live under the reserved `ext` member and
-    /// are hostile input until the extension's own rules have checked them.
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -186,6 +180,7 @@ impl Validatable for PubkySocialUser {
 
     fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         self.validate_size()?;
+        check_extra_keys(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
         // Validate name length
         let name_length = code_point_len(&self.name);
@@ -261,7 +256,7 @@ impl Validatable for PubkySocialUserLink {
     }
 
     fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
-        // Validate title
+        check_extra_keys(&self.extra, &["title", "url"])?;
         if frozen_trim(&self.title).is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());
         }

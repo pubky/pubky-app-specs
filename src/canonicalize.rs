@@ -88,6 +88,30 @@ pub fn canonicalize_target(raw: &str) -> Result<String, ()> {
     Ok(canonical)
 }
 
+/// A stored reference is the fixed point of its own canonical spelling. Nothing rewrites it
+/// on the way in or out, so the SDK short form and any padding reject here.
+pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String> {
+    let max = VALIDATION_LIMITS.reference_uri_max_length;
+    let ok = canonicalize_pubky_uri(raw).is_ok_and(|c| c == raw) && code_point_len(raw) <= max;
+    if ok {
+        return Ok(());
+    }
+    Err(format!(
+        "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
+    ))
+}
+
+/// Same rule for the fields that also accept `http`/`https`; `canonicalize_target` caps.
+pub(crate) fn check_target_reference(field: &str, raw: &str) -> Result<(), String> {
+    if canonicalize_target(raw).is_ok_and(|c| c == raw) {
+        return Ok(());
+    }
+    Err(format!(
+        "Validation Error: {field} must be a canonical pubky or web URI of at most {} code points: {raw}",
+        VALIDATION_LIMITS.reference_uri_max_length
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

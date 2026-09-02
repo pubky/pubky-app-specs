@@ -66,6 +66,20 @@ pub fn code_point_len(s: &str) -> usize {
     s.chars().count()
 }
 
+/// A preserved-members map must not carry a known field name: serde would emit the key
+/// twice and the reader would reject the object. Only in-process mutation can get here.
+pub(crate) fn check_extra_keys(
+    extra: &serde_json::Map<String, serde_json::Value>,
+    known: &[&str],
+) -> Result<(), String> {
+    match extra.keys().find(|k| known.contains(&k.as_str())) {
+        Some(k) => Err(format!(
+            "Validation Error: extra must not shadow the field {k}"
+        )),
+        None => Ok(()),
+    }
+}
+
 const CROCKFORD_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /// An id is valid iff re-encoding its decoded bytes reproduces the input

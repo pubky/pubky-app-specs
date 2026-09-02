@@ -9,22 +9,24 @@
 //!    ships MUST be `Option<T>` + `#[serde(default)]` +
 //!    `#[serde(skip_serializing_if = "Option::is_none")]`, so old data
 //!    reads back cleanly and old readers never see a shape change.
-//! 3. Unknown members are preserved, not only tolerated. Every wire model
-//!    carries a flattened `extra` map that a read-modify-write carries
-//!    through untouched, so an older client never drops a newer client's
-//!    data. It is opaque: never validated, never written by builders.
-//!    Deliberate extensions live under the reserved `ext` member and are
-//!    hostile input until the extension's own rules have checked them.
+//! 3. Unknown members are preserved, not only tolerated. A wire model carries
+//!    a flattened `extra` map that a read-modify-write carries through
+//!    untouched, so an older client never drops a newer client's data. It is
+//!    opaque: never validated beyond one rule, it must not shadow a known
+//!    field, and never written by builders. Deliberate extensions live under
+//!    the reserved `ext` member and are hostile input until the extension's
+//!    own rules have checked them. Post, attachment, the article envelope,
+//!    user and user link carry it today; the other models adopt it with
+//!    their own wire changes.
 //! 4. One total size cap per object (`Validatable::MAX_BYTES`), checked on
-//!    the raw bytes before parsing and on the serialized bytes in
-//!    `validate`. It bounds the open-ended `extra` without counting newer
-//!    known fields against the extension budget.
+//!    the raw bytes before parsing and, for the models that adopted it, on
+//!    the serialized bytes in `validate`. It bounds the open-ended `extra`
+//!    without counting newer known fields against the extension budget.
 //!
 //! Every enum that appears as a value inside a stored JSON object carries a
-//! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (The URI
-//! parse result `Resource` is not a homeserver-stored object, though its public serde
-//! shape is pinned by the wire fixture and changes to it are API breaks.
-//! and keep their own shape.) `Unknown` in an object's PRIMARY enum (for
+//! `#[serde(other)] Unknown` catch-all and an `is_known()` helper. (`Resource`,
+//! the URI parse result, is not a stored object; its serde shape is pinned by
+//! the wire fixture and changing it is an API break.) `Unknown` in an object's PRIMARY enum (for
 //! example `post.kind` or `feed.reach`) fails validation, so consumers skip
 //! the object; `Unknown` in an optional, secondary enum (for example
 //! `feed.content` or `collection.layout`) degrades to "no constraint": a

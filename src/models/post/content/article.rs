@@ -2,13 +2,13 @@ use crate::common::{code_point_len, frozen_trim};
 use crate::limits::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use tsify_next::Tsify;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use super::super::{check_target_reference, PubkySocialPost};
+use crate::canonicalize::check_target_reference;
+use crate::common::check_extra_keys;
+
+use super::super::PubkySocialPost;
 
 /// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Article`.
 ///
@@ -17,7 +17,6 @@ use super::super::{check_target_reference, PubkySocialPost};
 /// shape. No `deny_unknown_fields`: later minors may add members, and `extra` keeps them.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkySocialArticleContent {
     /// Trimmed by the builder; `[1, article_title_max_length]` code points.
@@ -28,10 +27,7 @@ pub struct PubkySocialArticleContent {
     /// code points.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
-    /// Members this version does not know, preserved member-for-member on rewrite so an
-    /// older client never drops a newer client's data. Opaque: never validated, never
-    /// written by builders. Deliberate extensions live under the reserved `ext` member and
-    /// are hostile input until the extension's own rules have checked them.
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -41,13 +37,14 @@ pub struct PubkySocialArticleContent {
 pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String> {
     if code_point_len(&post.content) > VALIDATION_LIMITS.article_content_max_length {
         return Err(format!(
-            "Validation Error: Article content exceeds max length {}",
+            "Validation Error: Article content must be at most {} code points",
             VALIDATION_LIMITS.article_content_max_length
         ));
     }
     let envelope: PubkySocialArticleContent = serde_json::from_str(&post.content).map_err(|e| {
         format!("Validation Error: Article content must be a valid JSON envelope: {e}")
     })?;
+    check_extra_keys(&envelope.extra, &["title", "body", "cover_image"])?;
     if frozen_trim(&envelope.title).is_empty() {
         return Err(
             "Validation Error: Article title must contain non-whitespace characters".into(),
@@ -56,24 +53,25 @@ pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String
     // The untrimmed length, so a padded title cannot slip past the cap
     if code_point_len(&envelope.title) > VALIDATION_LIMITS.article_title_max_length {
         return Err(format!(
-            "Validation Error: Article title must be at most {} characters",
+            "Validation Error: Article title must be at most {} code points",
             VALIDATION_LIMITS.article_title_max_length
         ));
     }
     if code_point_len(&envelope.body) > VALIDATION_LIMITS.article_body_max_length {
         return Err(format!(
-            "Validation Error: Article body must be at most {} characters",
+            "Validation Error: Article body must be at most {} code points",
             VALIDATION_LIMITS.article_body_max_length
         ));
     }
     if let Some(cover) = &envelope.cover_image {
-        check_target_reference("cover_image", cover)?;
+        // The tighter image cap first, so the error names the bound that applies
         if code_point_len(cover) > VALIDATION_LIMITS.image_url_max_length {
             return Err(format!(
-                "Validation Error: cover_image must be at most {} characters",
+                "Validation Error: cover_image must be at most {} code points",
                 VALIDATION_LIMITS.image_url_max_length
             ));
         }
+        check_target_reference("cover_image", cover)?;
     }
     Ok(())
 }
@@ -91,13 +89,14 @@ mod tests {
     }
 
     fn article(title: &str, body: &str, cover: Option<&str>) -> PubkySocialPost {
-        PubkySocialPost::create_article_post(
+        PubkySocialPost::new_article(
             title.to_string(),
             body.to_string(),
             cover.map(str::to_string),
             None,
             None,
             vec![],
+            None,
         )
     }
 
@@ -139,6 +138,16 @@ mod tests {
         let max = VALIDATION_LIMITS.article_body_max_length;
         assert!(validate(&article("t", &"b".repeat(max), None)).is_ok());
         assert!(err(&article("t", &"b".repeat(max + 1), None)).contains("body"));
+        // A max body made of escaped characters must still fit the raw envelope cap
+        let escaped = "a\n\"\\".repeat(max / 4);
+        assert_eq!(code_point_len(&escaped), max);
+        let title = "t".repeat(VALIDATION_LIMITS.article_title_max_length);
+        assert!(validate(&article(
+            &title,
+            &escaped,
+            Some("https://example.com/c.png")
+        ))
+        .is_ok());
     }
 
     #[test]
@@ -146,7 +155,7 @@ mod tests {
         let raw = "x".repeat(VALIDATION_LIMITS.article_content_max_length + 1);
         let post = PubkySocialPost::new(raw, PubkySocialPostKind::Article, None, None, vec![]);
         let e = err(&post);
-        assert!(e.contains("exceeds max length"), "{e}");
+        assert!(e.contains("at most"), "{e}");
         assert!(!e.contains("JSON"), "{e}");
     }
 
@@ -189,8 +198,8 @@ mod tests {
     }
 
     #[test]
-    fn article_may_reply_quote_and_attach() {
-        let post = PubkySocialPost::create_article_post(
+    fn article_may_reply_quote_attach_and_lock() {
+        let post = PubkySocialPost::new_article(
             "t".into(),
             "b".into(),
             None,
@@ -201,8 +210,10 @@ mod tests {
                 None,
                 None,
             )],
+            Some(p("/pub/app.locks/0032SSN7Q4EVG.json")),
         );
         assert!(validate(&post).is_ok());
+        assert!(post.lock.is_some());
     }
 
     #[test]
@@ -213,7 +224,7 @@ mod tests {
             })
             .collect();
         let post =
-            PubkySocialPost::create_article_post("t".into(), "b".into(), None, None, None, many);
+            PubkySocialPost::new_article("t".into(), "b".into(), None, None, None, many, None);
         assert!(err(&post).contains("Too many attachments"));
     }
 

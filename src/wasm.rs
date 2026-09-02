@@ -267,7 +267,6 @@ impl PubkySpecsBuilder {
     // 4. PubkySocialPost
     // -----------------------------------------------------------------------------
 
-    /// `embed` is a plain URI; `attachments` are `PubkySocialAttachment` instances.
     /// Optional `lock`: the canonical `pubky://` URI of the lock file.
     #[wasm_bindgen(js_name = createPost)]
     pub fn create_post(
@@ -331,14 +330,16 @@ impl PubkySpecsBuilder {
         parent: Option<String>,
         embed: Option<String>,
         attachments: Option<Vec<PubkySocialAttachment>>,
+        lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkySocialPost::create_article_post(
+        let post = PubkySocialPost::new_article(
             title,
             body,
             cover_image,
             parent,
             embed,
             attachments.unwrap_or_default(),
+            lock,
         );
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
