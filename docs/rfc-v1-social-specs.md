@@ -372,6 +372,10 @@ v0: pubky-app hand-rolls `{title, body}` JSON inside `long` posts, unspecified, 
 Articles may carry parent/embed/attachments (an article can be a reply or carry media).
 Caps: title 100 and body 50000 code points; the raw envelope string is bounded at 104000 before
 parsing, twice the body, because JSON escaping doubles a body made of newlines and quotes.
+`body` is CommonMark; renderers may honor the GFM tables, strikethrough, task-list and autolink
+extensions, anything else renders as literal text. The validator does not parse it (every string
+is valid CommonMark, so a parse proves nothing). Renderers never execute raw HTML, block or
+inline, and limit link destinations to `http`, `https`, `pubky` and `mailto`.
 
 ## B4. CollectionContent
 `{name, description?, items[], cover_image?}`, with two changes to `items`.
