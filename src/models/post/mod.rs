@@ -1,19 +1,14 @@
+use crate::canonicalize::{canonicalize_pubky_uri, canonicalize_target};
+use crate::common::{code_point_len, frozen_trim};
 use crate::constants::social_path;
-use crate::traits::{Root, ValidationCtx, ValidationError};
-use crate::{
-    common::{code_point_len, frozen_trim},
-    is_pubky_scheme,
-    limits::VALIDATION_LIMITS,
-    traits::{HasIdPath, TimestampId, Validatable},
-    PROTOCOL,
-};
+use crate::limits::VALIDATION_LIMITS;
+use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
 
 pub mod content;
 
 pub use content::{PubkySocialCollectionContent, PubkySocialCollectionLayout};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
-use url::Url;
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -32,8 +27,8 @@ use utoipa::ToSchema;
 #[non_exhaustive]
 pub enum PubkySocialPostKind {
     #[default]
-    Short,
-    Long,
+    Note,
+    Article,
     Image,
     Video,
     Link,
@@ -58,8 +53,8 @@ impl FromStr for PubkySocialPostKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "short" => Ok(PubkySocialPostKind::Short),
-            "long" => Ok(PubkySocialPostKind::Long),
+            "note" => Ok(PubkySocialPostKind::Note),
+            "article" => Ok(PubkySocialPostKind::Article),
             "image" => Ok(PubkySocialPostKind::Image),
             "video" => Ok(PubkySocialPostKind::Video),
             "link" => Ok(PubkySocialPostKind::Link),
@@ -75,61 +70,92 @@ impl PubkySocialPostKind {
     ///
     /// `Unknown` is the forwards-compat catch-all variant (via `#[serde(other)]`)
     /// that captures any post-kind string this version of the spec doesn't
-    /// recognize yet. Most consumers — indexers, stream filters, search ranking —
+    /// recognize yet. Most consumers, indexers, stream filters, search ranking,
     /// want to skip such posts, and this helper lets them write
     /// `if kind.is_known() { ... }` rather than
     /// `if !matches!(kind, PubkySocialPostKind::Unknown) { ... }`.
     pub fn is_known(&self) -> bool {
         !matches!(self, PubkySocialPostKind::Unknown)
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn wasm_name(&self) -> &'static str {
+        match self {
+            PubkySocialPostKind::Note => "Note",
+            PubkySocialPostKind::Article => "Article",
+            PubkySocialPostKind::Image => "Image",
+            PubkySocialPostKind::Video => "Video",
+            PubkySocialPostKind::Link => "Link",
+            PubkySocialPostKind::File => "File",
+            PubkySocialPostKind::Collection => "Collection",
+            PubkySocialPostKind::Unknown => "Unknown",
+        }
+    }
 }
 
-/// Represents embedded content within a post
+/// One attached media reference. An object rather than a string so per-item metadata can
+/// grow without a break. `name` is per reference: two posts may attach the same bytes under
+/// different names.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkySocialPostEmbed {
+pub struct PubkySocialAttachment {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub kind: PubkySocialPostKind, // Kind of the embedded content
+    pub uri: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub uri: String, // URI of the embedded content
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt: Option<String>,
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Members this version does not know, preserved member-for-member on rewrite so an
+    /// older client never drops a newer client's data. Opaque: never validated, never
+    /// written by builders. Deliberate extensions live under the reserved `ext` member and
+    /// are hostile input until the extension's own rules have checked them.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkySocialAttachment {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(uri: String, alt: Option<String>, name: Option<String>) -> Self {
+        PubkySocialAttachment {
+            uri,
+            alt,
+            name,
+            extra: Default::default(),
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialPostEmbed {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
-    pub fn new(uri: String, kind: PubkySocialPostKind) -> Self {
-        PubkySocialPostEmbed { uri, kind }
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn kind(&self) -> String {
-        match self.kind {
-            PubkySocialPostKind::Short => "Short".to_string(),
-            PubkySocialPostKind::Long => "Long".to_string(),
-            PubkySocialPostKind::Image => "Image".to_string(),
-            PubkySocialPostKind::Video => "Video".to_string(),
-            PubkySocialPostKind::Link => "Link".to_string(),
-            PubkySocialPostKind::File => "File".to_string(),
-            PubkySocialPostKind::Collection => "Collection".to_string(),
-            PubkySocialPostKind::Unknown => "Unknown".to_string(),
-        }
-    }
-
+impl PubkySocialAttachment {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn uri(&self) -> String {
         self.uri.clone()
     }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn alt(&self) -> Option<String> {
+        self.alt.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
+    pub fn name(&self) -> Option<String> {
+        self.name.clone()
+    }
 }
 
 /// Represents raw post in homeserver with content and kind
-/// URI: /pub/social/v1/posts/:post_id
-/// Where post_id is CrockfordBase32 encoding of timestamp
+/// URI: /pub/social/v1/posts/:post_id/:edit_id.json
+/// Where both ids are CrockfordBase32 encodings of a timestamp
 ///
 /// Example URI:
 ///
-/// `/pub/social/v1/posts/00321FCW75ZFY`
+/// `/pub/social/v1/posts/00321FCW75ZFY/00321FCW75ZFY.json`
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -138,12 +164,19 @@ pub struct PubkySocialPost {
     pub content: String,
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub kind: PubkySocialPostKind,
+    /// If a reply, the URI of the parent post. Pubky only: a reply is a thread edge.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub parent: Option<String>, // If a reply, the URI of the parent post.
+    pub parent: Option<String>,
+    /// A quoted resource, pubky or web. The kind is derivable from the target.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub embed: Option<PubkySocialPostEmbed>,
+    pub embed: Option<String>,
+    /// Always present on the wire, `[]` when empty. An absent field reads as `[]`; an
+    /// explicit `null` is invalid.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub attachments: Option<Vec<String>>,
+    #[serde(default)]
+    pub attachments: Vec<PubkySocialAttachment>,
+    /// The lock file URI, a foreign-app pubky reference. Presence means "locked content"
+    /// whatever the kind; the teaser envelope inside `content` is the client's.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<String>,
@@ -166,16 +199,7 @@ impl PubkySocialPost {
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn kind(&self) -> String {
-        match self.kind {
-            PubkySocialPostKind::Short => "Short".to_string(),
-            PubkySocialPostKind::Long => "Long".to_string(),
-            PubkySocialPostKind::Image => "Image".to_string(),
-            PubkySocialPostKind::Video => "Video".to_string(),
-            PubkySocialPostKind::Link => "Link".to_string(),
-            PubkySocialPostKind::File => "File".to_string(),
-            PubkySocialPostKind::Collection => "Collection".to_string(),
-            PubkySocialPostKind::Unknown => "Unknown".to_string(),
-        }
+        self.kind.wasm_name().to_string()
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
@@ -184,12 +208,12 @@ impl PubkySocialPost {
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn embed(&self) -> Option<PubkySocialPostEmbed> {
+    pub fn embed(&self) -> Option<String> {
         self.embed.clone()
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn attachments(&self) -> Option<Vec<String>> {
+    pub fn attachments(&self) -> Vec<PubkySocialAttachment> {
         self.attachments.clone()
     }
 
@@ -220,8 +244,8 @@ impl PubkySocialPost {
         content: String,
         kind: PubkySocialPostKind,
         parent: Option<String>,
-        embed: Option<PubkySocialPostEmbed>,
-        attachments: Option<Vec<String>>,
+        embed: Option<String>,
+        attachments: Vec<PubkySocialAttachment>,
     ) -> Self {
         Self::new_with_lock(content, kind, parent, embed, attachments, None)
     }
@@ -231,8 +255,8 @@ impl PubkySocialPost {
         content: String,
         kind: PubkySocialPostKind,
         parent: Option<String>,
-        embed: Option<PubkySocialPostEmbed>,
-        attachments: Option<Vec<String>>,
+        embed: Option<String>,
+        attachments: Vec<PubkySocialAttachment>,
         lock: Option<String>,
     ) -> Self {
         let post = PubkySocialPost {
@@ -259,171 +283,135 @@ impl HasIdPath for PubkySocialPost {
     }
 }
 
+/// A stored reference is the fixed point of its own canonical spelling. Nothing rewrites
+/// it on the way in or out, so the SDK short form and any padding reject here.
+pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String> {
+    let max = VALIDATION_LIMITS.reference_uri_max_length;
+    match canonicalize_pubky_uri(raw) {
+        Ok(canonical) if canonical == raw && code_point_len(raw) <= max => Ok(()),
+        _ => Err(format!(
+            "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
+        )),
+    }
+}
+
+/// Same rule for the fields that also accept `http`/`https`; the helper caps the length.
+pub(crate) fn check_target_reference(field: &str, raw: &str) -> Result<(), String> {
+    match canonicalize_target(raw) {
+        Ok(canonical) if canonical == raw => Ok(()),
+        _ => Err(format!(
+            "Validation Error: {field} must be a canonical pubky or web URI of at most {} code points: {raw}",
+            VALIDATION_LIMITS.reference_uri_max_length
+        )),
+    }
+}
+
 impl Validatable for PubkySocialPost {
     const MAX_BYTES: usize = VALIDATION_LIMITS.post_max_bytes;
 
     fn sanitize(self) -> Self {
         // Trim is the only documented canonicalization here; references pass through verbatim
+        let attachments = self
+            .attachments
+            .into_iter()
+            .map(|a| PubkySocialAttachment {
+                name: a.name.map(|n| frozen_trim(&n).to_string()),
+                ..a
+            })
+            .collect();
         PubkySocialPost {
             content: frozen_trim(&self.content).to_string(),
+            attachments,
             ..self
         }
     }
 
     fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
-        // Validate the post ID
         if let Some(id) = id {
             self.validate_id(id)?;
         }
         self.validate_size()?;
 
-        // Validate that post has meaningful content (at least one of: content, embed, or attachments)
-        if frozen_trim(&self.content).is_empty()
-            && self.embed.is_none()
-            && self.attachments.is_none()
-        {
-            return Err(
-                "Validation Error: Post must have content, an embed, or attachments".into(),
-            );
-        }
-
-        // Reject posts whose kind couldn't be matched against any known variant.
-        // `Unknown` is a serde catch-all for forwards-compat: older binaries can
-        // deserialize events from newer clients without panicking, but such posts
-        // must never pass spec validation. Same reasoning for `embed.kind`.
+        // `Unknown` is the forwards-compat catch-all: readable, never valid to write
         if !self.kind.is_known() {
             return Err("Validation Error: post kind is unknown".into());
         }
-        if let Some(ref embed) = self.embed {
-            if !embed.kind.is_known() {
-                return Err("Validation Error: embed kind is unknown".into());
-            }
-        }
 
-        // Validate lock URL if present, for every kind (including collections,
-        // which return early below). Missing or null locks keep posts unlocked.
-        // Lock servers live on the Pubky network, so the URL must be `pubky://`
-        // with a host; the length cap is shared with attachment URLs.
-        if let Some(ref lock_url) = self.lock {
-            if frozen_trim(lock_url).is_empty() {
-                return Err("Validation Error: Lock URL cannot be empty".into());
-            }
-            if code_point_len(lock_url) > VALIDATION_LIMITS.reference_uri_max_length {
-                return Err(format!(
-                    "Validation Error: Lock URL exceeds maximum length (max: {} characters)",
-                    VALIDATION_LIMITS.reference_uri_max_length
-                ));
-            }
-            let parsed = Url::parse(lock_url)
-                .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
-            if !is_pubky_scheme(parsed.scheme()) {
-                return Err(format!(
-                    "Validation Error: Lock URL must use the {PROTOCOL} scheme: {lock_url}"
-                ));
-            }
-            // Reject opaque URLs like `pubky:lock-id` that carry the scheme but
-            // no authority and so point at no resolvable lock server.
-            if parsed.host().is_none() {
-                return Err(format!(
-                    "Validation Error: Lock URL must include a host: {lock_url}"
-                ));
-            }
+        if let Some(parent) = &self.parent {
+            check_pubky_reference("parent", parent)?;
+        }
+        if let Some(lock) = &self.lock {
+            check_pubky_reference("lock", lock)?;
+        }
+        if let Some(embed) = &self.embed {
+            check_target_reference("embed", embed)?;
         }
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
             return content::collection::validate_collection_post(self);
         }
 
-        // Validate content length based on post kind
-        let (max_length, kind_name) = match self.kind {
-            PubkySocialPostKind::Short => (VALIDATION_LIMITS.post_note_content_max_length, "Short"),
-            PubkySocialPostKind::Long => (VALIDATION_LIMITS.article_body_max_length, "Long"),
-            PubkySocialPostKind::Image
+        if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
+            return Err(format!(
+                "Validation Error: Too many attachments (max: {})",
+                VALIDATION_LIMITS.post_attachments_max_count
+            ));
+        }
+        for (index, attachment) in self.attachments.iter().enumerate() {
+            check_target_reference(&format!("attachments[{index}].uri"), &attachment.uri)?;
+            if let Some(alt) = &attachment.alt {
+                if code_point_len(alt) > VALIDATION_LIMITS.attachment_alt_max_length {
+                    return Err(format!(
+                        "Validation Error: attachments[{index}].alt exceeds {} code points",
+                        VALIDATION_LIMITS.attachment_alt_max_length
+                    ));
+                }
+            }
+            if let Some(name) = &attachment.name {
+                let len = code_point_len(name);
+                if len == 0 || len > VALIDATION_LIMITS.attachment_name_max_length {
+                    return Err(format!(
+                        "Validation Error: attachments[{index}].name must be 1..={} code points",
+                        VALIDATION_LIMITS.attachment_name_max_length
+                    ));
+                }
+            }
+        }
+
+        match self.kind {
+            PubkySocialPostKind::Article => {
+                self.check_content_length(VALIDATION_LIMITS.article_body_max_length)
+            }
+            PubkySocialPostKind::Note
+            | PubkySocialPostKind::Image
             | PubkySocialPostKind::Video
             | PubkySocialPostKind::Link
-            | PubkySocialPostKind::File => (
-                VALIDATION_LIMITS.post_note_content_max_length,
-                "Image/Video/Link/File",
-            ),
+            | PubkySocialPostKind::File => {
+                if frozen_trim(&self.content).is_empty()
+                    && self.embed.is_none()
+                    && self.attachments.is_empty()
+                {
+                    return Err(
+                        "Validation Error: Post must have content, an embed, or attachments".into(),
+                    );
+                }
+                self.check_content_length(VALIDATION_LIMITS.post_note_content_max_length)
+            }
             PubkySocialPostKind::Collection | PubkySocialPostKind::Unknown => {
                 unreachable!("guarded by early-return above")
             }
-        };
+        }
+    }
+}
 
-        if code_point_len(&self.content) > max_length {
+impl PubkySocialPost {
+    fn check_content_length(&self, max: usize) -> Result<(), ValidationError> {
+        if code_point_len(&self.content) > max {
             return Err(format!(
                 "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
-                kind_name, max_length
+                self.kind, max
             ));
         }
-
-        // Validate parent URI format if present
-        if let Some(ref parent_uri) = self.parent {
-            Url::parse(parent_uri).map_err(|_| {
-                format!(
-                    "Validation Error: Invalid parent URI format: {}",
-                    parent_uri
-                )
-            })?;
-        }
-
-        // Validate embed URI format if present
-        if let Some(ref embed) = self.embed {
-            Url::parse(&embed.uri).map_err(|_| {
-                format!("Validation Error: Invalid embed URI format: {}", embed.uri)
-            })?;
-        }
-
-        // Validate attachments
-        if let Some(attachments) = &self.attachments {
-            if attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
-                return Err(format!(
-                    "Validation Error: Too many attachments (max: {})",
-                    VALIDATION_LIMITS.post_attachments_max_count
-                ));
-            }
-
-            for (index, url) in attachments.iter().enumerate() {
-                if frozen_trim(url).is_empty() {
-                    return Err(format!(
-                        "Validation Error: Attachment URL at index {} cannot be empty",
-                        index
-                    ));
-                }
-                if code_point_len(url) > VALIDATION_LIMITS.reference_uri_max_length {
-                    return Err(format!(
-                        "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
-                        index, VALIDATION_LIMITS.reference_uri_max_length
-                    ));
-                }
-                // Validate URL format and ensure it uses an allowed protocol
-                let parsed_url = Url::parse(url).map_err(|_| {
-                    format!(
-                        "Validation Error: Invalid attachment URL format at index {}",
-                        index
-                    )
-                })?;
-
-                // Ensure the URL uses an allowed protocol
-                if !VALIDATION_LIMITS
-                    .post_allowed_attachment_protocols
-                    .iter()
-                    .any(|&protocol| parsed_url.scheme().eq_ignore_ascii_case(protocol))
-                {
-                    let allowed_protocols = VALIDATION_LIMITS
-                        .post_allowed_attachment_protocols
-                        .iter()
-                        .map(|p| format!("{}://", p))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    return Err(format!(
-                        "Validation Error: Attachment URL at index {} must use one of the allowed protocols: {}",
-                        index, allowed_protocols
-                    ));
-                }
-            }
-        }
-
         Ok(())
     }
 }
@@ -433,386 +421,175 @@ mod tests {
     use super::*;
     use crate::traits::PUB_CTX;
 
-    const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
-    use crate::traits::Validatable;
+    const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
+    fn p(path: &str) -> String {
+        format!("pubky://{PK}{path}")
+    }
+
+    fn post_uri() -> String {
+        p("/pub/social/v1/posts/0032SSN7Q4EVG")
+    }
+
+    fn file_uri() -> String {
+        p("/pub/social/v1/files/0034A0X7NJ52G")
+    }
+
+    fn note(content: &str) -> PubkySocialPost {
+        PubkySocialPost::new(
+            content.to_string(),
+            PubkySocialPostKind::Note,
+            None,
+            None,
+            vec![],
+        )
+    }
+
+    fn att(uri: &str) -> PubkySocialAttachment {
+        PubkySocialAttachment::new(uri.to_string(), None, None)
+    }
+
+    fn validate(post: &PubkySocialPost) -> Result<(), String> {
+        let id = post.create_id();
+        post.validate(Some(&id), &PUB_CTX)
+    }
+
+    fn err(post: &PubkySocialPost) -> String {
+        validate(post).expect_err("expected a validation error")
+    }
+
+    // ---- ids, paths, builders ----
 
     #[test]
     fn test_create_id() {
-        let post = PubkySocialPost::new(
-            "Hello World!".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-
-        let post_id = post.create_id();
-        println!("Generated Post ID: {}", post_id);
-
-        // Assert that the post ID is 13 characters long
-        assert_eq!(post_id.len(), 13);
+        let id = note("Hello World!").create_id();
+        assert_eq!(id.len(), 13);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
     #[test]
     fn test_new() {
-        let content = "This is a test post".to_string();
-        let kind = PubkySocialPostKind::Short;
-        let post = PubkySocialPost::new(content.clone(), kind.clone(), None, None, None);
-
-        assert_eq!(post.content, content);
-        assert_eq!(post.kind, kind);
+        let post = note("Hello World!");
+        assert_eq!(post.content, "Hello World!");
+        assert_eq!(post.kind, PubkySocialPostKind::Note);
         assert!(post.parent.is_none());
         assert!(post.embed.is_none());
-        assert!(post.attachments.is_none());
+        assert!(post.attachments.is_empty());
+        assert!(post.lock.is_none());
+        assert!(post.extra.is_empty());
+    }
+
+    #[test]
+    fn test_default_kind_is_note() {
+        assert_eq!(PubkySocialPostKind::default(), PubkySocialPostKind::Note);
     }
 
     #[test]
     fn test_create_path() {
-        let post = PubkySocialPost::new(
-            "Test post".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-
-        let post_id = post.create_id();
-        let path = PubkySocialPost::create_path(&post_id);
-
-        // Check if the path starts with the expected prefix
-        let prefix = "/pub/social/v1/posts/".to_string();
-        assert!(path.starts_with(&prefix));
-
-        // posts/{id}/{id}.json: the first version reuses the post id
-        let expected_path_len = prefix.len() + post_id.len() * 2 + "/".len() + ".json".len();
-        assert_eq!(path.len(), expected_path_len);
-    }
-
-    #[test]
-    fn test_sanitize() {
-        let content = "\u{3000}  This is a test post with extra whitespace  \u{3000}".to_string();
-        let parent = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string();
-        let post = PubkySocialPost::new(
-            content.clone(),
-            PubkySocialPostKind::Short,
-            Some(parent.clone()),
-            None,
-            None,
-        );
-
-        let sanitized_post = post.sanitize();
+        let path = PubkySocialPost::create_path("0032SSN7Q4EVG");
         assert_eq!(
-            sanitized_post.content,
-            "This is a test post with extra whitespace"
+            path,
+            "/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json"
         );
-        // References are never rewritten; validation rejects a padded one
-        assert_eq!(sanitized_post.parent.as_deref(), Some(parent.as_str()));
-    }
-
-    #[test]
-    fn test_sanitize_keeps_zero_width_space() {
-        let post = PubkySocialPost::new(
-            "\u{200B}hello\u{200B}".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-        assert_eq!(post.content, "\u{200B}hello\u{200B}");
     }
 
     #[test]
     fn test_validate() {
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_ok());
+        assert!(validate(&note("Hello World!")).is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-
-        let invalid_id = "INVALIDID12345";
-        let result = post.validate(Some(invalid_id), &PUB_CTX);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_invalid_parent_uri() {
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Short,
-            Some("invalid uri".to_string()),
-            None,
-            None,
-        );
-
-        let id = post.create_id();
-        let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid parent URI format"));
-    }
-
-    #[test]
-    fn test_validate_invalid_embed_uri() {
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Link,
-                uri: "invalid uri".to_string(),
-            }),
-            None,
-        );
-
-        let id = post.create_id();
-        let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid embed URI format"));
-    }
-
-    #[test]
-    fn test_validate_invalid_attachment_uri() {
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(vec![
-                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "invalid uri".to_string(),
-            ]),
-        );
-
-        let id = post.create_id();
-        let sanitized = post.sanitize();
-        let result = sanitized.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid attachment URL format"));
-    }
-
-    #[test]
-    fn test_validate_pubky_lock_url() {
-        let expected_lock = format!("pubky://{TEST_PUBKY_ID}/pub");
-        let post = PubkySocialPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-            Some(expected_lock.clone()),
-        );
-
-        let id = post.create_id();
-        assert_eq!(post.lock.as_deref(), Some(expected_lock.as_str()));
-        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
-    }
-
-    #[test]
-    fn test_validate_non_pubky_lock_url_rejected() {
-        let post = PubkySocialPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-            Some("https://locks.example.com/session/0034A0X7NJ52G".to_string()),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("must use the pubky:// scheme"));
-    }
-
-    #[test]
-    fn test_validate_invalid_lock_url() {
-        let post = PubkySocialPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-            Some("not a url".to_string()),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid lock URL format"));
-    }
-
-    #[test]
-    fn test_missing_lock_deserializes_unlocked() {
-        let post_json = r#"
-        {
-            "content": "Hello World!",
-            "kind": "short",
-            "parent": null,
-            "embed": null,
-            "attachments": null
-        }
-        "#;
-
-        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
-        assert!(post.lock.is_none());
-        let id = post.create_id();
-        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
-    }
-
-    #[test]
-    fn test_collection_post_rejects_invalid_lock_url() {
-        let content = r#"{"name":"My collection","items":[]}"#.to_string();
-        let post = PubkySocialPost::new_with_lock(
-            content,
-            PubkySocialPostKind::Collection,
-            None,
-            None,
-            None,
-            Some("not a url".to_string()),
-        );
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid lock URL format"));
-    }
-
-    #[test]
-    fn test_collection_post_accepts_valid_lock_url() {
-        let content = r#"{"name":"My collection","items":[]}"#.to_string();
-        let lock = format!("pubky://{TEST_PUBKY_ID}/pub");
-        let post = PubkySocialPost::new_with_lock(
-            content,
-            PubkySocialPostKind::Collection,
-            None,
-            None,
-            None,
-            Some(lock.clone()),
-        );
-        let id = post.create_id();
-        assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
-        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
-    }
-
-    #[test]
-    fn test_validate_hostless_lock_url_rejected() {
-        let post = PubkySocialPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-            Some("pubky:lock-id".to_string()),
-        );
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("must include a host"));
-    }
-
-    #[test]
-    fn test_validate_empty_lock_url_rejected() {
-        let post = PubkySocialPost::new_with_lock(
-            "Visible preview".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-            Some("".to_string()),
-        );
-        let id = post.create_id();
-        assert!(post.validate(Some(&id), &PUB_CTX).is_err());
+        let post = note("Hello World!");
+        assert!(post.validate(Some("INVALIDID12345"), &PUB_CTX).is_err());
     }
 
     #[test]
     fn test_try_from_valid() {
-        let post_json = r#"
-        {
-            "content": "Hello World!",
-            "kind": "short",
-            "parent": null,
-            "embed": null,
-            "attachments": null
-        }
-        "#;
-
-        let id = PubkySocialPost::new(
-            "Hello World!".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        )
-        .create_id();
-
-        let blob = post_json.as_bytes();
-        let post = <PubkySocialPost as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
-
+        let post_json = r#"{"content":"Hello World!","kind":"note","parent":null,"embed":null,"attachments":[]}"#;
+        let id = note("x").create_id();
+        let post = <PubkySocialPost as Validatable>::try_from(post_json.as_bytes(), &id, &PUB_CTX)
+            .unwrap();
         assert_eq!(post.content, "Hello World!");
+    }
+
+    // ---- sanitize and text ops ----
+
+    #[test]
+    fn test_sanitize() {
+        let parent = format!("  {}  ", post_uri());
+        let post = PubkySocialPost::new(
+            "\u{3000}  hello  \u{3000}".to_string(),
+            PubkySocialPostKind::Note,
+            Some(parent.clone()),
+            None,
+            vec![PubkySocialAttachment::new(
+                format!("  {}  ", file_uri()),
+                None,
+                Some("  cat.jpg  ".to_string()),
+            )],
+        );
+        assert_eq!(post.content, "hello");
+        // References are never rewritten; validation rejects a padded one
+        assert_eq!(post.parent.as_deref(), Some(parent.as_str()));
+        assert_eq!(post.attachments[0].uri, format!("  {}  ", file_uri()));
+        assert_eq!(post.attachments[0].name.as_deref(), Some("cat.jpg"));
+        assert!(err(&post).contains("parent"));
+    }
+
+    #[test]
+    fn test_sanitize_keeps_zero_width_space() {
+        let post = note("\u{200B}hello\u{200B}");
+        assert_eq!(post.content, "\u{200B}hello\u{200B}");
+    }
+
+    #[test]
+    fn test_content_length_counts_code_points() {
+        let post = note(&"\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length));
+        assert!(validate(&post).is_ok());
+        let post = note(&"\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length + 1));
+        assert!(err(&post).contains("exceeds maximum length"));
     }
 
     #[test]
     fn test_deleted_literal_is_ordinary_content() {
-        let post_json = r#"{"content":"[DELETED]","kind":"short","parent":null,"embed":null,"attachments":null}"#;
-        let id = PubkySocialPost::new(
-            "x".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        )
-        .create_id();
+        let post_json =
+            r#"{"content":"[DELETED]","kind":"note","parent":null,"embed":null,"attachments":[]}"#;
+        let id = note("x").create_id();
         let post = <PubkySocialPost as Validatable>::try_from(post_json.as_bytes(), &id, &PUB_CTX)
             .expect("no reserved literal in v1");
         assert_eq!(post.content, "[DELETED]");
     }
 
+    // ---- preservation and size caps ----
+
     #[test]
     fn test_unknown_members_survive_rewrite() {
-        let post_json = r#"{"content":"hello","kind":"short","parent":null,"embed":null,"attachments":null,"ext":{"badge":1},"later":"field"}"#;
-        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
+        let post_json = format!(
+            r#"{{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":[{{"uri":"{}","focus":"center"}}],"ext":{{"badge":1}},"later":"field"}}"#,
+            file_uri()
+        );
+        let post: PubkySocialPost = serde_json::from_str(&post_json).unwrap();
         assert_eq!(post.extra.len(), 2);
         let out: serde_json::Value = serde_json::to_value(&post).unwrap();
         assert_eq!(out["ext"]["badge"], 1);
         assert_eq!(out["later"], "field");
+        assert_eq!(out["attachments"][0]["focus"], "center");
         assert_eq!(out["content"], "hello");
     }
 
     #[test]
     fn test_empty_extra_emits_nothing() {
-        let post = PubkySocialPost::new(
-            "hello".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
+        let out = serde_json::to_string(&note("hello")).unwrap();
+        assert_eq!(
+            out,
+            r#"{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":[]}"#
         );
-        let out = serde_json::to_string(&post).unwrap();
-        assert!(!out.contains("extra"), "{out}");
-        assert!(out.ends_with(r#""attachments":null}"#), "{out}");
     }
 
     fn padded_blob(len: usize) -> Vec<u8> {
-        let head = r#"{"content":"x","kind":"short","parent":null,"embed":null,"attachments":null,"pad":""#;
+        let head =
+            r#"{"content":"x","kind":"note","parent":null,"embed":null,"attachments":[],"pad":""#;
         let tail = r#""}"#;
         let mut blob = head.to_string();
         blob.push_str(&"a".repeat(len - head.len() - tail.len()));
@@ -823,14 +600,7 @@ mod tests {
 
     #[test]
     fn test_size_cap_is_checked_before_parsing() {
-        let id = PubkySocialPost::new(
-            "x".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        )
-        .create_id();
+        let id = note("x").create_id();
         let cap = VALIDATION_LIMITS.post_max_bytes;
         assert!(
             <PubkySocialPost as Validatable>::try_from(&padded_blob(cap), &id, &PUB_CTX).is_ok()
@@ -843,494 +613,360 @@ mod tests {
 
     #[test]
     fn test_size_cap_applies_to_built_objects() {
-        let mut post = PubkySocialPost::new(
-            "x".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-        let id = post.create_id();
+        let mut post = note("x");
         post.extra.insert(
             "pad".into(),
             serde_json::Value::String("a".repeat(VALIDATION_LIMITS.post_max_bytes)),
         );
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("exceeds"), "{err}");
+        assert!(err(&post).contains("exceeds"));
     }
 
-    #[test]
-    fn test_content_length_counts_code_points() {
-        let post = PubkySocialPost::new(
-            "\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length),
-            PubkySocialPostKind::Short,
-            None,
-            None,
-            None,
-        );
-        let id = post.create_id();
-        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
-    }
+    // ---- kinds ----
 
     #[test]
-    fn test_validate_attachments_valid_protocols() {
-        // Test allowed protocols (limited to post_attachments_max_count)
-        let protocols = vec![
-            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-            "https://example.com/file.png".to_string(),
-            "http://example.com/file.jpg".to_string(),
-        ];
-        assert!(
-            protocols.len() <= VALIDATION_LIMITS.post_attachments_max_count,
-            "Test uses more than post_attachments_max_count"
-        );
-
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(protocols),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_attachments_all_allowed_protocols() {
-        // Test each allowed protocol individually to ensure all are accepted
-        let allowed_protocols = vec![
-            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G",
-            "http://example.com/file.jpg",
-            "https://example.com/file.png",
-        ];
-
-        for protocol_url in allowed_protocols {
-            let post = PubkySocialPost::new(
-                "Valid content".to_string(),
-                PubkySocialPostKind::Image,
-                None,
-                None,
-                Some(vec![protocol_url.to_string()]),
-            );
-
-            let id = post.create_id();
-            let result = post.validate(Some(&id), &PUB_CTX);
-            assert!(result.is_ok(), "Should accept protocol: {}", protocol_url);
-        }
-    }
-
-    #[test]
-    fn test_validate_attachments_too_many() {
-        let mut attachments = Vec::new();
-        for i in 0..VALIDATION_LIMITS.post_attachments_max_count + 1 {
-            attachments.push(format!(
-                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
-                i
-            ));
-        }
-
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(attachments),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Too many attachments"));
-    }
-
-    #[test]
-    fn test_validate_attachments_invalid_protocol() {
-        // Test that disallowed protocols are rejected
-        let invalid_protocols = vec!["ftp://example.com/file", "file:///path/to/file"];
-
-        for invalid_url in invalid_protocols {
-            let post = PubkySocialPost {
-                content: "Valid content".to_string(),
-                kind: PubkySocialPostKind::Image,
-                parent: None,
-                embed: None,
-                attachments: Some(vec![invalid_url.to_string()]),
-                lock: None,
-                extra: Default::default(),
-            };
-
-            let id = post.create_id();
-            let result = post.validate(Some(&id), &PUB_CTX);
-            assert!(result.is_err(), "Should reject protocol: {}", invalid_url);
-            assert!(result.unwrap_err().contains("protocol"));
-        }
-    }
-
-    #[test]
-    fn test_validate_attachments_invalid_url_format() {
-        // Create post directly without sanitization to test validation logic
-        let post = PubkySocialPost {
-            content: "Valid content".to_string(),
-            kind: PubkySocialPostKind::Image,
-            parent: None,
-            embed: None,
-            attachments: Some(vec!["not a valid url".to_string()]),
-            lock: None,
-            extra: Default::default(),
-        };
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid attachment URL format"));
-    }
-
-    #[test]
-    fn test_validate_attachments_url_too_long() {
-        // Create a URL that exceeds reference_uri_max_length (1024)
-        // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
-        // So we need a file ID that makes the total exceed 1024
-        let long_file_id = "a".repeat(1100); // This will make total > 1024
-        let long_url = format!(
-            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
-            long_file_id
-        );
-
-        // Verify the URL is actually too long
-        assert!(
-            long_url.chars().count() > VALIDATION_LIMITS.reference_uri_max_length,
-            "URL length {} should exceed {}",
-            long_url.chars().count(),
-            VALIDATION_LIMITS.reference_uri_max_length
-        );
-
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(vec![long_url]),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("exceeds maximum length"));
-    }
-
-    #[test]
-    fn test_validate_attachments_empty_url() {
-        // Create post directly without sanitization to test validation logic
-        let post = PubkySocialPost {
-            content: "Valid content".to_string(),
-            kind: PubkySocialPostKind::Image,
-            parent: None,
-            embed: None,
-            attachments: Some(vec!["   ".to_string()]), // Whitespace only
-            lock: None,
-            extra: Default::default(),
-        };
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("cannot be empty"));
-    }
-
-    #[test]
-    fn test_sanitize_attachments_preserves_all() {
-        // Sanitize should preserve all attachments (just trim), validation rejects invalid
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(vec![
-                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
-                "https://example.com/file.jpg".to_string(),
-                "  invalid url  ".to_string(), // Preserved verbatim
-            ]),
-        );
-
-        let id = post.create_id();
-        let sanitized = post.sanitize();
-        assert!(sanitized.attachments.is_some());
-        let attachments = sanitized.attachments.as_ref().unwrap();
-        assert_eq!(attachments.len(), 3); // All URLs should be preserved
-        assert!(attachments[0].starts_with("pubky://"));
-        assert!(attachments[1].starts_with("https://"));
-        assert_eq!(attachments[2], "  invalid url  ");
-
-        // Validation should reject the invalid URL
-        let result = sanitized.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid attachment URL format"));
-    }
-
-    #[test]
-    fn test_sanitize_attachments_with_all_invalid_preserved() {
-        // Sanitize should preserve all attachments, validation rejects invalid
-        let post = PubkySocialPost::new(
-            "Valid content".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(vec!["invalid url".to_string(), "not a url".to_string()]),
-        );
-
-        let id = post.create_id();
-        let sanitized = post.sanitize();
-        assert!(sanitized.attachments.is_some()); // Attachments preserved
-        let attachments = sanitized.attachments.as_ref().unwrap();
-        assert_eq!(attachments.len(), 2);
-
-        // Validation should reject the invalid URLs
-        let result = sanitized.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid attachment URL format"));
-    }
-
-    #[test]
-    fn test_validate_empty_post_rejected() {
-        // Post with empty content, no embed, and no attachments should be rejected
-        let post =
-            PubkySocialPost::new("".to_string(), PubkySocialPostKind::Short, None, None, None);
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("must have content, an embed, or attachments"));
-    }
-
-    #[test]
-    fn test_validate_empty_content_with_embed_accepted() {
-        // Post with empty content but with embed should be valid
-        let post = PubkySocialPost::new(
-            "".to_string(),
-            PubkySocialPostKind::Short,
-            None,
-            Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Short,
-                uri: "pubky://user123/pub/pubky.app/posts/0033SSE3B1FQ0".to_string(),
-            }),
-            None,
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(
-            result.is_ok(),
-            "Post with embed but no content should be valid"
-        );
-    }
-
-    #[test]
-    fn test_validate_empty_content_with_attachments_accepted() {
-        // Post with empty content but with attachments should be valid
-        let post = PubkySocialPost::new(
-            "".to_string(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            Some(vec![
-                "pubky://user123/pub/pubky.app/files/0034A0X7NJ52G".to_string()
-            ]),
-        );
-
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(
-            result.is_ok(),
-            "Post with attachments but no content should be valid"
-        );
-    }
-
-    // ----- v0.4.5 forwards-compat shim: PubkySocialPostKind::Unknown -----
-
-    #[test]
-    fn test_postkind_deserializes_unknown_kind_as_unknown() {
-        // A future spec version adds a new kind that this binary doesn't know about.
-        // The serde catch-all `Unknown` variant lets old binaries deserialize without panicking.
-        let post_json = r#"
-        {
-            "content": "Hello",
-            "kind": "totally-new-kind",
-            "parent": null,
-            "embed": null,
-            "attachments": null
-        }
-        "#;
-
-        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
-        assert_eq!(post.kind, PubkySocialPostKind::Unknown);
-    }
-
-    #[test]
-    fn test_postkind_existing_variants_unchanged_after_unknown_added() {
-        // Regression guard: adding Unknown with #[serde(other)] must not break round-tripping
-        // any of the six existing lowercase string forms.
-        for (s, expected) in [
-            ("short", PubkySocialPostKind::Short),
-            ("long", PubkySocialPostKind::Long),
-            ("image", PubkySocialPostKind::Image),
-            ("video", PubkySocialPostKind::Video),
-            ("link", PubkySocialPostKind::Link),
-            ("file", PubkySocialPostKind::File),
+    fn test_kinds_round_trip_and_retired_spellings_read_as_unknown() {
+        for (kind, wire) in [
+            (PubkySocialPostKind::Note, "\"note\""),
+            (PubkySocialPostKind::Article, "\"article\""),
+            (PubkySocialPostKind::Image, "\"image\""),
+            (PubkySocialPostKind::Video, "\"video\""),
+            (PubkySocialPostKind::Link, "\"link\""),
+            (PubkySocialPostKind::File, "\"file\""),
+            (PubkySocialPostKind::Collection, "\"collection\""),
         ] {
-            let json = format!(
-                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
-                s
+            assert_eq!(serde_json::to_string(&kind).unwrap(), wire);
+            assert_eq!(
+                serde_json::from_str::<PubkySocialPostKind>(wire).unwrap(),
+                kind
             );
-            let post: PubkySocialPost = serde_json::from_str(&json).unwrap();
-            assert_eq!(post.kind, expected, "kind={} did not round-trip", s);
-            // re-serialize and ensure the lowercase string survives
-            let re = serde_json::to_value(&post.kind).unwrap();
-            assert_eq!(re.as_str(), Some(s));
+            assert_eq!(kind.to_string(), wire.trim_matches('"'));
+            assert!(kind.is_known());
         }
-    }
-
-    #[test]
-    fn test_postkind_unknown_rejected_by_validator() {
-        let post = PubkySocialPost {
-            content: "x".to_string(),
-            kind: PubkySocialPostKind::Unknown,
-            parent: None,
-            embed: None,
-            attachments: None,
-            lock: None,
-            extra: Default::default(),
-        };
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(
-            result.unwrap_err().to_lowercase().contains("unknown"),
-            "validator should mention 'unknown' in the error"
-        );
-    }
-
-    #[test]
-    fn test_postkind_unknown_displays_as_lowercase() {
+        for retired in ["\"short\"", "\"long\"", "\"hologram\""] {
+            let kind: PubkySocialPostKind = serde_json::from_str(retired).unwrap();
+            assert_eq!(kind, PubkySocialPostKind::Unknown);
+            assert!(!kind.is_known());
+        }
         assert_eq!(PubkySocialPostKind::Unknown.to_string(), "unknown");
     }
 
     #[test]
-    fn test_postkind_fromstr_rejects_unknown_strings() {
-        // FromStr stays strict: it does NOT produce Unknown for arbitrary input.
-        // Unknown is exclusively a serde catch-all.
-        assert!(PubkySocialPostKind::from_str("foobar").is_err());
-        assert!(PubkySocialPostKind::from_str("totally-new-kind").is_err());
-    }
-
-    #[test]
-    fn test_is_known_returns_true_for_all_recognized_variants() {
-        use PubkySocialPostKind::*;
-        for k in [Short, Long, Image, Video, Link, File, Collection] {
-            assert!(k.is_known(), "{k:?} should be known");
-        }
-    }
-
-    #[test]
-    fn test_is_known_returns_false_for_unknown() {
-        assert!(!PubkySocialPostKind::Unknown.is_known());
-    }
-
-    #[test]
-    fn test_post_deserializes_embed_with_unknown_kind_as_unknown() {
-        // Embed kinds get the same forwards-compat treatment as top-level kinds:
-        // an unrecognized embed.kind deserializes to Unknown rather than failing.
-        let post_json = r#"
-        {
-            "content": "x",
-            "kind": "short",
-            "parent": null,
-            "embed": {"kind": "totally-new-embed-kind", "uri": "pubky://x/pub/pubky.app/posts/01"},
-            "attachments": null
-        }
-        "#;
-        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
-        assert_eq!(post.embed.unwrap().kind, PubkySocialPostKind::Unknown);
-    }
-
-    #[test]
-    fn test_postkind_unknown_embed_kind_rejected_by_validator() {
-        // Counterpart to `test_postkind_unknown_rejected_by_validator`:
-        // an Unknown embed.kind also fails validation, so the spec stays as
-        // strict as before for posts that reach validation.
-        let post = PubkySocialPost {
-            content: "x".to_string(),
-            kind: PubkySocialPostKind::Short,
-            parent: None,
-            embed: Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Unknown,
-                uri: "pubky://x/pub/pubky.app/posts/01".to_string(),
-            }),
-            attachments: None,
-            lock: None,
-            extra: Default::default(),
-        };
-        let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_lowercase();
-        assert!(
-            err.contains("embed") && err.contains("unknown"),
-            "validator should mention 'embed' and 'unknown' in the error, got: {}",
-            err
+    fn test_fromstr_never_produces_unknown() {
+        assert_eq!(
+            "note".parse::<PubkySocialPostKind>().unwrap(),
+            PubkySocialPostKind::Note
         );
+        assert_eq!(
+            "article".parse::<PubkySocialPostKind>().unwrap(),
+            PubkySocialPostKind::Article
+        );
+        assert_eq!(
+            "collection".parse::<PubkySocialPostKind>().unwrap(),
+            PubkySocialPostKind::Collection
+        );
+        for bad in ["short", "long", "unknown", "Note", ""] {
+            assert!(bad.parse::<PubkySocialPostKind>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_unknown_kind_reads_then_fails_validation() {
+        let post_json =
+            r#"{"content":"hello","kind":"short","parent":null,"embed":null,"attachments":[]}"#;
+        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.kind, PubkySocialPostKind::Unknown);
+        assert!(err(&post).contains("post kind is unknown"));
     }
 
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen_test::wasm_bindgen_test]
-    fn test_postkind_unknown_wasm_getter() {
-        let post = PubkySocialPost {
-            content: "x".to_string(),
-            kind: PubkySocialPostKind::Unknown,
-            parent: None,
-            embed: None,
-            attachments: None,
-            lock: None,
-            extra: Default::default(),
-        };
+    fn test_kind_wasm_getter() {
+        let mut post = note("x");
+        assert_eq!(post.kind(), "Note");
+        post.kind = PubkySocialPostKind::Article;
+        assert_eq!(post.kind(), "Article");
+        post.kind = PubkySocialPostKind::Unknown;
         assert_eq!(post.kind(), "Unknown");
     }
 
-    #[test]
-    fn test_postkind_collection_display_lowercase() {
-        assert_eq!(PubkySocialPostKind::Collection.to_string(), "collection");
-    }
+    // ---- references ----
 
     #[test]
-    fn test_postkind_fromstr_collection() {
-        assert_eq!(
-            PubkySocialPostKind::from_str("collection").unwrap(),
-            PubkySocialPostKind::Collection
+    fn test_parent_is_pubky_only_and_canonical() {
+        let ok = PubkySocialPost::new(
+            "re".into(),
+            PubkySocialPostKind::Note,
+            Some(post_uri()),
+            None,
+            vec![],
         );
+        assert!(validate(&ok).is_ok());
+        for bad in [
+            "https://example.com/post".to_string(),
+            format!("pubky{PK}/pub/social/v1/posts/0032SSN7Q4EVG"),
+            p("/pub/social/v1/posts/../profile.json"),
+            p("/pub/social/v1/posts/00%32"),
+            String::new(),
+        ] {
+            let post = PubkySocialPost::new(
+                "re".into(),
+                PubkySocialPostKind::Note,
+                Some(bad.clone()),
+                None,
+                vec![],
+            );
+            assert!(err(&post).contains("parent"), "{bad}");
+        }
     }
 
     #[test]
-    fn test_existing_post_kinds_unchanged_with_collection() {
-        // Regression: each of the six legacy lowercase kinds still round-trips after
-        // adding Collection. Catches accidental ordering / serde changes.
-        for s in ["short", "long", "image", "video", "link", "file"] {
-            let json = format!(
-                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
-                s
+    fn test_embed_accepts_pubky_and_web() {
+        for ok in [post_uri(), "https://example.com/a?b=c".to_string()] {
+            let post = PubkySocialPost::new(
+                "".into(),
+                PubkySocialPostKind::Note,
+                None,
+                Some(ok.clone()),
+                vec![],
             );
-            let post: PubkySocialPost = serde_json::from_str(&json).unwrap();
-            let re = serde_json::to_value(&post.kind).unwrap();
-            assert_eq!(re.as_str(), Some(s), "kind={} did not round-trip", s);
+            assert!(validate(&post).is_ok(), "{ok}");
         }
+        for bad in ["nostr:nevent1abc", "ftp://x/y", " https://example.com", ""] {
+            let post = PubkySocialPost::new(
+                "q".into(),
+                PubkySocialPostKind::Note,
+                None,
+                Some(bad.to_string()),
+                vec![],
+            );
+            assert!(err(&post).contains("embed"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_lock_is_a_canonical_pubky_uri() {
+        let lock = p("/pub/app.locks/0032SSN7Q4EVG.json");
+        let post = PubkySocialPost::new_with_lock(
+            "Visible preview".into(),
+            PubkySocialPostKind::Note,
+            None,
+            None,
+            vec![],
+            Some(lock.clone()),
+        );
+        assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
+        assert!(validate(&post).is_ok());
+
+        for bad in [
+            "https://locks.example/0032SSN7Q4EVG".to_string(),
+            "pubky:lock-id".to_string(),
+            String::new(),
+            "   ".to_string(),
+            p(&format!(
+                "/pub/{}",
+                "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
+            )),
+        ] {
+            let post = PubkySocialPost::new_with_lock(
+                "Visible preview".into(),
+                PubkySocialPostKind::Note,
+                None,
+                None,
+                vec![],
+                Some(bad.clone()),
+            );
+            assert!(err(&post).contains("lock"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_missing_lock_deserializes_unlocked() {
+        let post_json =
+            r#"{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":[]}"#;
+        let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
+        assert!(post.lock.is_none());
+        let out = serde_json::to_string(&post).unwrap();
+        assert!(!out.contains("lock"));
+    }
+
+    #[test]
+    fn test_collection_post_lock_rule_applies() {
+        let content = r#"{"name":"Favorites","items":[]}"#.to_string();
+        let ok = PubkySocialPost::new_with_lock(
+            content.clone(),
+            PubkySocialPostKind::Collection,
+            None,
+            None,
+            vec![],
+            Some(p("/pub/app.locks/0032SSN7Q4EVG.json")),
+        );
+        assert!(validate(&ok).is_ok());
+        let bad = PubkySocialPost::new_with_lock(
+            content,
+            PubkySocialPostKind::Collection,
+            None,
+            None,
+            vec![],
+            Some("https://locks.example/x".into()),
+        );
+        assert!(err(&bad).contains("lock"));
+    }
+
+    // ---- attachments ----
+
+    #[test]
+    fn test_attachments_absent_reads_empty_and_null_is_invalid() {
+        let post: PubkySocialPost =
+            serde_json::from_str(r#"{"content":"hello","kind":"note","parent":null,"embed":null}"#)
+                .unwrap();
+        assert!(post.attachments.is_empty());
+        let null = serde_json::from_str::<PubkySocialPost>(
+            r#"{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":null}"#,
+        );
+        assert!(null.is_err());
+    }
+
+    #[test]
+    fn test_attachments_serialize_as_objects() {
+        let post = PubkySocialPost::new(
+            "".into(),
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![PubkySocialAttachment::new(
+                file_uri(),
+                Some("a cat".into()),
+                Some("cat.jpg".into()),
+            )],
+        );
+        assert!(validate(&post).is_ok());
+        let out: serde_json::Value = serde_json::to_value(&post).unwrap();
+        assert_eq!(out["attachments"][0]["uri"], file_uri());
+        assert_eq!(out["attachments"][0]["alt"], "a cat");
+        assert_eq!(out["attachments"][0]["name"], "cat.jpg");
+        let bare: serde_json::Value = serde_json::to_value(att(&file_uri())).unwrap();
+        assert_eq!(bare.as_object().unwrap().len(), 1, "{bare}");
+    }
+
+    #[test]
+    fn test_attachments_count_cap() {
+        let max = VALIDATION_LIMITS.post_attachments_max_count;
+        let many = |n: usize| {
+            PubkySocialPost::new(
+                "".into(),
+                PubkySocialPostKind::Image,
+                None,
+                None,
+                (0..n).map(|_| att(&file_uri())).collect(),
+            )
+        };
+        assert!(validate(&many(max)).is_ok());
+        assert!(err(&many(max + 1)).contains("Too many attachments"));
+    }
+
+    #[test]
+    fn test_attachment_uri_rule() {
+        for ok in [file_uri(), "https://example.com/cat.jpg".to_string()] {
+            let post = PubkySocialPost::new(
+                "".into(),
+                PubkySocialPostKind::Image,
+                None,
+                None,
+                vec![att(&ok)],
+            );
+            assert!(validate(&post).is_ok(), "{ok}");
+        }
+        let long_ok = p(&format!(
+            "/pub/{}",
+            "a".repeat(VALIDATION_LIMITS.reference_uri_max_length - 8 - PK.len() - 5)
+        ));
+        assert_eq!(
+            code_point_len(&long_ok),
+            VALIDATION_LIMITS.reference_uri_max_length
+        );
+        let post = PubkySocialPost::new(
+            "".into(),
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att(&long_ok)],
+        );
+        assert!(validate(&post).is_ok());
+
+        for bad in [
+            "ipfs://bafy".to_string(),
+            format!("pubky{PK}/pub/social/v1/files/0034A0X7NJ52G"),
+            format!("{}a", long_ok),
+            "not a url".to_string(),
+            String::new(),
+        ] {
+            let post = PubkySocialPost::new(
+                "".into(),
+                PubkySocialPostKind::Image,
+                None,
+                None,
+                vec![att(&bad)],
+            );
+            assert!(err(&post).contains("attachments[0].uri"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_attachment_alt_and_name_caps() {
+        let with = |alt: Option<String>, name: Option<String>| {
+            PubkySocialPost::new(
+                "".into(),
+                PubkySocialPostKind::Image,
+                None,
+                None,
+                vec![PubkySocialAttachment::new(file_uri(), alt, name)],
+            )
+        };
+        let alt_max = VALIDATION_LIMITS.attachment_alt_max_length;
+        assert!(validate(&with(Some("\u{1F600}".repeat(alt_max)), None)).is_ok());
+        assert!(err(&with(Some("a".repeat(alt_max + 1)), None)).contains("alt"));
+
+        let name_max = VALIDATION_LIMITS.attachment_name_max_length;
+        assert!(validate(&with(None, Some("\u{1F600}".repeat(name_max)))).is_ok());
+        assert!(err(&with(None, Some("a".repeat(name_max + 1)))).contains("name"));
+        assert!(err(&with(None, Some("".into()))).contains("name"));
+        assert!(err(&with(None, Some("   ".into()))).contains("name"));
+    }
+
+    #[test]
+    fn test_attachment_unknown_members_survive() {
+        let a: PubkySocialAttachment =
+            serde_json::from_str(&format!(r#"{{"uri":"{}","focus":"center"}}"#, file_uri()))
+                .unwrap();
+        let out: serde_json::Value = serde_json::to_value(&a).unwrap();
+        assert_eq!(out["focus"], "center");
+    }
+
+    // ---- at least one of ----
+
+    #[test]
+    fn test_empty_post_rejected() {
+        assert!(err(&note("")).contains("must have content"));
+        assert!(err(&note("   \u{3000}")).contains("must have content"));
+    }
+
+    #[test]
+    fn test_embed_or_attachment_alone_is_enough() {
+        let embed_only = PubkySocialPost::new(
+            "".into(),
+            PubkySocialPostKind::Note,
+            None,
+            Some(post_uri()),
+            vec![],
+        );
+        assert!(validate(&embed_only).is_ok());
+        let attachment_only = PubkySocialPost::new(
+            "".into(),
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att(&file_uri())],
+        );
+        assert!(validate(&attachment_only).is_ok());
     }
 }

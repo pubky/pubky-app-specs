@@ -46,7 +46,7 @@ console.log(user.toJson());
 
 const { post, meta: postMeta } = specs.createPost(
   "Hello, Pubky!",
-  PubkySocialPostKind.Short
+  PubkySocialPostKind.Note
 );
 
 console.log(postMeta.url);
@@ -62,7 +62,7 @@ Each create method returns:
 
 ```js
 const { user, meta } = specs.createUser(name, bio, image, links, status);
-const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock);
+const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
 const { file, meta } = specs.createFile(name, src, contentType, size);
 const { blob, meta } = specs.createBlob(bytes);
 const { bookmark, meta } = specs.createBookmark(uri);

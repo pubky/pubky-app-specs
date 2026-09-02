@@ -99,9 +99,9 @@ pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), Str
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
     // Anti-misuse guard: items belong in the envelope, not in `post.attachments`.
-    if post.attachments.is_some() {
+    if !post.attachments.is_empty() {
         return Err(
-            "Validation Error: Collection posts must not use post.attachments — items belong in the content envelope"
+            "Validation Error: Collection posts must not use post.attachments; items belong in the content envelope"
                 .into(),
         );
     }
@@ -212,7 +212,7 @@ fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind};
+    use super::super::super::{PubkySocialAttachment, PubkySocialPost, PubkySocialPostKind};
     use super::*;
     use crate::traits::PUB_CTX;
     use crate::traits::{TimestampId, Validatable};
@@ -240,7 +240,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         )
     }
 
@@ -251,7 +251,7 @@ mod tests {
             ..Default::default()
         };
         let content = serde_json::to_string(&envelope).expect("envelope serialization");
-        PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, None)
+        PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![])
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tests {
         let blob = serde_json::to_vec(&post).unwrap();
         let parsed = <PubkySocialPost as Validatable>::try_from(&blob, &id, &PUB_CTX).unwrap();
         assert_eq!(parsed.kind, PubkySocialPostKind::Collection);
-        assert!(parsed.attachments.is_none());
+        assert!(parsed.attachments.is_empty());
         let envelope: PubkySocialCollectionContent = serde_json::from_str(&parsed.content).unwrap();
         assert_eq!(envelope.items.len(), 3);
     }
@@ -281,7 +281,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
@@ -440,8 +440,13 @@ mod tests {
         // Distinct from `test_collection_post_rejects_empty_name`, which sends
         // an empty string; this sends a missing key entirely.
         let envelope = r#"{ "description": "no name here" }"#.to_string();
-        let post =
-            PubkySocialPost::new(envelope, PubkySocialPostKind::Collection, None, None, None);
+        let post = PubkySocialPost::new(
+            envelope,
+            PubkySocialPostKind::Collection,
+            None,
+            None,
+            vec![],
+        );
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
@@ -457,9 +462,11 @@ mod tests {
         let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
             PubkySocialPostKind::Collection,
-            Some("pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string()),
+            Some(format!(
+                "pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"
+            )),
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
@@ -478,11 +485,10 @@ mod tests {
             collection_envelope_json("X", None, &[]),
             PubkySocialPostKind::Collection,
             None,
-            Some(PubkySocialPostEmbed {
-                kind: PubkySocialPostKind::Short,
-                uri: "pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
-            }),
-            None,
+            Some(format!(
+                "pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"
+            )),
+            vec![],
         );
         let id = post.create_id();
         let result = post.validate(Some(&id), &PUB_CTX);
@@ -527,7 +533,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
@@ -545,7 +551,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
@@ -565,7 +571,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         assert!(
@@ -712,9 +718,11 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            Some(vec![
-                "pubky://userA/pub/social/v1/posts/0034A0X7NJ52A".to_string()
-            ]),
+            vec![PubkySocialAttachment::new(
+                format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"),
+                None,
+                None,
+            )],
         );
         let id = post.create_id();
         let err = post
@@ -727,22 +735,16 @@ mod tests {
     }
 
     #[test]
-    fn test_collection_post_rejects_empty_attachments() {
+    fn test_collection_post_accepts_empty_attachments() {
         let post = PubkySocialPost::new(
             collection_envelope_json("X", None, &[]),
             PubkySocialPostKind::Collection,
             None,
             None,
-            Some(vec![]),
+            vec![],
         );
         let id = post.create_id();
-        let err = post
-            .validate(Some(&id), &PUB_CTX)
-            .expect_err("Collection with empty post.attachments must be rejected");
-        assert!(
-            err.contains("post.attachments"),
-            "expected anti-misuse error, got: {err}"
-        );
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -753,7 +755,7 @@ mod tests {
             PubkySocialPostKind::Collection,
             None,
             None,
-            None,
+            vec![],
         );
         let id = post.create_id();
         assert!(
@@ -787,7 +789,7 @@ mod tests {
             kind: PubkySocialPostKind::Collection,
             parent: None,
             embed: None,
-            attachments: None,
+            attachments: vec![],
             lock: None,
             extra: Default::default(),
         };
@@ -820,7 +822,7 @@ mod tests {
 
         let post = result.post();
         assert_eq!(post.kind, PubkySocialPostKind::Collection);
-        assert!(post.attachments.is_none());
+        assert!(post.attachments.is_empty());
         let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content)
             .expect("Collection content must deserialize as PubkySocialCollectionContent");
         assert_eq!(envelope.name, "My favorites");

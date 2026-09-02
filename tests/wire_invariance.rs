@@ -4,11 +4,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    ParsedUri, PubkyId, PubkySocialBlob, PubkySocialBookmark, PubkySocialCollectionContent,
-    PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
-    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
-    PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
+    ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBlob, PubkySocialBookmark,
+    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
+    PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
+    PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
@@ -32,24 +32,32 @@ fn user() -> PubkySocialUser {
     )
 }
 
+/// The post shape took its v1 form with the wire break: `note`/`article` kinds, a plain
+/// `embed` string, attachment objects that are always present. The first deliberate change
+/// to this fixture; the feed entry below moved with it because a feed config pins a kind.
 fn post_full() -> PubkySocialPost {
     PubkySocialPost::new_with_lock(
         "hello".into(),
-        PubkySocialPostKind::Short,
+        PubkySocialPostKind::Note,
         Some(format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG")),
-        Some(PubkySocialPostEmbed {
-            uri: format!("pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G"),
-            kind: PubkySocialPostKind::Short,
-        }),
-        Some(vec![format!(
-            "pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG"
-        )]),
+        Some(format!("pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G")),
+        vec![PubkySocialAttachment::new(
+            format!("pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG"),
+            Some("a cat".into()),
+            Some("cat.jpg".into()),
+        )],
         Some(format!("pubky://{PK}/pub/app.locks/0032SSN7Q4EVG.json")),
     )
 }
 
 fn post_minimal() -> PubkySocialPost {
-    PubkySocialPost::new("hello".into(), PubkySocialPostKind::Long, None, None, None)
+    PubkySocialPost::new(
+        "hello".into(),
+        PubkySocialPostKind::Article,
+        None,
+        None,
+        vec![],
+    )
 }
 
 fn tag() -> PubkySocialTag {
@@ -86,7 +94,7 @@ fn feed_config() -> PubkySocialFeedConfig {
         reach: PubkySocialFeedReach::Wot,
         layout: PubkySocialFeedLayout::Columns,
         sort: PubkySocialFeedSort::Recent,
-        content: Some(PubkySocialPostKind::Short),
+        content: Some(PubkySocialPostKind::Note),
     }
 }
 
@@ -173,12 +181,12 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "post_full",
             json(&post_full()),
-            r#"{"content":"hello","kind":"short","parent":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","embed":{"kind":"short","uri":"pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G"},"attachments":["pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG"],"lock":"pubky://{PK}/pub/app.locks/0032SSN7Q4EVG.json"}"#,
+            r#"{"content":"hello","kind":"note","parent":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","embed":"pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G","attachments":[{"uri":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","alt":"a cat","name":"cat.jpg"}],"lock":"pubky://{PK}/pub/app.locks/0032SSN7Q4EVG.json"}"#,
         ),
         (
             "post_minimal",
             json(&post_minimal()),
-            r#"{"content":"hello","kind":"long","parent":null,"embed":null,"attachments":null}"#,
+            r#"{"content":"hello","kind":"article","parent":null,"embed":null,"attachments":[]}"#,
         ),
         (
             "tag",
@@ -199,7 +207,7 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "feed_with_icon",
             json(&feed_with_icon()),
-            r#"{"feed":{"tags":["rust"],"domain_tags":["dev"],"reach":"wot","layout":"columns","sort":"recent","content":"short"},"name":"Rust","icon":"code","created_at":1727740800000000}"#,
+            r#"{"feed":{"tags":["rust"],"domain_tags":["dev"],"reach":"wot","layout":"columns","sort":"recent","content":"note"},"name":"Rust","icon":"code","created_at":1727740800000000}"#,
         ),
         (
             "feed_legacy",
@@ -270,7 +278,7 @@ fn pinned_variants() -> Vec<(String, &'static str)> {
         (json(&Resource::Blob(h.clone())), r#"{"Blob":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::Feed(h)), r#"{"Feed":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::Unknown), r#""Unknown""#),
-        (json(&K::Short), r#""short""#), (json(&K::Long), r#""long""#), (json(&K::Image), r#""image""#),
+        (json(&K::Note), r#""note""#), (json(&K::Article), r#""article""#), (json(&K::Image), r#""image""#),
         (json(&K::Video), r#""video""#), (json(&K::Link), r#""link""#), (json(&K::File), r#""file""#),
         (json(&K::Collection), r#""collection""#), (json(&K::Unknown), r#""unknown""#),
         (json(&R::Following), r#""following""#), (json(&R::Followers), r#""followers""#),
