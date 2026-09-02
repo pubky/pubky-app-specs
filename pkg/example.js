@@ -130,6 +130,17 @@ field("ID", postWithAttachmentsMeta.id);
 field("Attachments", `${postWithAttachments.toJson().attachments.length} files`);
 console.log();
 
+// Article
+console.log(`  ${c.yellow}▸ Article${c.reset}`);
+const { post: articlePost, meta: articleMeta } = specsBuilder.createArticlePost(
+  "Why Pubky",
+  "# Why Pubky\n\nBecause keys, not accounts.",
+  `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`
+);
+field("ID", articleMeta.id);
+field("Title", JSON.parse(articlePost.toJson().content).title);
+console.log();
+
 // Locked post (gated behind a lock server)
 console.log(`  ${c.yellow}▸ Locked Post${c.reset}`);
 const lockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;

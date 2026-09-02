@@ -28,7 +28,7 @@ yarn add pubky-social-specs
 ## Quick Start
 
 ```js
-import { PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
+import { PubkySocialAttachment, PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
 
 const pubkyId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const specs = new PubkySpecsBuilder(pubkyId);
@@ -63,7 +63,7 @@ Each create method returns:
 ```js
 const { user, meta } = specs.createUser(name, bio, image, links, status);
 const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
-const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments);
+const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments, lock);
 const { file, meta } = specs.createFile(name, src, contentType, size);
 const { blob, meta } = specs.createBlob(bytes);
 const { bookmark, meta } = specs.createBookmark(uri);
@@ -81,6 +81,8 @@ const { feed, meta } = specs.createFeed({
   icon,
 });
 ```
+
+`embed` is a `pubky://` or `https://` URI string. `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 

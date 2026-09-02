@@ -1,16 +1,16 @@
-use crate::canonicalize::{canonicalize_pubky_uri, canonicalize_target};
-use crate::common::{code_point_len, frozen_trim};
+use crate::canonicalize::{check_pubky_reference, check_target_reference};
+use crate::common::{check_extra_keys, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
+use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 pub mod content;
 
 pub use content::{
     PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionLayout,
 };
-use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr};
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -110,10 +110,7 @@ pub struct PubkySocialAttachment {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Members this version does not know, preserved member-for-member on rewrite so an
-    /// older client never drops a newer client's data. Opaque: never validated, never
-    /// written by builders. Deliberate extensions live under the reserved `ext` member and
-    /// are hostile input until the extension's own rules have checked them.
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -129,11 +126,22 @@ impl PubkySocialAttachment {
             name,
             extra: Default::default(),
         }
+        .sanitize()
+    }
+}
+
+impl PubkySocialAttachment {
+    /// Trim is the only documented canonicalization; the uri passes through verbatim
+    fn sanitize(self) -> Self {
+        PubkySocialAttachment {
+            name: self.name.map(|n| frozen_trim(&n).to_string()),
+            ..self
+        }
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[wasm_bindgen]
 impl PubkySocialAttachment {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
     pub fn uri(&self) -> String {
@@ -182,10 +190,7 @@ pub struct PubkySocialPost {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<String>,
-    /// Members this version does not know, preserved member-for-member on rewrite so an
-    /// older client never drops a newer client's data. Opaque: never validated, never
-    /// written by builders. Deliberate extensions live under the reserved `ext` member and
-    /// are hostile input until the extension's own rules have checked them.
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -240,7 +245,7 @@ impl Json for PubkySocialPost {}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialPost {
-    /// Creates a new `PubkySocialPost` instance and sanitizes it.
+    /// Infallible; callers validate before writing.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         content: String,
@@ -252,7 +257,6 @@ impl PubkySocialPost {
         Self::new_with_lock(content, kind, parent, embed, attachments, None)
     }
 
-    /// Creates a new lockable `PubkySocialPost` instance and sanitizes it.
     pub fn new_with_lock(
         content: String,
         kind: PubkySocialPostKind,
@@ -285,45 +289,18 @@ impl HasIdPath for PubkySocialPost {
     }
 }
 
-/// A stored reference is the fixed point of its own canonical spelling. Nothing rewrites
-/// it on the way in or out, so the SDK short form and any padding reject here.
-pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String> {
-    let max = VALIDATION_LIMITS.reference_uri_max_length;
-    match canonicalize_pubky_uri(raw) {
-        Ok(canonical) if canonical == raw && code_point_len(raw) <= max => Ok(()),
-        _ => Err(format!(
-            "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
-        )),
-    }
-}
-
-/// Same rule for the fields that also accept `http`/`https`; the helper caps the length.
-pub(crate) fn check_target_reference(field: &str, raw: &str) -> Result<(), String> {
-    match canonicalize_target(raw) {
-        Ok(canonical) if canonical == raw => Ok(()),
-        _ => Err(format!(
-            "Validation Error: {field} must be a canonical pubky or web URI of at most {} code points: {raw}",
-            VALIDATION_LIMITS.reference_uri_max_length
-        )),
-    }
-}
-
 impl Validatable for PubkySocialPost {
     const MAX_BYTES: usize = VALIDATION_LIMITS.post_max_bytes;
 
     fn sanitize(self) -> Self {
         // Trim is the only documented canonicalization here; references pass through verbatim
-        let attachments = self
-            .attachments
-            .into_iter()
-            .map(|a| PubkySocialAttachment {
-                name: a.name.map(|n| frozen_trim(&n).to_string()),
-                ..a
-            })
-            .collect();
         PubkySocialPost {
             content: frozen_trim(&self.content).to_string(),
-            attachments,
+            attachments: self
+                .attachments
+                .into_iter()
+                .map(PubkySocialAttachment::sanitize)
+                .collect(),
             ..self
         }
     }
@@ -333,6 +310,10 @@ impl Validatable for PubkySocialPost {
             self.validate_id(id)?;
         }
         self.validate_size()?;
+        check_extra_keys(
+            &self.extra,
+            &["content", "kind", "parent", "embed", "attachments", "lock"],
+        )?;
 
         // `Unknown` is the forwards-compat catch-all: readable, never valid to write
         if !self.kind.is_known() {
@@ -360,11 +341,12 @@ impl Validatable for PubkySocialPost {
             ));
         }
         for (index, attachment) in self.attachments.iter().enumerate() {
+            check_extra_keys(&attachment.extra, &["uri", "alt", "name"])?;
             check_target_reference(&format!("attachments[{index}].uri"), &attachment.uri)?;
             if let Some(alt) = &attachment.alt {
                 if code_point_len(alt) > VALIDATION_LIMITS.attachment_alt_max_length {
                     return Err(format!(
-                        "Validation Error: attachments[{index}].alt exceeds {} code points",
+                        "Validation Error: attachments[{index}].alt must be at most {} code points",
                         VALIDATION_LIMITS.attachment_alt_max_length
                     ));
                 }
@@ -380,40 +362,41 @@ impl Validatable for PubkySocialPost {
             }
         }
 
-        match self.kind {
-            PubkySocialPostKind::Article => content::article::validate_article_post(self),
-            PubkySocialPostKind::Note
-            | PubkySocialPostKind::Image
-            | PubkySocialPostKind::Video
-            | PubkySocialPostKind::Link
-            | PubkySocialPostKind::File => {
-                if frozen_trim(&self.content).is_empty()
-                    && self.embed.is_none()
-                    && self.attachments.is_empty()
-                {
-                    return Err(
-                        "Validation Error: Post must have content, an embed, or attachments".into(),
-                    );
-                }
-                self.check_content_length(VALIDATION_LIMITS.post_note_content_max_length)
-            }
-            PubkySocialPostKind::Collection | PubkySocialPostKind::Unknown => {
-                unreachable!("guarded by early-return above")
-            }
+        if matches!(self.kind, PubkySocialPostKind::Article) {
+            return content::article::validate_article_post(self);
         }
+
+        // Note, Image, Video, Link, File: untyped content
+        if frozen_trim(&self.content).is_empty()
+            && self.embed.is_none()
+            && self.attachments.is_empty()
+        {
+            return Err(
+                "Validation Error: Post must have content, an embed, or attachments".into(),
+            );
+        }
+        let max = VALIDATION_LIMITS.post_note_content_max_length;
+        if code_point_len(&self.content) > max {
+            return Err(format!(
+                "Validation Error: content must be at most {max} code points for kind {}",
+                self.kind
+            ));
+        }
+        Ok(())
     }
 }
 
 impl PubkySocialPost {
-    /// Builds the article envelope, serializes it into `content` and wraps it in a
-    /// `kind = Article` post. Infallible like `new`; callers validate before writing.
-    pub fn create_article_post(
+    /// Builds the article envelope into `content` and wraps it in a `kind = Article` post.
+    /// Infallible; callers validate before writing.
+    pub fn new_article(
         title: String,
         body: String,
         cover_image: Option<String>,
         parent: Option<String>,
         embed: Option<String>,
         attachments: Vec<PubkySocialAttachment>,
+        lock: Option<String>,
     ) -> Self {
         let envelope = PubkySocialArticleContent {
             title: frozen_trim(&title).to_string(),
@@ -423,23 +406,14 @@ impl PubkySocialPost {
         };
         let content =
             serde_json::to_string(&envelope).expect("a string-only envelope always serializes");
-        Self::new(
+        Self::new_with_lock(
             content,
             PubkySocialPostKind::Article,
             parent,
             embed,
             attachments,
+            lock,
         )
-    }
-
-    fn check_content_length(&self, max: usize) -> Result<(), ValidationError> {
-        if code_point_len(&self.content) > max {
-            return Err(format!(
-                "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
-                self.kind, max
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -474,6 +448,21 @@ mod tests {
 
     fn att(uri: &str) -> PubkySocialAttachment {
         PubkySocialAttachment::new(uri.to_string(), None, None)
+    }
+
+    fn post(
+        kind: PubkySocialPostKind,
+        parent: Option<&str>,
+        embed: Option<&str>,
+        attachments: Vec<PubkySocialAttachment>,
+    ) -> PubkySocialPost {
+        PubkySocialPost::new(
+            "".into(),
+            kind,
+            parent.map(str::to_string),
+            embed.map(str::to_string),
+            attachments,
+        )
     }
 
     fn validate(post: &PubkySocialPost) -> Result<(), String> {
@@ -575,9 +564,10 @@ mod tests {
         let post = note(&"\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length));
         assert!(validate(&post).is_ok());
         let post = note(&"\u{1F600}".repeat(VALIDATION_LIMITS.post_note_content_max_length + 1));
-        assert!(err(&post).contains("exceeds maximum length"));
+        assert!(err(&post).contains("at most"));
     }
 
+    // v0 reserved this literal; v1 keys deletion on the indexer's flag instead
     #[test]
     fn test_deleted_literal_is_ordinary_content() {
         let post_json =
@@ -608,10 +598,7 @@ mod tests {
     #[test]
     fn test_empty_extra_emits_nothing() {
         let out = serde_json::to_string(&note("hello")).unwrap();
-        assert_eq!(
-            out,
-            r#"{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":[]}"#
-        );
+        assert!(!out.contains("extra"), "{out}");
     }
 
     fn padded_blob(len: usize) -> Vec<u8> {
@@ -632,10 +619,22 @@ mod tests {
         assert!(
             <PubkySocialPost as Validatable>::try_from(&padded_blob(cap), &id, &PUB_CTX).is_ok()
         );
-        let err = <PubkySocialPost as Validatable>::try_from(&padded_blob(cap + 1), &id, &PUB_CTX)
-            .unwrap_err();
+        // Malformed on purpose: only the pre-parse check can produce the size error
+        let mut oversize = padded_blob(cap + 2);
+        oversize.pop();
+        let err = <PubkySocialPost as Validatable>::try_from(&oversize, &id, &PUB_CTX).unwrap_err();
         assert!(err.contains("exceeds"), "{err}");
-        assert!(!err.contains("expected"), "not a parse error: {err}");
+    }
+
+    #[test]
+    fn test_extra_must_not_shadow_a_field() {
+        let mut post = note("real");
+        post.extra.insert("kind".into(), "article".into());
+        assert!(err(&post).contains("shadow"));
+        let mut post = note("real");
+        post.attachments.push(att(&file_uri()));
+        post.attachments[0].extra.insert("uri".into(), "x".into());
+        assert!(err(&post).contains("shadow"));
     }
 
     #[test]
@@ -720,13 +719,8 @@ mod tests {
 
     #[test]
     fn test_parent_is_pubky_only_and_canonical() {
-        let ok = PubkySocialPost::new(
-            "re".into(),
-            PubkySocialPostKind::Note,
-            Some(post_uri()),
-            None,
-            vec![],
-        );
+        let mut ok = post(PubkySocialPostKind::Note, Some(&post_uri()), None, vec![]);
+        ok.content = "re".into();
         assert!(validate(&ok).is_ok());
         for bad in [
             "https://example.com/post".to_string(),
@@ -735,38 +729,21 @@ mod tests {
             p("/pub/social/v1/posts/00%32"),
             String::new(),
         ] {
-            let post = PubkySocialPost::new(
-                "re".into(),
-                PubkySocialPostKind::Note,
-                Some(bad.clone()),
-                None,
-                vec![],
-            );
-            assert!(err(&post).contains("parent"), "{bad}");
+            let mut reply = post(PubkySocialPostKind::Note, Some(&bad), None, vec![]);
+            reply.content = "re".into();
+            assert!(err(&reply).contains("parent"), "{bad}");
         }
     }
 
     #[test]
     fn test_embed_accepts_pubky_and_web() {
         for ok in [post_uri(), "https://example.com/a?b=c".to_string()] {
-            let post = PubkySocialPost::new(
-                "".into(),
-                PubkySocialPostKind::Note,
-                None,
-                Some(ok.clone()),
-                vec![],
-            );
-            assert!(validate(&post).is_ok(), "{ok}");
+            let quote = post(PubkySocialPostKind::Note, None, Some(&ok), vec![]);
+            assert!(validate(&quote).is_ok(), "{ok}");
         }
         for bad in ["nostr:nevent1abc", "ftp://x/y", " https://example.com", ""] {
-            let post = PubkySocialPost::new(
-                "q".into(),
-                PubkySocialPostKind::Note,
-                None,
-                Some(bad.to_string()),
-                vec![],
-            );
-            assert!(err(&post).contains("embed"), "{bad}");
+            let quote = post(PubkySocialPostKind::Note, None, Some(bad), vec![]);
+            assert!(err(&quote).contains("embed"), "{bad}");
         }
     }
 
@@ -893,48 +870,26 @@ mod tests {
 
     #[test]
     fn test_attachment_uri_rule() {
+        let image = |uri: &str| post(PubkySocialPostKind::Image, None, None, vec![att(uri)]);
         for ok in [file_uri(), "https://example.com/cat.jpg".to_string()] {
-            let post = PubkySocialPost::new(
-                "".into(),
-                PubkySocialPostKind::Image,
-                None,
-                None,
-                vec![att(&ok)],
-            );
-            assert!(validate(&post).is_ok(), "{ok}");
+            assert!(validate(&image(&ok)).is_ok(), "{ok}");
         }
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
         let long_ok = p(&format!(
             "/pub/{}",
-            "a".repeat(VALIDATION_LIMITS.reference_uri_max_length - 8 - PK.len() - 5)
+            "a".repeat(max - code_point_len(&p("/pub/")))
         ));
-        assert_eq!(
-            code_point_len(&long_ok),
-            VALIDATION_LIMITS.reference_uri_max_length
-        );
-        let post = PubkySocialPost::new(
-            "".into(),
-            PubkySocialPostKind::Image,
-            None,
-            None,
-            vec![att(&long_ok)],
-        );
-        assert!(validate(&post).is_ok());
+        assert_eq!(code_point_len(&long_ok), max);
+        assert!(validate(&image(&long_ok)).is_ok());
 
         for bad in [
             "ipfs://bafy".to_string(),
             format!("pubky{PK}/pub/social/v1/files/0034A0X7NJ52G"),
-            format!("{}a", long_ok),
+            format!("{long_ok}a"),
             "not a url".to_string(),
             String::new(),
         ] {
-            let post = PubkySocialPost::new(
-                "".into(),
-                PubkySocialPostKind::Image,
-                None,
-                None,
-                vec![att(&bad)],
-            );
-            assert!(err(&post).contains("attachments[0].uri"), "{bad}");
+            assert!(err(&image(&bad)).contains("attachments[0].uri"), "{bad}");
         }
     }
 

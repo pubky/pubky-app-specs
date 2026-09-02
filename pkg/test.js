@@ -118,6 +118,34 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(repostJson.embed, embedUriRaw, "Embed URI should match");
     });
 
+    it("should carry attachment objects with alt and name", () => {
+      const uri = `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`;
+      const attachment = new PubkySocialAttachment(uri, "a cat", "  cat.jpg  ");
+      assert.strictEqual(attachment.uri, uri);
+      assert.strictEqual(attachment.alt, "a cat");
+      assert.strictEqual(attachment.name, "cat.jpg", "name should be trimmed");
+
+      const { post } = specsBuilder.createPost("", PubkySocialPostKind.Image, null, null, [attachment]);
+      const postJson = post.toJson();
+      assert.deepStrictEqual(postJson.attachments, [{ uri, alt: "a cat", name: "cat.jpg" }]);
+      assert.strictEqual(post.attachments[0].alt, "a cat", "getter should return attachment instances");
+    });
+
+    it("toJson returns a plain object and keeps unknown members", () => {
+      const post = PubkySocialPost.fromJson({
+        content: "x",
+        kind: "note",
+        parent: null,
+        embed: null,
+        attachments: [],
+        later: 1,
+      });
+      const postJson = post.toJson();
+      assert.strictEqual(Object.getPrototypeOf(postJson), Object.prototype, "toJson must not return a Map");
+      assert.strictEqual(postJson.kind, "note");
+      assert.strictEqual(postJson.later, 1, "unknown members survive a round trip");
+    });
+
     it("cannot create post with too many attachments", () => {
       const attachments = [
         `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
@@ -264,6 +292,23 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.strictEqual(envelope.title, "On Pubky", "Title should be trimmed");
         assert.strictEqual(envelope.body, "# Hello\n\nbody");
         assert.strictEqual(envelope.cover_image, `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`);
+      });
+
+      it("should accept parent, embed, attachments and lock on an article", () => {
+        const { post } = specsBuilder.createArticlePost(
+          "Reply article",
+          "body",
+          null,
+          `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`,
+          "https://example.com/source",
+          [new PubkySocialAttachment(`pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`, "alt", "a.jpg")],
+          `pubky://${RIO}/pub/app.locks/0034A0X7NJ52G.json`
+        );
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.parent, `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`);
+        assert.strictEqual(postJson.embed, "https://example.com/source");
+        assert.strictEqual(postJson.attachments.length, 1);
+        assert.ok(postJson.lock);
       });
 
       it("cannot create article with empty title", () => {

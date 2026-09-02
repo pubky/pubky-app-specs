@@ -128,7 +128,7 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
     const MAX_BYTES: usize = VALIDATION_LIMITS.object_max_bytes;
 
     fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
-        Self::check_size(blob.len())?;
+        check_size(blob.len(), Self::MAX_BYTES)?;
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
         instance.validate(Some(id), ctx)?;
@@ -141,21 +141,19 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
         self
     }
 
-    /// The same cap as `try_from`, for objects built in memory and never read from bytes.
+    /// The same cap for objects built in memory. On the read path this re-serializes an
+    /// object whose raw bytes already passed; that cost is accepted for one code path.
     fn validate_size(&self) -> Result<(), ValidationError> {
         let len = serde_json::to_vec(self).map_err(|e| e.to_string())?.len();
-        Self::check_size(len)
+        check_size(len, Self::MAX_BYTES)
     }
+}
 
-    fn check_size(len: usize) -> Result<(), ValidationError> {
-        if len > Self::MAX_BYTES {
-            return Err(format!(
-                "Validation Error: object exceeds {} bytes",
-                Self::MAX_BYTES
-            ));
-        }
-        Ok(())
+fn check_size(len: usize, max: usize) -> Result<(), ValidationError> {
+    if len > max {
+        return Err(format!("Validation Error: object exceeds {max} bytes"));
     }
+    Ok(())
 }
 
 pub trait HasPath {
