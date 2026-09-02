@@ -370,6 +370,8 @@ v0: pubky-app hand-rolls `{title, body}` JSON inside `long` posts, unspecified, 
 `kind == article` (a per-kind content schema INSIDE the content string, distinct from the
 `PostEnvelope` mechanics layer of B2). Per-kind content shape is now-or-never; the cover moves into the envelope.
 Articles may carry parent/embed/attachments (an article can be a reply or carry media).
+Caps: title 100 and body 50000 code points; the raw envelope string is bounded at 104000 before
+parsing, twice the body, because JSON escaping doubles a body made of newlines and quotes.
 
 ## B4. CollectionContent
 `{name, description?, items[], cover_image?}`, with two changes to `items`.
