@@ -63,8 +63,9 @@ pub fn canonicalize_web_uri(raw: &str) -> Result<String, ()> {
     let after = s
         .strip_prefix("http://")
         .or_else(|| s.strip_prefix("https://"));
+    // The authority runs to the first `/`, `?` or `#` and must not be empty
     match after {
-        Some(rest) if rest.chars().next().is_some_and(|c| c != '/') => Ok(s.to_string()),
+        Some(rest) if !rest.starts_with(['/', '?', '#']) && !rest.is_empty() => Ok(s.to_string()),
         _ => Err(()),
     }
 }
@@ -99,6 +100,25 @@ pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String
     Err(format!(
         "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
     ))
+}
+
+/// A reference to a post: public, versionless, and a fixed point of the parser's own emitter
+/// (which rejects the short form). Replies and collection items share it.
+pub(crate) fn check_post_reference(raw: &str) -> Result<(), String> {
+    let parsed = crate::ParsedUri::try_from(raw)
+        .map_err(|e| format!("must be a canonical post URI: {e}"))?;
+    match (parsed.visibility, &parsed.resource) {
+        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => {
+            if parsed.try_to_uri_str().as_deref() == Ok(raw) {
+                Ok(())
+            } else {
+                Err(format!("must be spelled in canonical form: {raw}"))
+            }
+        }
+        _ => Err(format!(
+            "must be a public, versionless post reference: {raw}"
+        )),
+    }
 }
 
 /// Same rule for the fields that also accept `http`/`https`; `canonicalize_target` caps.
@@ -200,6 +220,8 @@ mod tests {
             "HTTPS://x.com",
             "https://",
             "https:///path",
+            "https://?q=1",
+            "https://#frag",
             "ftp://x",
             "",
         ] {

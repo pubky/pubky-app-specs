@@ -96,7 +96,7 @@ console.log(`  ${c.yellow}▸ Reply Post${c.reset}`);
 const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   "This is a reply to the first post!",
   PubkySocialPostKind.Note,
-  userMeta.url
+  `pubky://${OTTO}/pub/social/v1/posts/${meta.id}`
 );
 field("ID", replyMeta.id);
 field("Parent", replyPost.toJson().parent);

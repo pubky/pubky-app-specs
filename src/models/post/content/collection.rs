@@ -190,24 +190,8 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
 /// versionless post reference passes. The reference-tier widening comes with the collection
 /// rework.
 fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
-    // A canonical versionless post reference; the reference-tier widening comes with the
-    // collection rework.
-    let parsed = crate::ParsedUri::try_from(uri)
-        .map_err(|e| format!("must be a canonical post URI: {e}"))?;
-    match (parsed.visibility, &parsed.resource) {
-        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => {
-            // The stored string is not rewritten, so it must already BE the canonical
-            // spelling: a fixed point of the parser's own emitter (rejects the short form).
-            if parsed.try_to_uri_str().as_deref() == Ok(uri) {
-                Ok(())
-            } else {
-                Err(format!("must be spelled in canonical form: {uri}"))
-            }
-        }
-        _ => Err(format!(
-            "must be a public, versionless post reference: {uri}"
-        )),
-    }
+    // The reference-tier widening comes with the collection rework
+    crate::canonicalize::check_post_reference(uri)
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use crate::canonicalize::{check_pubky_reference, check_target_reference};
+use crate::canonicalize::{check_post_reference, check_pubky_reference, check_target_reference};
 use crate::common::{check_extra_keys, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
@@ -321,7 +321,8 @@ impl Validatable for PubkySocialPost {
         }
 
         if let Some(parent) = &self.parent {
-            check_pubky_reference("parent", parent)?;
+            // A reply is a thread edge, so the target must be a post
+            check_post_reference(parent).map_err(|e| format!("Validation Error: parent {e}"))?;
         }
         if let Some(lock) = &self.lock {
             check_pubky_reference("lock", lock)?;
@@ -727,6 +728,10 @@ mod tests {
             format!("pubky{PK}/pub/social/v1/posts/0032SSN7Q4EVG"),
             p("/pub/social/v1/posts/../profile.json"),
             p("/pub/social/v1/posts/00%32"),
+            p("/pub/social/v1/profile.json"),
+            p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json"),
+            p("/priv/social/v1/posts/0032SSN7Q4EVG"),
+            p(""),
             String::new(),
         ] {
             let mut reply = post(PubkySocialPostKind::Note, Some(&bad), None, vec![]);
