@@ -249,6 +249,35 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
     });
 
+    describe("Article posts", () => {
+      it("should create article post with JSON envelope content", () => {
+        const { post, meta } = specsBuilder.createArticlePost(
+          "  On Pubky  ",
+          "# Hello\n\nbody",
+          `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`
+        );
+        assert.ok(meta.id, "Article post should have an ID");
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.kind, "article", "Post kind should be article");
+        assert.deepStrictEqual(postJson.attachments, []);
+        const envelope = JSON.parse(postJson.content);
+        assert.strictEqual(envelope.title, "On Pubky", "Title should be trimmed");
+        assert.strictEqual(envelope.body, "# Hello\n\nbody");
+        assert.strictEqual(envelope.cover_image, `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`);
+      });
+
+      it("cannot create article with empty title", () => {
+        assert.throws(
+          () => specsBuilder.createArticlePost("   ", "body", null),
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(msg.includes("title"), `Expected title error, got: "${msg}"`);
+            return true;
+          }
+        );
+      });
+    });
+
     describe("Collection posts", () => {
       const collectionItemUri = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
       const coverImageUrl = `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`;
