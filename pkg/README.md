@@ -63,6 +63,7 @@ Each create method returns:
 ```js
 const { user, meta } = specs.createUser(name, bio, image, links, status);
 const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
+const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments);
 const { file, meta } = specs.createFile(name, src, contentType, size);
 const { blob, meta } = specs.createBlob(bytes);
 const { bookmark, meta } = specs.createBookmark(uri);
