@@ -1,7 +1,7 @@
 import {
   PubkySocialPostKind,
   PubkySpecsBuilder,
-  PubkySocialPostEmbed,
+  PubkySocialAttachment,
   userUriBuilder,
   postUriBuilder,
   bookmarkUriBuilder,
@@ -84,7 +84,7 @@ header("POSTS");
 console.log(`  ${c.yellow}▸ Simple Post${c.reset}`);
 const { post, meta } = specsBuilder.createPost(
   "Hello, Pubky world! This is my first post.",
-  PubkySocialPostKind.Short
+  PubkySocialPostKind.Note
 );
 field("ID", meta.id);
 field("URL", meta.url);
@@ -95,7 +95,7 @@ console.log();
 console.log(`  ${c.yellow}▸ Reply Post${c.reset}`);
 const { post: replyPost, meta: replyMeta } = specsBuilder.createPost(
   "This is a reply to the first post!",
-  PubkySocialPostKind.Short,
+  PubkySocialPostKind.Note,
   userMeta.url
 );
 field("ID", replyMeta.id);
@@ -104,19 +104,14 @@ console.log();
 
 // Repost with embed
 console.log(`  ${c.yellow}▸ Repost with Embed${c.reset}`);
-const embed = new PubkySocialPostEmbed(
-  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`,
-  PubkySocialPostKind.Video
-);
 const { post: repost, meta: repostMeta } = specsBuilder.createPost(
   "Check out this awesome video!",
-  PubkySocialPostKind.Short,
+  PubkySocialPostKind.Note,
   null,
-  embed
+  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
 );
 field("ID", repostMeta.id);
-field("Embed URI", repost.toJson().embed.uri);
-field("Embed Kind", repost.toJson().embed.kind);
+field("Embed", repost.toJson().embed);
 console.log();
 
 // Post with attachments
@@ -127,8 +122,8 @@ const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilde
   null,
   null,
   [
-    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
-    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`,
+    new PubkySocialAttachment(`pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`, "beach", "beach.jpg"),
+    new PubkySocialAttachment(`pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`, null, null),
   ]
 );
 field("ID", postWithAttachmentsMeta.id);
@@ -140,7 +135,7 @@ console.log(`  ${c.yellow}▸ Locked Post${c.reset}`);
 const lockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
 const { post: lockedPost, meta: lockedPostMeta } = specsBuilder.createPost(
   "We were reckless adopting Lightning without understanding the tradeoffs.",
-  PubkySocialPostKind.Long,
+  PubkySocialPostKind.Note,
   null,
   null,
   null,
@@ -316,7 +311,7 @@ header("VALIDATION LIMITS");
 const limitsCopy = getValidationLimits();
 
 field("User name max", validationLimits.userNameMaxLength);
-field("Short post max", validationLimits.postNoteContentMaxLength);
+field("Note post max", validationLimits.postNoteContentMaxLength);
 field("Max attachments", validationLimits.postAttachmentsMaxCount);
 field("Copy matches", JSON.stringify(limitsCopy) === JSON.stringify(validationLimits));
 

@@ -197,10 +197,10 @@ mod tests {
         );
         let post_json = r#"{
             "content": "Hello World!",
-            "kind": "short",
+            "kind": "note",
             "parent": null,
             "embed": null,
-            "attachments": null
+            "attachments": []
         }"#;
         let result = PubkySocialObject::from_uri(uri, post_json.as_bytes());
         assert!(

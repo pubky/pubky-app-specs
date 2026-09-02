@@ -267,18 +267,26 @@ impl PubkySpecsBuilder {
     // 4. PubkySocialPost
     // -----------------------------------------------------------------------------
 
-    /// Optional `lock`: `pubky://` URL with a host pointing at a lock server.
+    /// `embed` is a plain URI; `attachments` are `PubkySocialAttachment` instances.
+    /// Optional `lock`: the canonical `pubky://` URI of the lock file.
     #[wasm_bindgen(js_name = createPost)]
     pub fn create_post(
         &self,
         content: String,
         kind: PubkySocialPostKind,
         parent: Option<String>,
-        embed: Option<PubkySocialPostEmbed>,
-        attachments: Option<Vec<String>>,
+        embed: Option<String>,
+        attachments: Option<Vec<PubkySocialAttachment>>,
         lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkySocialPost::new_with_lock(content, kind, parent, embed, attachments, lock);
+        let post = PubkySocialPost::new_with_lock(
+            content,
+            kind,
+            parent,
+            embed,
+            attachments.unwrap_or_default(),
+            lock,
+        );
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
 
@@ -345,7 +353,8 @@ impl PubkySpecsBuilder {
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
 
-        let post = PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, None);
+        let post =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
 

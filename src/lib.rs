@@ -32,8 +32,8 @@ pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
 pub use models::mute::PubkySocialMute;
 pub use models::post::{
-    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialPost,
-    PubkySocialPostEmbed, PubkySocialPostKind,
+    PubkySocialAttachment, PubkySocialCollectionContent, PubkySocialCollectionLayout,
+    PubkySocialPost, PubkySocialPostKind,
 };
 pub use models::tag::PubkySocialTag;
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};
