@@ -16,20 +16,17 @@ use crate::types::PubkyId;
 // the callers classify, they do not report.
 #[allow(clippy::result_unit_err)]
 pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
-    // Scheme, case-sensitive. starts_with on an ASCII prefix keeps the later slicing safe.
-    let rest = if let Some(r) = raw.strip_prefix("pubky://") {
-        r
-    } else if let Some(r) = raw.strip_prefix("pubky") {
-        r
-    } else {
-        return Err(());
-    };
+    // Scheme, case-sensitive. The prefix is ASCII, which keeps the later slicing safe.
+    let rest = raw
+        .strip_prefix("pubky://")
+        .or_else(|| raw.strip_prefix("pubky"))
+        .ok_or(())?;
     // Host: up to the first '/'. No userinfo, no port, then a canonical PubkyId.
     let (host, path) = match rest.find('/') {
         Some(i) => (&rest[..i], Some(&rest[i + 1..])),
         None => (rest, None),
     };
-    if host.contains('@') || host.contains(':') || PubkyId::try_from(host).is_err() {
+    if host.contains(['@', ':']) || PubkyId::try_from(host).is_err() {
         return Err(());
     }
     let Some(path) = path else {
@@ -39,15 +36,15 @@ pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
     // Segments: no empty segment (kills `//`, leading and trailing slashes), no `.` or `..`,
     // and nowhere a `%`, `?`, `#`, an ASCII control, or a frozen-whitespace code point.
     // Everything else, including non-ASCII, passes: foreign apps may use it.
-    for seg in path.split('/') {
-        if seg.is_empty() || seg == "." || seg == ".." {
-            return Err(());
-        }
-        for c in seg.chars() {
-            if c == '%' || c == '?' || c == '#' || c.is_ascii_control() || is_frozen_whitespace(c) {
-                return Err(());
-            }
-        }
+    if path.split('/').any(|seg| {
+        seg.is_empty()
+            || seg == "."
+            || seg == ".."
+            || seg.chars().any(|c| {
+                matches!(c, '%' | '?' | '#') || c.is_ascii_control() || is_frozen_whitespace(c)
+            })
+    }) {
+        return Err(());
     }
     Ok(["pubky://", host, "/", path].concat())
 }
