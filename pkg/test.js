@@ -75,8 +75,9 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(meta.url, "Post should have a URL");
       const postChunks = meta.url.split("/")
       assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(postChunks[5], "posts", "URL should contain posts path");
-      assert.strictEqual(postChunks[6], meta.id, "URL should contain post ID");
+      assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
+      assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
+      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
 
       // Test post content
       const postJson = post.toJson();
@@ -85,7 +86,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     it("should create reply post with parent reference", () => {
-      const parentPostUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SSE3B1FQ0`
+      const parentPostUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`
       const parentPostUri = postUriBuilder(RIO, "0033SSE3B1FQ0")
       assert.strictEqual(parentPostUri, parentPostUriRaw, "Parent post URI should match");
 
@@ -101,7 +102,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     it("should create repost with embed", () => {
-      const embedUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+      const embedUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
       const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
       assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
 
@@ -122,17 +123,17 @@ describe("PubkySpecs Example Objects Tests", () => {
 
     it("cannot create post with too many attachments", () => {
       const attachments = [
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ52G`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ54I`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55J`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55K`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55L`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55M`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55N`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55O`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55P`,
-        `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ55A`, // 11th attachment exceeds limit
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ54I`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55J`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55K`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55L`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55M`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55N`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55O`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55P`,
+        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55A`, // 11th attachment exceeds limit
       ];
 
       assert.throws(
@@ -253,8 +254,8 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     describe("Collection posts", () => {
-      const collectionItemUri = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`;
-      const coverImageUrl = `pubky://${RIO}/pub/pubky.app/files/0034A0X7NJ52G`;
+      const collectionItemUri = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
+      const coverImageUrl = `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`;
 
       it("should create collection post with JSON envelope content", () => {
         assert.strictEqual(
@@ -274,8 +275,9 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.ok(meta.url, "Collection post should have a URL");
         const postChunks = meta.url.split("/");
         assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
-        assert.strictEqual(postChunks[5], "posts", "URL should contain posts path");
-        assert.strictEqual(postChunks[6], meta.id, "URL should contain post ID");
+        assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
+        assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
+      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
 
         const postJson = post.toJson();
         assert.strictEqual(postJson.kind, "collection", "Post kind should be collection");
@@ -304,7 +306,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
         const tooManyItems = Array.from(
           { length: validationLimits.collectionItemsMaxCount + 1 },
-          (_, index) => `pubky://${RIO}/pub/pubky.app/posts/${String(index).padStart(13, "0")}`
+          (_, index) => `pubky://${RIO}/pub/social/v1/posts/${String(index).padStart(13, "0")}`
         );
 
         assert.throws(
@@ -327,7 +329,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
   describe("Bookmark Pubky-social-specs", () => {
     it("should create bookmark with correct properties", () => {
-      const postUriRaw = `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+      const postUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
 
       const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(postUriRaw);
       const bookmarkUriFromBuilder = bookmarkUriBuilder(OTTO, bookmarkMeta.id)
@@ -338,8 +340,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(bookmarkMeta.url, "Bookmark should have a URL");
       const bookmarkChunks = bookmarkMeta.url.split("/")
       assert.strictEqual(bookmarkChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(bookmarkChunks[5], "bookmarks", "URL should contain bookmarks path");
-      assert.strictEqual(bookmarkChunks[6], bookmarkMeta.id, "URL should contain bookmark ID");
+      assert.strictEqual(bookmarkChunks[6], "bookmarks", "URL should contain bookmarks path");
+      assert.strictEqual(bookmarkChunks[7], bookmarkMeta.id + ".json", "URL should contain bookmark ID");
 
       // Test bookmark content
       const bookmarkJson = bookmark.toJson();
@@ -360,8 +362,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(followMeta.url, "Follow should have a URL");
       const followChunks = followMeta.url.split("/")
       assert.strictEqual(followChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(followChunks[5], "follows", "URL should contain follows path");
-      assert.strictEqual(followChunks[6], RIO, "URL should contain follow ID");
+      assert.strictEqual(followChunks[6], "follows", "URL should contain follows path");
+      assert.strictEqual(followChunks[7], RIO + ".json", "URL should contain follow ID");
 
       // Test follow content
       const followJson = follow.toJson();
@@ -372,7 +374,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
   describe("Tag Pubky-social-specs", () => {
     it("should create tag with correct properties", () => {
-      const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
+      const userUriRaw = `pubky://${OTTO}/pub/social/v1/profile.json`;
       const userUriFromBuilder = userUriBuilder(OTTO)
       assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
 
@@ -383,8 +385,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(tagMeta.url, "Tag should have a URL");
       const tagChunks = tagMeta.url.split("/")
       assert.strictEqual(tagChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(tagChunks[5], "tags", "URL should contain tags path");
-      assert.strictEqual(tagChunks[6], tagMeta.id, "URL should contain tag ID");
+      assert.strictEqual(tagChunks[6], "tags", "URL should contain tags path");
+      assert.strictEqual(tagChunks[7], tagMeta.id + ".json", "URL should contain tag ID");
 
       // Test tag content
       const tagJson = tag.toJson();
@@ -394,7 +396,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(typeof tagJson.created_at === "number", "created_at should be a number");
     });
     it("cannot create a tag with invalid characters (comma, colon, space)", () => {
-      const userUriRaw = `pubky://${OTTO}/pub/pubky.app/profile.json`;
+      const userUriRaw = `pubky://${OTTO}/pub/social/v1/profile.json`;
       const userUriFromBuilder = userUriBuilder(OTTO);
       assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
 
@@ -444,31 +446,13 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(muteMeta.url, "Mute should have a URL");
       const muteChunks = muteMeta.url.split("/")
       assert.strictEqual(muteChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(muteChunks[5], "mutes", "URL should contain mutes path");
-      assert.strictEqual(muteChunks[6], muteMeta.id, "URL should contain mute ID");
+      assert.strictEqual(muteChunks[6], "mutes", "URL should contain mutes path");
+      assert.strictEqual(muteChunks[7], muteMeta.id + ".json", "URL should contain mute ID");
 
       // Test mute content
       const muteJson = mute.toJson();
       assert.ok(muteJson.created_at, "Mute should have created_at timestamp");
       assert.ok(typeof muteJson.created_at === "number", "created_at should be a number");
-    });
-  });
-
-  describe("LastRead Pubky-social-specs", () => {
-    it("should create last_read with correct properties", () => {
-      const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead(RIO);
-
-      // Test meta properties
-      assert.ok(lastReadMeta.url, "LastRead should have a URL");
-      const lastReadChunks = lastReadMeta.url.split("/")
-      assert.strictEqual(lastReadChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(lastReadChunks[5], "last_read", "URL should contain last_read path");
-      assert.strictEqual(lastReadChunks.length, 6, "URL should have 6 segments");
-
-      // Test last_read content
-      const lastReadJson = last_read.toJson();
-      assert.ok(lastReadJson.timestamp, "LastRead should have timestamp");
-      assert.ok(typeof lastReadJson.timestamp === "number", "timestamp should be a number");
     });
   });
 
@@ -483,8 +467,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(blobMeta.url, "Blob should have a URL");
       const blobChunks = blobMeta.url.split("/")
       assert.strictEqual(blobChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(blobChunks[5], "blobs", "URL should contain blobs path");
-      assert.strictEqual(blobChunks[6], blobMeta.id, "URL should contain blob ID");
+      assert.strictEqual(blobChunks[6], "blobs", "URL should contain blobs path");
+      assert.strictEqual(blobChunks[7], blobMeta.id, "URL should contain blob ID");
 
       // Test blob content
       const blobJson = blob.toJson();
@@ -505,8 +489,8 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(fileMeta.url, "File should have a URL");
       const fileChunks = fileMeta.url.split("/")
       assert.strictEqual(fileChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(fileChunks[5], "files", "URL should contain files path");
-      assert.strictEqual(fileChunks[6], fileMeta.id, "URL should contain file ID");
+      assert.strictEqual(fileChunks[6], "files", "URL should contain files path");
+      assert.strictEqual(fileChunks[7], fileMeta.id + ".json", "URL should contain file ID");
 
       // Test file content
       const fileJson = file.toJson();

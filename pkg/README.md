@@ -41,7 +41,7 @@ const { user, meta: userMeta } = specs.createUser(
   "active"
 );
 
-console.log(userMeta.url); // pubky://.../pub/pubky.app/profile.json
+console.log(userMeta.url); // pubky://.../pub/social/v1/profile.json
 console.log(user.toJson());
 
 const { post, meta: postMeta } = specs.createPost(
@@ -79,7 +79,6 @@ const { feed, meta } = specs.createFeed({
   domainTags,
   icon,
 });
-const { last_read, meta } = specs.createLastRead();
 ```
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
@@ -96,7 +95,6 @@ import {
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
-  lastReadUriBuilder,
   blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,

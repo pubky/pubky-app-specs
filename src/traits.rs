@@ -89,15 +89,46 @@ pub trait HashId {
     }
 }
 
+/// The storage root a path lives under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Root {
+    Pub,
+    Priv,
+}
+
+impl Root {
+    pub fn segment(&self) -> &'static str {
+        match self {
+            Root::Pub => crate::constants::PUBLIC_ROOT,
+            Root::Priv => crate::constants::PRIVATE_ROOT,
+        }
+    }
+}
+
+/// Validation context: the DESTINATION ROOT the object is being written under.
+/// Models with reference-tier fields need it for the root rule; the rest ignore
+/// it. Nothing else is ever threaded here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidationCtx {
+    pub root: Root,
+}
+
+/// Ingest and single-root-model convenience.
+pub const PUB_CTX: ValidationCtx = ValidationCtx { root: Root::Pub };
+
+/// An alias for now, so `Err(String)` sites keep compiling; may become a
+/// structured enum in a later breaking pass.
+pub type ValidationError = String;
+
 pub trait Validatable: Sized + DeserializeOwned {
-    fn try_from(blob: &[u8], id: &str) -> Result<Self, String> {
+    fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
-        instance.validate(Some(id))?;
+        instance.validate(Some(id), ctx)?;
         Ok(instance)
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String>;
+    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError>;
 
     fn sanitize(self) -> Self {
         self
@@ -105,11 +136,13 @@ pub trait Validatable: Sized + DeserializeOwned {
 }
 
 pub trait HasPath {
+    const ROOT: Root;
     const PATH_SEGMENT: &'static str;
     fn create_path() -> String;
 }
 
 pub trait HasIdPath {
+    const ROOT: Root;
     const PATH_SEGMENT: &'static str;
     fn create_path(id: &str) -> String;
 }
@@ -132,7 +165,7 @@ pub trait Json: Serialize + DeserializeOwned + Validatable {
         let object: Self =
             from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))?;
         let object = object.sanitize();
-        object.validate(None)?;
+        object.validate(None, &PUB_CTX)?;
         Ok(object)
     }
 }

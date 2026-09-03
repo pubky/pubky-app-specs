@@ -87,6 +87,10 @@ pub struct ValidationLimits {
     /// Maximum UTF-8 byte length of a bookmark target that still fits the
     /// reversible filename form; longer targets use the overflow form.
     pub bookmark_target_uri_max_bytes: usize,
+    /// Maximum length of the optional readable label on a post version leaf
+    /// (`{editId}-{label}.json`): chars of `a-z`, `0-9` and `-`. Not an id,
+    /// never hashed, validated as written and stored verbatim.
+    pub post_slug_max_length: usize,
     /// Maximum serialized size of a post object in bytes, envelopes and unknown
     /// members included. Checked before parsing on read and after building on write.
     pub post_max_bytes: usize,
@@ -127,6 +131,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     feed_name_max_length: 100,
     feed_icon_max_length: 50,
     bookmark_target_uri_max_bytes: 187,
+    post_slug_max_length: 64,
     post_max_bytes: 512 * 1024,
     object_max_bytes: 64 * 1024,
 };

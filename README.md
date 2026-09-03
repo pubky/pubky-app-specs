@@ -28,11 +28,11 @@ use serde_json::to_vec;
 
 // Create a user profile
 let user = PubkySocialUser::new("Alice".into(), None, None, None, None);
-let path = PubkySocialUser::create_path(); // /pub/pubky.app/profile.json
+let path = PubkySocialUser::create_path(); // /pub/social/v1/profile.json
 let json = to_vec(&user).unwrap();
 
 // Parse and validate JSON from storage
-let profile = PubkySocialUser::try_from(&json, "").unwrap();
+let profile = PubkySocialUser::try_from(&json, "", &PUB_CTX).unwrap();
 ```
 
 For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/pubky/pubky-social-specs/blob/main/examples/create_user.rs).
@@ -69,7 +69,6 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |
 | `PubkySocialBlob`      | Raw binary file data                     |
-| `PubkySocialLastRead`  | Last-read notification timestamp         |
 
 ## Specification
 

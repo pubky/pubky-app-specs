@@ -8,7 +8,6 @@ import {
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
-  lastReadUriBuilder,
   blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
@@ -106,7 +105,7 @@ console.log();
 // Repost with embed
 console.log(`  ${c.yellow}▸ Repost with Embed${c.reset}`);
 const embed = new PubkySocialPostEmbed(
-  `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`,
+  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`,
   PubkySocialPostKind.Video
 );
 const { post: repost, meta: repostMeta } = specsBuilder.createPost(
@@ -128,8 +127,8 @@ const { post: postWithAttachments, meta: postWithAttachmentsMeta } = specsBuilde
   null,
   null,
   [
-    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ52G`,
-    `pubky://${OTTO}/pub/pubky.app/files/0034A0X7NJ53H`,
+    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
+    `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`,
   ]
 );
 field("ID", postWithAttachmentsMeta.id);
@@ -159,7 +158,7 @@ header("SOCIAL ACTIONS");
 // Bookmark
 console.log(`  ${c.yellow}▸ Bookmark${c.reset}`);
 const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
-  `pubky://${RIO}/pub/pubky.app/posts/0033SREKPC4N0`
+  `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
 );
 field("ID", bookmarkMeta.id);
 field("URI", bookmark.toJson().uri);
@@ -175,7 +174,7 @@ console.log();
 // Tag
 console.log(`  ${c.yellow}▸ Tag${c.reset}`);
 const { tag, meta: tagMeta } = specsBuilder.createTag(
-  `pubky://${OTTO}/pub/pubky.app/profile.json`,
+  `pubky://${OTTO}/pub/social/v1/profile.json`,
   "developer"
 );
 field("ID", tagMeta.id);
@@ -218,9 +217,9 @@ field("Size", `${file.toJson().size} bytes`);
 field("Source", file.toJson().src);
 
 // =============================================================================
-// 5. Feeds & LastRead
+// 5. Feeds
 // =============================================================================
-header("FEEDS & LAST READ");
+header("FEEDS");
 
 // Feed
 console.log(`  ${c.yellow}▸ Custom Feed${c.reset}`);
@@ -258,12 +257,6 @@ field("Reach", wotFeed.toJson().feed.reach);
 field("Domain Tags", wotFeed.toJson().feed.domain_tags.join(", "));
 console.log();
 
-// LastRead
-console.log(`  ${c.yellow}▸ Last Read Marker${c.reset}`);
-const { last_read, meta: lastReadMeta } = specsBuilder.createLastRead();
-field("URL", lastReadMeta.url);
-field("Timestamp", new Date(last_read.toJson().timestamp / 1000).toISOString());
-
 // =============================================================================
 // 6. URI Builders
 // =============================================================================
@@ -275,7 +268,6 @@ const uris = [
   ["Follow", followUriBuilder(OTTO, RIO)],
   ["Tag", tagUriBuilder(OTTO, tagMeta.id)],
   ["Mute", muteUriBuilder(OTTO, RIO)],
-  ["LastRead", lastReadUriBuilder(OTTO)],
   ["Blob", blobUriBuilder(OTTO, blobMeta.id)],
   ["File", fileUriBuilder(OTTO, fileMeta.id)],
   ["Feed", feedUriBuilder(OTTO, feedMeta.id)],

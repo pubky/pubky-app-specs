@@ -1,7 +1,8 @@
+use crate::constants::social_path;
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, HashId, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -15,11 +16,11 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver bookmark with id
-/// URI: /pub/pubky.app/bookmarks/:bookmark_id
+/// URI: /pub/social/v1/bookmarks/:bookmark_id
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
+/// `/pub/social/v1/bookmarks/AF7KQ6NEV5XV1EG5DVJ2E74JJ4`
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -72,15 +73,16 @@ impl HashId for PubkySocialBookmark {
 }
 
 impl HasIdPath for PubkySocialBookmark {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "bookmarks/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
     }
 }
 
 impl Validatable for PubkySocialBookmark {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the bookmark ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -97,6 +99,7 @@ impl Validatable for PubkySocialBookmark {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{post_uri_builder, traits::Validatable};
 
     #[test]
@@ -107,7 +110,7 @@ mod tests {
         };
 
         let bookmark_id = bookmark.create_id();
-        assert_eq!(bookmark_id, "2GN0JCHX9NYXPECQDS8KSMSE7M");
+        assert_eq!(bookmark_id, "6ZT2N9HEDP7DAANBTKF28T2G2W");
     }
 
     #[test]
@@ -118,7 +121,7 @@ mod tests {
             created_at: 1627849723,
         };
         let expected_id = bookmark.create_id();
-        let expected_path = format!("{}{}bookmarks/{}", PUBLIC_PATH, APP_PATH, expected_id);
+        let expected_path = format!("/pub/social/v1/bookmarks/{}.json", expected_id);
         let path = PubkySocialBookmark::create_path(&expected_id);
         assert_eq!(path, expected_path);
     }
@@ -128,7 +131,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkySocialBookmark::new(post_uri);
         let id = bookmark.create_id();
-        let result = bookmark.validate(Some(&id));
+        let result = bookmark.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -137,7 +140,7 @@ mod tests {
         let post_uri = post_uri_builder("user_id".into(), "post_id".into());
         let bookmark = PubkySocialBookmark::new(post_uri);
         let invalid_id = "INVALIDID";
-        let result = bookmark.validate(Some(invalid_id));
+        let result = bookmark.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -147,7 +150,7 @@ mod tests {
         let bookmark = PubkySocialBookmark::new(post_uri);
 
         let id = bookmark.create_id();
-        let res = bookmark.validate(Some(&id));
+        let res = bookmark.validate(Some(&id), &PUB_CTX);
         assert!(res
             .unwrap_err()
             .starts_with("Validation Error: Invalid URI format"));
@@ -155,19 +158,21 @@ mod tests {
 
     #[test]
     fn test_try_from_valid() {
-        let bookmark_json = r#"
-        {
-            "uri": "pubky://user_id/pub/pubky.app/posts/post_id",
-            "created_at": 1627849723
-        }
-        "#;
-
         let uri = post_uri_builder("user_id".into(), "post_id".into());
+        let bookmark_json = format!(
+            r#"
+        {{
+            "uri": "{uri}",
+            "created_at": 1627849723
+        }}
+        "#
+        );
         let bookmark = PubkySocialBookmark::new(uri.clone());
         let id = bookmark.create_id();
 
-        let blob = bookmark_json.as_bytes();
-        let bookmark_parsed = <PubkySocialBookmark as Validatable>::try_from(blob, &id).unwrap();
+        let bookmark_parsed =
+            <PubkySocialBookmark as Validatable>::try_from(bookmark_json.as_bytes(), &id, &PUB_CTX)
+                .unwrap();
 
         assert_eq!(bookmark_parsed.uri, uri);
     }

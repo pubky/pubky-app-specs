@@ -1,7 +1,9 @@
+use crate::constants::social_path;
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, Validatable},
-    PubkyId, APP_PATH, PUBLIC_PATH,
+    PubkyId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,11 +19,11 @@ use utoipa::ToSchema;
 ///
 /// On follow objects, the main data is encoded in the path
 ///
-/// URI: /pub/pubky.app/follows/:user_id
+/// URI: /pub/social/v1/follows/:user_id.json
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
+/// `/pub/social/v1/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -59,7 +61,7 @@ impl PubkySocialFollow {
 impl Json for PubkySocialFollow {}
 
 impl Validatable for PubkySocialFollow {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the followee ID
         if let Some(id) = id {
             PubkyId::try_from(id)?;
@@ -70,10 +72,14 @@ impl Validatable for PubkySocialFollow {
 }
 
 impl HasIdPath for PubkySocialFollow {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "follows/";
 
     fn create_path(pubky_id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
+        social_path(
+            Self::ROOT,
+            &format!("{}{pubky_id}.json", Self::PATH_SEGMENT),
+        )
     }
 }
 
@@ -81,6 +87,7 @@ impl HasIdPath for PubkySocialFollow {
 mod tests {
     use super::*;
     use crate::traits::Validatable;
+    use crate::traits::PUB_CTX;
 
     #[test]
     fn test_new() {
@@ -94,20 +101,23 @@ mod tests {
     #[test]
     fn test_create_path_with_id() {
         let path = PubkySocialFollow::create_path("user_id123");
-        assert_eq!(path, "/pub/pubky.app/follows/user_id123");
+        assert_eq!(path, "/pub/social/v1/follows/user_id123.json");
     }
 
     #[test]
     fn test_validate() {
         let follow = PubkySocialFollow::new();
-        let result = follow.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
+        let result = follow.validate(
+            Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"),
+            &PUB_CTX,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
         let follow = PubkySocialFollow::new();
-        let result = follow.validate(Some("not_a_valid_pubky_id"));
+        let result = follow.validate(Some("not_a_valid_pubky_id"), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -123,6 +133,7 @@ mod tests {
         let follow_parsed = <PubkySocialFollow as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+            &PUB_CTX,
         )
         .unwrap();
 

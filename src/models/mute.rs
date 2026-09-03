@@ -1,7 +1,9 @@
+use crate::constants::social_path;
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     traits::{HasIdPath, Validatable},
-    PubkyId, APP_PATH, PUBLIC_PATH,
+    PubkyId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,11 +16,11 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver Mute object with timestamp
-/// URI: /pub/pubky.app/mutes/:user_id
+/// URI: /pub/social/v1/mutes/:user_id.json
 ///
 /// Example URI:
 ///
-/// `/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
+/// `/pub/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -53,7 +55,7 @@ impl PubkySocialMute {
 impl Json for PubkySocialMute {}
 
 impl Validatable for PubkySocialMute {
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the muteee ID
         if let Some(id) = id {
             PubkyId::try_from(id)?;
@@ -64,10 +66,14 @@ impl Validatable for PubkySocialMute {
 }
 
 impl HasIdPath for PubkySocialMute {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "mutes/";
 
     fn create_path(pubky_id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, pubky_id].concat()
+        social_path(
+            Self::ROOT,
+            &format!("{}{pubky_id}.json", Self::PATH_SEGMENT),
+        )
     }
 }
 
@@ -76,6 +82,7 @@ mod tests {
     use super::*;
     use crate::common::timestamp;
     use crate::traits::Validatable;
+    use crate::traits::PUB_CTX;
 
     #[test]
     fn test_new() {
@@ -92,21 +99,24 @@ mod tests {
             PubkySocialMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
         assert_eq!(
             path,
-            "/pub/pubky.app/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
+            "/pub/social/v1/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo.json"
         );
     }
 
     #[test]
     fn test_validate() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"));
+        let result = mute.validate(
+            Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"),
+            &PUB_CTX,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_invalid_id() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("not_a_valid_pubky_id"));
+        let result = mute.validate(Some("not_a_valid_pubky_id"), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -122,6 +132,7 @@ mod tests {
         let mute_parsed = <PubkySocialMute as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+            &PUB_CTX,
         )
         .unwrap();
 

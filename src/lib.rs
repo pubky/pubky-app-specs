@@ -1,3 +1,4 @@
+mod canonicalize;
 mod common;
 mod constants;
 pub mod limits;
@@ -7,8 +8,11 @@ mod types;
 mod uri;
 
 // Re-export constants
-pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH, VERSION};
+pub use constants::{
+    epoch_segment, social_path, PROTOCOL, SOCIAL_EPOCH, SOCIAL_NAMESPACE, VERSION,
+};
 // Re-export common utilities
+pub use canonicalize::{canonicalize_pubky_uri, canonicalize_target, canonicalize_web_uri};
 pub use common::{
     ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace, mint_timestamp_micros,
     validate_hash_id_format, validate_safe_json_int, validate_timestamp_id_format,
@@ -16,6 +20,7 @@ pub use common::{
 };
 #[doc(inline)]
 pub use limits::*;
+pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
 pub use models::blob::PubkySocialBlob;
 pub use models::bookmark::PubkySocialBookmark;
@@ -25,7 +30,6 @@ pub use models::feed::{
 };
 pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
-pub use models::last_read::PubkySocialLastRead;
 pub use models::mute::PubkySocialMute;
 pub use models::post::{
     PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialPost,
@@ -37,10 +41,9 @@ pub use models::PubkySocialObject;
 pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{
-    base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-    follow_uri_builder, is_pubky_scheme, last_read_uri_builder, mute_uri_builder, post_uri_builder,
-    tag_uri_builder, try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri,
-    PubkyPath, Resource,
+    blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder, follow_uri_builder,
+    is_pubky_scheme, list_prefix_builder, mute_uri_builder, post_uri_builder, tag_uri_builder,
+    user_uri_builder, ParsedUri, Resource, Visibility,
 };
 
 // Our WASM module

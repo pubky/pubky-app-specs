@@ -1,8 +1,9 @@
+use crate::constants::social_path;
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
-    APP_PATH, PUBLIC_PATH,
 };
 use mime::Mime;
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 ];
 
 /// Represents a file uploaded by the user.
-/// URI: /pub/pubky.app/files/:file_id
+/// URI: /pub/social/v1/files/:file_id
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -110,10 +111,11 @@ impl PubkySocialFile {
 impl TimestampId for PubkySocialFile {}
 
 impl HasIdPath for PubkySocialFile {
+    const ROOT: Root = Root::Pub;
     const PATH_SEGMENT: &'static str = "files/";
 
     fn create_path(id: &str) -> String {
-        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
     }
 }
 
@@ -144,7 +146,7 @@ impl Validatable for PubkySocialFile {
         }
     }
 
-    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
         // Validate the file ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -194,6 +196,7 @@ impl Validatable for PubkySocialFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::PUB_CTX;
     use crate::{blob_uri_builder, traits::Validatable};
 
     #[test]
@@ -205,7 +208,7 @@ mod tests {
             1024,
         );
         assert_eq!(file.name, "example.png");
-        assert_eq!(file.src, "pubky://user_id/pub/pubky.app/blobs/id");
+        assert_eq!(file.src, "pubky://user_id/pub/social/v1/blobs/id");
         assert_eq!(file.content_type, "image/png");
         assert_eq!(file.size, 1024);
         // Check that created_at is recent
@@ -225,10 +228,10 @@ mod tests {
         let path = PubkySocialFile::create_path(&file_id);
 
         // Check if the path starts with the expected prefix
-        let prefix = format!("{}{}files/", PUBLIC_PATH, APP_PATH);
+        let prefix = "/pub/social/v1/files/".to_string();
         assert!(path.starts_with(&prefix));
 
-        let expected_path_len = prefix.len() + file_id.len();
+        let expected_path_len = prefix.len() + file_id.len() + ".json".len();
         assert_eq!(path.len(), expected_path_len);
     }
 
@@ -241,7 +244,7 @@ mod tests {
             1024,
         );
         let id = file.create_id();
-        let result = file.validate(Some(&id));
+        let result = file.validate(Some(&id), &PUB_CTX);
         assert!(result.is_ok());
     }
 
@@ -254,7 +257,7 @@ mod tests {
             1024,
         );
         let invalid_id = "INVALIDID";
-        let result = file.validate(Some(invalid_id));
+        let result = file.validate(Some(invalid_id), &PUB_CTX);
         assert!(result.is_err());
     }
 
@@ -296,7 +299,7 @@ mod tests {
 
         for (file, expected_error) in test_cases {
             let id = file.create_id();
-            let result = file.validate(Some(&id));
+            let result = file.validate(Some(&id), &PUB_CTX);
             assert!(
                 result.is_err(),
                 "Should reject file with {}",
@@ -317,7 +320,7 @@ mod tests {
             size: 1024,
         };
         let id = file.create_id();
-        let result = file.validate(Some(&id));
+        let result = file.validate(Some(&id), &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid src"));
     }
@@ -343,7 +346,7 @@ mod tests {
         let id = file.create_id();
 
         let blob = file_json.as_bytes();
-        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id).unwrap();
+        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
 
         assert_eq!(file_parsed.name, "example.png");
         assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");
