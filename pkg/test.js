@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialAttachment, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -68,7 +68,7 @@ describe("PubkySpecs Example Objects Tests", () => {
   describe("Post Pubky-social-specs", () => {
     it("should create basic post with correct properties", () => {
       const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Short);
+      const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Note);
 
       // Test meta properties
       assert.ok(meta.id, "Post should have an ID");
@@ -82,7 +82,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       // Test post content
       const postJson = post.toJson();
       assert.strictEqual(postJson.content, postContent, "Post content should match");
-      assert.strictEqual(postJson.kind, "short", "Post kind should match");
+      assert.strictEqual(postJson.kind, "note", "Post kind should match");
     });
 
     it("should create reply post with parent reference", () => {
@@ -92,7 +92,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
       const { post: replyPost } = specsBuilder.createPost(
         "This is a reply to the first post!",
-        PubkySocialPostKind.Short,
+        PubkySocialPostKind.Note,
         parentPostUriRaw
       );
 
@@ -106,19 +106,44 @@ describe("PubkySpecs Example Objects Tests", () => {
       const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
       assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
 
-      const embed = new PubkySocialPostEmbed(embedUriRaw, PubkySocialPostKind.Video);
       const { post: repost } = specsBuilder.createPost(
         "This is a repost to random post!",
-        PubkySocialPostKind.Short,
+        PubkySocialPostKind.Note,
         null,
-        embed
+        embedUriRaw
       );
 
       // Test repost content
       const repostJson = repost.toJson();
-      assert.ok(repostJson.embed, "Repost should have embed");
-      assert.strictEqual(repostJson.embed.uri, embedUriRaw, "Embed URI should match");
-      assert.strictEqual(repostJson.embed.kind, "video", "Embed kind should match");
+      assert.strictEqual(repostJson.embed, embedUriRaw, "Embed URI should match");
+    });
+
+    it("should carry attachment objects with alt and name", () => {
+      const uri = `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`;
+      const attachment = new PubkySocialAttachment(uri, "a cat", "  cat.jpg  ");
+      assert.strictEqual(attachment.uri, uri);
+      assert.strictEqual(attachment.alt, "a cat");
+      assert.strictEqual(attachment.name, "cat.jpg", "name should be trimmed");
+
+      const { post } = specsBuilder.createPost("", PubkySocialPostKind.Image, null, null, [attachment]);
+      const postJson = post.toJson();
+      assert.deepStrictEqual(postJson.attachments, [{ uri, alt: "a cat", name: "cat.jpg" }]);
+      assert.strictEqual(post.attachments[0].alt, "a cat", "getter should return attachment instances");
+    });
+
+    it("toJson returns a plain object and keeps unknown members", () => {
+      const post = PubkySocialPost.fromJson({
+        content: "x",
+        kind: "note",
+        parent: null,
+        embed: null,
+        attachments: [],
+        later: 1,
+      });
+      const postJson = post.toJson();
+      assert.strictEqual(Object.getPrototypeOf(postJson), Object.prototype, "toJson must not return a Map");
+      assert.strictEqual(postJson.kind, "note");
+      assert.strictEqual(postJson.later, 1, "unknown members survive a round trip");
     });
 
     it("cannot create post with too many attachments", () => {
@@ -134,7 +159,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55O`,
         `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55P`,
         `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55A`, // 11th attachment exceeds limit
-      ];
+      ].map((uri) => new PubkySocialAttachment(uri, null, null));
 
       assert.throws(
         () => {
@@ -165,7 +190,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         const postContent = "Visible preview for locked content";
         const { post } = specsBuilder.createPost(
           postContent,
-          PubkySocialPostKind.Long,
+          PubkySocialPostKind.Note,
           null,
           null,
           null,
@@ -179,7 +204,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       });
 
       it("should create unlocked post when lock is omitted", () => {
-        const { post } = specsBuilder.createPost("Hello", PubkySocialPostKind.Short);
+        const { post } = specsBuilder.createPost("Hello", PubkySocialPostKind.Note);
         const lock = post.lock;
         assert.ok(
           lock === null || lock === undefined,
@@ -195,10 +220,9 @@ describe("PubkySpecs Example Objects Tests", () => {
       it("should deserialize post without lock field as unlocked", () => {
         const post = PubkySocialPost.fromJson({
           content: "Hello World!",
-          kind: "short",
+          kind: "note",
           parent: null,
           embed: null,
-          attachments: null,
         });
         const lock = post.lock;
         assert.ok(
@@ -212,7 +236,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkySocialPostKind.Short,
+              PubkySocialPostKind.Note,
               null,
               null,
               null,
@@ -222,8 +246,8 @@ describe("PubkySpecs Example Objects Tests", () => {
           (err) => {
             const msg = err instanceof Error ? err.message : String(err);
             assert.ok(
-              msg.includes("pubky://"),
-              `Expected pubky:// scheme error, got: "${msg}"`
+              msg.includes("lock"),
+              `Expected lock error, got: "${msg}"`
             );
             return true;
           },
@@ -236,7 +260,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           () => {
             specsBuilder.createPost(
               "Preview",
-              PubkySocialPostKind.Short,
+              PubkySocialPostKind.Note,
               null,
               null,
               null,
@@ -245,10 +269,56 @@ describe("PubkySpecs Example Objects Tests", () => {
           },
           (err) => {
             const msg = err instanceof Error ? err.message : String(err);
-            assert.ok(msg.includes("host"), `Expected host error, got: "${msg}"`);
+            assert.ok(msg.includes("lock"), `Expected lock error, got: "${msg}"`);
             return true;
           },
           "Expected validation error for hostless lock URL"
+        );
+      });
+    });
+
+    describe("Article posts", () => {
+      it("should create article post with JSON envelope content", () => {
+        const { post, meta } = specsBuilder.createArticlePost(
+          "  On Pubky  ",
+          "# Hello\n\nbody",
+          `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`
+        );
+        assert.ok(meta.id, "Article post should have an ID");
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.kind, "article", "Post kind should be article");
+        assert.deepStrictEqual(postJson.attachments, []);
+        const envelope = JSON.parse(postJson.content);
+        assert.strictEqual(envelope.title, "On Pubky", "Title should be trimmed");
+        assert.strictEqual(envelope.body, "# Hello\n\nbody");
+        assert.strictEqual(envelope.cover_image, `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`);
+      });
+
+      it("should accept parent, embed, attachments and lock on an article", () => {
+        const { post } = specsBuilder.createArticlePost(
+          "Reply article",
+          "body",
+          null,
+          `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`,
+          "https://example.com/source",
+          [new PubkySocialAttachment(`pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`, "alt", "a.jpg")],
+          `pubky://${RIO}/pub/app.locks/0034A0X7NJ52G.json`
+        );
+        const postJson = post.toJson();
+        assert.strictEqual(postJson.parent, `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`);
+        assert.strictEqual(postJson.embed, "https://example.com/source");
+        assert.strictEqual(postJson.attachments.length, 1);
+        assert.ok(postJson.lock);
+      });
+
+      it("cannot create article with empty title", () => {
+        assert.throws(
+          () => specsBuilder.createArticlePost("   ", "body", null),
+          (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            assert.ok(msg.includes("title"), `Expected title error, got: "${msg}"`);
+            return true;
+          }
         );
       });
     });
@@ -281,10 +351,7 @@ describe("PubkySpecs Example Objects Tests", () => {
 
         const postJson = post.toJson();
         assert.strictEqual(postJson.kind, "collection", "Post kind should be collection");
-        assert.ok(
-          postJson.attachments === null || postJson.attachments === undefined,
-          "Collection items should not be stored in post.attachments"
-        );
+        assert.deepStrictEqual(postJson.attachments, [], "Collection items should not be stored in post.attachments");
 
         const envelope = JSON.parse(postJson.content);
         assert.strictEqual(envelope.name, "Favorite posts", "Collection name should match");

@@ -3,11 +3,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    traits::Validatable, PubkySocialBookmark, PubkySocialCollectionContent,
-    PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
-    PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
-    PubkySocialPost, PubkySocialPostEmbed, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink, PUB_CTX,
+    traits::Validatable, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialBookmark,
+    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
+    PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
+    PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, PUB_CTX,
 };
 use serde::de::DeserializeOwned;
 
@@ -96,8 +96,8 @@ fn known_wire_strings_round_trip_and_unknown_serializes_as_unknown() {
     round_trips::<PubkySocialFeedLayout>(&["columns", "wide", "visual", "list"]);
     round_trips::<PubkySocialFeedSort>(&["recent", "popularity"]);
     round_trips::<PubkySocialPostKind>(&[
-        "short",
-        "long",
+        "note",
+        "article",
         "image",
         "video",
         "link",
@@ -178,12 +178,11 @@ fn every_json_wire_type_ignores_unknown_fields() {
         r#"{"title":"site","url":"https://example.com/"}"#,
     );
     reads_with_unknown_field::<PubkySocialPost>(
-        r#"{"content":"hello","kind":"short","parent":null,"embed":null,"attachments":null}"#,
+        r#"{"content":"hello","kind":"note","parent":null,"embed":null,"attachments":[]}"#,
     );
-    reads_with_unknown_field::<PubkySocialPostEmbed>(&format!(
-        r#"{{"kind":"short","uri":"{post_uri}"}}"#
-    ));
+    reads_with_unknown_field::<PubkySocialAttachment>(&format!(r#"{{"uri":"{post_uri}"}}"#));
     reads_with_unknown_field::<PubkySocialCollectionContent>(r#"{"name":"Photos","items":[]}"#);
+    reads_with_unknown_field::<PubkySocialArticleContent>(r#"{"title":"t","body":"b"}"#);
     reads_with_unknown_field::<PubkySocialTag>(&format!(
         r#"{{"uri":"{post_uri}","label":"rust","created_at":1727740800000000}}"#
     ));

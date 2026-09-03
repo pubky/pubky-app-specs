@@ -49,7 +49,8 @@ pub struct ValidationLimits {
     pub article_title_max_length: usize,
     /// Maximum article body length in characters.
     pub article_body_max_length: usize,
-    /// Maximum length of the raw article envelope string, checked before it is parsed.
+    /// Maximum length of the raw article envelope string, checked before it is parsed. The
+    /// envelope is JSON-escaped, so a body at its own cap can take twice the code points.
     pub article_content_max_length: usize,
     /// Maximum number of attachments per post.
     pub post_attachments_max_count: usize,
@@ -57,10 +58,11 @@ pub struct ValidationLimits {
     pub attachment_alt_max_length: usize,
     /// Maximum length of an attachment's display name.
     pub attachment_name_max_length: usize,
-    /// Maximum length of a reference URI field. Applied to lock and attachment URLs today;
-    /// parent, embed and tag targets adopt it with their 1.0 validators.
+    /// Maximum length of a reference URI field: parent, embed, lock, attachment URIs.
+    /// Tag and bookmark targets adopt it with their 1.0 validators.
     pub reference_uri_max_length: usize,
-    /// Allowed protocols for attachment URLs.
+    /// Allowed protocols for a collection cover image until its validator moves to the
+    /// canonicalizers; attachments no longer read this.
     pub post_allowed_attachment_protocols: &'static [&'static str],
     /// Maximum scalar count (`chars().count()`, not bytes) for the JSON
     /// envelope content of a Collection post. Sized to hold a
@@ -116,7 +118,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     post_note_content_max_length: 2000,
     article_title_max_length: 100,
     article_body_max_length: 50_000,
-    article_content_max_length: 52_000,
+    article_content_max_length: 104_000,
     post_attachments_max_count: 10,
     attachment_alt_max_length: 1000,
     attachment_name_max_length: 255,
