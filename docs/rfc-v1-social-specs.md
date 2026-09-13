@@ -707,10 +707,12 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 - [ ] **S3** forward-compat contract (`Unknown` on every wire enum).
 - [ ] **S4** validation core: limits table, canonical id validators, frozen text ops, mint guard.
 - [ ] **S5** path epoch + canonicalizers + parser (atomic).
-- [ ] **S6a** post wire shapes on the generic envelope (`PostEnvelope<K>` + kind trait + social
-  alias; kinds, embed, attachments, Article envelope).
-- [ ] **S6b** post storage, roots, lifecycle on the envelope, namespace-parameterized (versioned
-  builders, root rule, publish/unpublish/delete).
+- [ ] **S6a** post wire shapes on the concrete social post (kinds, embed, attachments, Article
+  envelope). The generic `PostEnvelope<K>` moves to J2: wasm-bindgen refuses type parameters on
+  an exported struct, and a wrapper class written now would be deleted when J2 drops the class
+  surface.
+- [ ] **S6b** post storage, roots, lifecycle on the concrete post (versioned builders, root
+  rule, publish/unpublish/delete), with the namespace as a parameter so J2 lifts it unchanged.
 - [ ] **S7** tag + collection (canonical id inputs; collection items become `{uri, note?}`
   objects on the universal tier).
 - [ ] **S8** media collapse (single bytes object, MIME map, parser ext-strip).
@@ -721,7 +723,8 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 **Conformance corpus + JS surface:**
 - [ ] **J1** Rust conformance-vector generator (byte-identity + verdict tiers, fuzzed).
 - [ ] **J2** the v1 wasm surface: function-shaped exports returning `{object, meta}`, an explicit
-  `init()`, TS types.
+  `init()`, TS types. Owns the generic envelope (`PostEnvelope<K>` + kind trait + social alias)
+  once the model structs lose their `#[wasm_bindgen]` attributes.
 - **J3** differential gate, retired: a pure-JS implementation is deferred past v1, and the gate
   returns with it.
 
