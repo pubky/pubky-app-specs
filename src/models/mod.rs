@@ -19,8 +19,8 @@
 //!    user and user link carry it today; the other models adopt it with
 //!    their own wire changes.
 //! 4. One total size cap per object (`Validatable::MAX_BYTES`), checked on
-//!    the raw bytes before parsing and, for the models that adopted it, on
-//!    the serialized bytes in `validate`. It bounds the open-ended `extra`
+//!    the raw bytes before parsing and on the serialized bytes in every
+//!    `validate`, so builders and JSON import cannot skip it. It bounds the open-ended `extra`
 //!    without counting newer known fields against the extension budget.
 //!
 //! Every enum that appears as a value inside a stored JSON object carries a

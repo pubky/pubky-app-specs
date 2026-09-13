@@ -90,7 +90,16 @@ impl Validatable for PubkySocialBlob {
         Ok(instance)
     }
 
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    // Bytes, not JSON: the media cap below is the size rule, so skip the JSON re-serialization.
+    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
+        self.validate_fields(id, ctx)
+    }
+
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Check if the blob data is empty or exceeds maximum size
         if self.0.is_empty() {
             return Err("Validation Error: Blob size cannot be zero".to_string());

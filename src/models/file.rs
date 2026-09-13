@@ -146,7 +146,11 @@ impl Validatable for PubkySocialFile {
         }
     }
 
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Validate the file ID
         if let Some(id) = id {
             self.validate_id(id)?;

@@ -82,7 +82,11 @@ impl HasIdPath for PubkySocialBookmark {
 }
 
 impl Validatable for PubkySocialBookmark {
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Validate the bookmark ID
         if let Some(id) = id {
             self.validate_id(id)?;

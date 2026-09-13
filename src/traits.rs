@@ -135,14 +135,22 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
         Ok(instance)
     }
 
-    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError>;
+    /// The cap first, then the model's own rules, so no in-memory path (builders, JSON
+    /// import) can skip the cap. On the read path this re-serializes an object whose raw
+    /// bytes already passed; that cost is accepted for one code path.
+    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
+        self.validate_size()?;
+        self.validate_fields(id, ctx)
+    }
+
+    /// The model's own rules, without the size cap.
+    fn validate_fields(&self, id: Option<&str>, ctx: &ValidationCtx)
+        -> Result<(), ValidationError>;
 
     fn sanitize(self) -> Self {
         self
     }
 
-    /// The same cap for objects built in memory. On the read path this re-serializes an
-    /// object whose raw bytes already passed; that cost is accepted for one code path.
     fn validate_size(&self) -> Result<(), ValidationError> {
         let len = serde_json::to_vec(self).map_err(|e| e.to_string())?.len();
         check_size(len, Self::MAX_BYTES)

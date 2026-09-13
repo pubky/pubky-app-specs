@@ -1,4 +1,6 @@
-use crate::canonicalize::{check_post_reference, check_pubky_reference, check_target_reference};
+use crate::canonicalize::{
+    check_post_reference, check_pubky_reference, check_target_reference, check_universal_reference,
+};
 use crate::common::{check_extra_keys, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
@@ -305,11 +307,14 @@ impl Validatable for PubkySocialPost {
         }
     }
 
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         if let Some(id) = id {
             self.validate_id(id)?;
         }
-        self.validate_size()?;
         check_extra_keys(
             &self.extra,
             &["content", "kind", "parent", "embed", "attachments", "lock"],
@@ -328,7 +333,8 @@ impl Validatable for PubkySocialPost {
             check_pubky_reference("lock", lock)?;
         }
         if let Some(embed) = &self.embed {
-            check_target_reference("embed", embed)?;
+            // A quote of anything: nostr, geo, ipfs. Attachments and covers stay pubky+web.
+            check_universal_reference("embed", embed)?;
         }
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
@@ -741,12 +747,19 @@ mod tests {
     }
 
     #[test]
-    fn test_embed_accepts_pubky_and_web() {
-        for ok in [post_uri(), "https://example.com/a?b=c".to_string()] {
+    fn test_embed_is_universal() {
+        for ok in [
+            post_uri(),
+            "https://example.com/a?b=c".to_string(),
+            "nostr:nevent1abc".to_string(),
+            "ftp://x/y".to_string(),
+            "geo:1,2".to_string(),
+        ] {
             let quote = post(PubkySocialPostKind::Note, None, Some(&ok), vec![]);
             assert!(validate(&quote).is_ok(), "{ok}");
         }
-        for bad in ["nostr:nevent1abc", "ftp://x/y", " https://example.com", ""] {
+        // Not fixed points of the gate: padding, an unfolded scheme, no scheme at all
+        for bad in [" https://example.com", "IPFS://x", "just words", ""] {
             let quote = post(PubkySocialPostKind::Note, None, Some(bad), vec![]);
             assert!(err(&quote).contains("embed"), "{bad}");
         }

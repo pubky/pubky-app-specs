@@ -178,8 +178,11 @@ impl Validatable for PubkySocialUser {
         }
     }
 
-    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
-        self.validate_size()?;
+    fn validate_fields(
+        &self,
+        _id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         check_extra_keys(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
         // Validate name length
@@ -255,7 +258,11 @@ impl Validatable for PubkySocialUserLink {
         }
     }
 
-    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        _id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         check_extra_keys(&self.extra, &["title", "url"])?;
         if frozen_trim(&self.title).is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());

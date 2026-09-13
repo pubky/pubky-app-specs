@@ -12,7 +12,10 @@ pub use constants::{
     epoch_segment, social_path, PROTOCOL, SOCIAL_EPOCH, SOCIAL_NAMESPACE, VERSION,
 };
 // Re-export common utilities
-pub use canonicalize::{canonicalize_pubky_uri, canonicalize_target, canonicalize_web_uri};
+pub use canonicalize::{
+    canonicalize_external_uri, canonicalize_pubky_uri, canonicalize_target, canonicalize_universal,
+    canonicalize_web_uri,
+};
 pub use common::{
     ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace, mint_timestamp_micros,
     validate_hash_id_format, validate_safe_json_int, validate_timestamp_id_format,

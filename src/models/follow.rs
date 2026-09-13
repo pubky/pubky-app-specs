@@ -61,7 +61,11 @@ impl PubkySocialFollow {
 impl Json for PubkySocialFollow {}
 
 impl Validatable for PubkySocialFollow {
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Validate the followee ID
         if let Some(id) = id {
             PubkyId::try_from(id)?;
