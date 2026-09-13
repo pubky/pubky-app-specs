@@ -82,7 +82,7 @@ const { feed, meta } = specs.createFeed({
 });
 ```
 
-`embed` is a `pubky://` or `https://` URI string. `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
+`embed` is any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme. `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
