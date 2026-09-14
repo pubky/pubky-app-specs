@@ -192,7 +192,18 @@ mod tests {
         let file = p("/pub/social/v1/files/0034A0X7NJ52G");
         assert!(validate(&article("t", "b", Some(&file))).is_ok());
         assert!(validate(&article("t", "b", Some("https://example.com/c.png"))).is_ok());
-        for bad in ["ftp://x/c.png", " https://example.com/c.png", ""] {
+        let short = format!(
+            "pubky{}/pub/social/v1/files/0034A0X7NJ52G",
+            &p("")["pubky://".len()..]
+        );
+        let versioned = p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json");
+        for bad in [
+            "ftp://x/c.png",
+            " https://example.com/c.png",
+            "",
+            short.as_str(),
+            versioned.as_str(),
+        ] {
             assert!(
                 err(&article("t", "b", Some(bad))).contains("cover_image"),
                 "{bad}"

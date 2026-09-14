@@ -1,5 +1,5 @@
 use crate::canonicalize::{checked, AllowedSchemes};
-use crate::common::{check_extra_keys, code_point_len, frozen_trim, validate_timestamp_id_format};
+use crate::common::{check_extra_keys, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
@@ -303,7 +303,7 @@ pub struct MintedVersion {
 impl PubkySocialPost {
     /// "/{root}/social/v1/posts/{id}/{editId}[-{slug}].json". Creation writes `editId == id`,
     /// deterministic so migration never invents a value. The slug is readable decoration on
-    /// the file name, validated with the parser's own rule and never part of the identity.
+    /// the file name, never part of the identity; the builders validate it, this assembles.
     pub fn create_path_in(root: Root, id: &str, edit_id: &str, slug: Option<&str>) -> String {
         let leaf = match slug {
             Some(slug) => format!("{}{id}/{edit_id}-{slug}.json", Self::PATH_SEGMENT),
@@ -333,7 +333,6 @@ impl PubkySocialPost {
         owner: &PubkyId,
         slug: Option<&str>,
     ) -> Result<MintedVersion, String> {
-        validate_timestamp_id_format(id)?;
         self.mint(id.to_string(), self.create_id(), root, owner, slug)
     }
 
@@ -867,11 +866,21 @@ mod tests {
         );
         let mut locked = note("x");
         locked.lock = Some(private.clone());
+        let covered = PubkySocialPost::new_article(
+            "t".into(),
+            "b".into(),
+            Some(priv_file.clone()),
+            None,
+            None,
+            vec![],
+            None,
+        );
         for (name, p) in [
             ("parent", reply),
             ("embed", quote),
             ("attachments[0].uri", with_file),
             ("lock", locked),
+            ("cover_image", covered),
         ] {
             assert!(
                 p.validate(Some(&id), &priv_ctx).is_ok(),
@@ -1009,7 +1018,8 @@ mod tests {
             .unwrap_err();
         assert!(e.contains("parent") && e.contains("another user"), "{e}");
         // A public destination is refused by the root rule before ownership is considered
-        assert!(draft.create_version(Root::Pub, &owner(), None).is_err());
+        let e = draft.create_version(Root::Pub, &owner(), None).unwrap_err();
+        assert!(e.contains("public object"), "{e}");
     }
 
     #[test]

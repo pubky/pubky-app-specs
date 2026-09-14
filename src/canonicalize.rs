@@ -214,17 +214,17 @@ pub fn validate_reference(
     let priv_rooted = path == crate::constants::PRIVATE_ROOT
         || path.starts_with(&format!("{}/", crate::constants::PRIVATE_ROOT));
     if priv_rooted {
+        if ctx.root == Root::Pub {
+            return Err(format!(
+                "a public object cannot reference a private one: {uri}"
+            ));
+        }
         if let Some(owner) = owner {
             if host != owner.as_ref() {
                 return Err(format!(
                     "references a private object of another user: {uri}"
                 ));
             }
-        }
-        if ctx.root == Root::Pub {
-            return Err(format!(
-                "a public object cannot reference a private one: {uri}"
-            ));
         }
     }
     if let Ok(parsed) = crate::ParsedUri::try_from(canonical.as_str()) {
@@ -457,12 +457,19 @@ mod tests {
             validate_reference(u, s, max, &ctx(Root::Pub), None).is_ok()
         };
         for (set, want) in [
-            (PubkyOnly, [true, false, false, false]),
-            (PubkyHttpHttps, [true, true, false, false]),
-            (HttpHttps, [false, true, false, false]),
-            (Universal, [true, true, true, false]),
+            (PubkyOnly, [true, false, false, false, false]),
+            (PubkyHttpHttps, [true, true, false, false, false]),
+            (HttpHttps, [false, true, false, false, false]),
+            (Universal, [true, true, true, false, false]),
         ] {
-            let got = [ok(set, &pk), ok(set, web), ok(set, ext), ok(set, bad)];
+            // an uppercase web scheme is neither the web gate's nor the external arm's
+            let got = [
+                ok(set, &pk),
+                ok(set, web),
+                ok(set, ext),
+                ok(set, bad),
+                ok(set, "HTTP://x"),
+            ];
             assert_eq!(got, want, "{set:?}");
         }
     }
@@ -566,7 +573,8 @@ mod tests {
         let other =
             PubkyId::try_from("8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo").unwrap();
         let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
-        for root in [Root::Pub, Root::Priv] {
+        // The root rule runs first, it needs no owner; ownership is the private-root verdict
+        for (root, reason) in [(Root::Pub, "public object"), (Root::Priv, "another user")] {
             let e = validate_reference(
                 &private,
                 AllowedSchemes::Universal,
@@ -575,7 +583,7 @@ mod tests {
                 Some(&other),
             )
             .unwrap_err();
-            assert!(e.contains("another user"), "{e}");
+            assert!(e.contains(reason), "{e}");
         }
         assert!(validate_reference(
             &private,

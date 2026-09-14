@@ -3,17 +3,19 @@
 //! the caller already fetched and returns ordered operations for the caller to execute. Paths
 //! are owner-relative (`/pub/social/v1/...`), the form a homeserver LIST returns.
 
-use super::content::article::PubkySocialArticleContent;
 use super::content::collection::PubkySocialCollectionContent;
 use super::{PubkySocialPost, PubkySocialPostKind};
+use crate::canonicalize::{validate_reference, AllowedSchemes};
 use crate::constants::{social_path, PROTOCOL};
+use crate::limits::VALIDATION_LIMITS;
 use crate::models::file::PubkySocialFile;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx};
 use crate::types::PubkyId;
 use crate::uri::parse_version_leaf;
 
 /// Publish: media copies first, then the post PUT. Skip-if-exists on a copy is the caller's,
-/// since existence proves completion.
+/// since existence proves completion. The public leaf carries no slug: the slug is private
+/// decoration on a draft, and the public spelling is the plain `{editId}.json`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishPlan {
     /// `(private path, public path)` pairs, in reference order, deduplicated.
@@ -59,21 +61,26 @@ fn is_priv_rooted(uri: &str) -> bool {
         .is_some_and(|(_, path)| path == "priv" || path.starts_with("priv/"))
 }
 
-/// The cover of either envelope, when it parses. An unparsable envelope is validation's error.
-fn cover_of(post: &PubkySocialPost) -> Option<String> {
-    match post.kind {
-        PubkySocialPostKind::Article => {
-            serde_json::from_str::<PubkySocialArticleContent>(&post.content)
-                .ok()
-                .and_then(|e| e.cover_image)
-        }
-        PubkySocialPostKind::Collection => {
-            serde_json::from_str::<PubkySocialCollectionContent>(&post.content)
-                .ok()
-                .and_then(|e| e.cover_image)
-        }
+/// The envelope as a JSON object, for the kinds that carry one and when it parses. An
+/// unparsable envelope is validation's error, not the planner's.
+fn envelope_of(post: &PubkySocialPost) -> Option<serde_json::Map<String, serde_json::Value>> {
+    if !matches!(
+        post.kind,
+        PubkySocialPostKind::Article | PubkySocialPostKind::Collection
+    ) {
+        return None;
+    }
+    match serde_json::from_str(&post.content) {
+        Ok(serde_json::Value::Object(map)) => Some(map),
         _ => None,
     }
+}
+
+fn cover_of(post: &PubkySocialPost) -> Option<String> {
+    envelope_of(post)?
+        .get("cover_image")?
+        .as_str()
+        .map(str::to_string)
 }
 
 /// Media positions in reference order: attachments, then the cover.
@@ -99,19 +106,37 @@ fn other_refs(post: &PubkySocialPost) -> Vec<String> {
 }
 
 /// The owner's private media a version references, first-encountered order, deduplicated.
-/// Any other private reference is the root rule stated as a publish error. Kept in the shape
-/// the media-closure enumerator will export once media collapses to one object.
+/// Every media reference passes the media gate with the author in scope first, so a
+/// non-canonical spelling or another user's private file is a publish error rather than a
+/// dangling reference. Any other private reference is the root rule stated as a publish error.
+/// Kept in the shape the media-closure enumerator will export once media collapses to one
+/// object.
 fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec<String>, String> {
     let own_private = media_prefix(owner, Root::Priv);
+    let priv_ctx = ValidationCtx { root: Root::Priv };
+    let max = VALIDATION_LIMITS.reference_uri_max_length;
     let mut media = Vec::new();
     for uri in media_refs(post) {
+        let canonical = validate_reference(
+            &uri,
+            AllowedSchemes::PubkyHttpHttps,
+            max,
+            &priv_ctx,
+            Some(owner),
+        )
+        .map_err(|e| format!("cannot publish: media reference {e}"))?;
+        if canonical != uri {
+            return Err(format!(
+                "cannot publish: media reference must be spelled in canonical form: {uri}"
+            ));
+        }
         if uri.starts_with(&own_private) {
             if !media.contains(&uri) {
                 media.push(uri);
             }
         } else if is_priv_rooted(&uri) {
             return Err(format!(
-                "cannot publish: private media is not the author's own: {uri}"
+                "cannot publish: a private reference in a media position is not media: {uri}"
             ));
         }
     }
@@ -160,24 +185,14 @@ pub fn plan_publish(
     for attachment in &mut post.attachments {
         attachment.uri = to_public(&attachment.uri, owner);
     }
-    // The cover lives inside the envelope: parse, respell, re-serialize; only when it changes
+    // The cover lives inside the envelope: respell it in place and re-serialize the object as
+    // parsed, so every other member survives verbatim; only when the cover changes
     if let Some(cover) = cover_of(&post) {
         let public = to_public(&cover, owner);
         if public != cover {
-            post.content = match post.kind {
-                PubkySocialPostKind::Article => {
-                    let mut e: PubkySocialArticleContent =
-                        serde_json::from_str(&post.content).map_err(|e| e.to_string())?;
-                    e.cover_image = Some(public);
-                    serde_json::to_string(&e).map_err(|e| e.to_string())?
-                }
-                _ => {
-                    let mut e: PubkySocialCollectionContent =
-                        serde_json::from_str(&post.content).map_err(|e| e.to_string())?;
-                    e.cover_image = Some(public);
-                    serde_json::to_string(&e).map_err(|e| e.to_string())?
-                }
-            };
+            let mut envelope = envelope_of(&post).ok_or("unreachable: the cover parsed")?;
+            envelope.insert("cover_image".into(), serde_json::Value::String(public));
+            post.content = serde_json::Value::Object(envelope).to_string();
         }
     }
     let ctx = ValidationCtx { root: Root::Pub };
@@ -190,9 +205,17 @@ pub fn plan_publish(
     })
 }
 
-/// The editId of a version path, parsed by the path grammar's own rule.
-fn edit_id_of(path: &str) -> Result<String, String> {
-    let leaf = path.rsplit('/').next().unwrap_or(path);
+/// The editId of a version path that lives under this post's directory in the given root,
+/// parsed by the path grammar's own rule.
+fn edit_id_of(post_id: &str, root: Root, path: &str) -> Result<String, String> {
+    let dir = social_path(
+        root,
+        &format!("{}{post_id}/", PubkySocialPost::PATH_SEGMENT),
+    );
+    let leaf = path
+        .strip_prefix(&dir)
+        .filter(|leaf| !leaf.contains('/'))
+        .ok_or_else(|| format!("not a version path of post {post_id} under {dir}: {path}"))?;
     parse_version_leaf(leaf)
         .map(|(v, _)| v)
         .ok_or_else(|| format!("not a post version path: {path}"))
@@ -208,17 +231,27 @@ fn under(root: Root, path: &str) -> String {
     ["/", root.segment(), "/", after_root].concat()
 }
 
-/// Versions sorted oldest first. Bytewise on the editId, never decoded: fixed-width
-/// single-case ids make bytewise order chronological.
-fn sorted_by_edit_id<T: Clone>(
+/// Versions keyed by editId and sorted oldest first. Bytewise on the editId, never decoded:
+/// fixed-width single-case ids make bytewise order chronological. `tiebreak` orders equal
+/// editIds.
+fn sorted_versions<T: Clone>(
+    post_id: &str,
     items: &[T],
-    path: impl Fn(&T) -> &str,
+    locate: impl Fn(&T) -> (Root, &str),
+    tiebreak: impl Fn(&T, &T) -> std::cmp::Ordering,
 ) -> Result<Vec<(String, T)>, String> {
     let mut keyed = items
         .iter()
-        .map(|t| Ok((edit_id_of(path(t))?, t.clone())))
+        .map(|t| {
+            let (root, path) = locate(t);
+            Ok((edit_id_of(post_id, root, path)?, t.clone()))
+        })
         .collect::<Result<Vec<_>, String>>()?;
-    keyed.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    keyed.sort_by(|a, b| {
+        a.0.as_bytes()
+            .cmp(b.0.as_bytes())
+            .then_with(|| tiebreak(&a.1, &b.1))
+    });
     Ok(keyed)
 }
 
@@ -231,9 +264,15 @@ pub fn plan_unpublish(
     legacy_public_paths: &[String],
     private_head_path: Option<&str>,
 ) -> Result<UnpublishPlan, String> {
-    crate::common::validate_timestamp_id_format(post_id)?;
-    let public = sorted_by_edit_id(public_v1_paths, |p| p.as_str())?;
-    let head = private_head_path.map(edit_id_of).transpose()?;
+    let public = sorted_versions(
+        post_id,
+        public_v1_paths,
+        |p| (Root::Pub, p.as_str()),
+        |_, _| std::cmp::Ordering::Equal,
+    )?;
+    let head = private_head_path
+        .map(|p| edit_id_of(post_id, Root::Priv, p))
+        .transpose()?;
     if public.is_empty() && head.is_none() {
         return Err(format!("nothing to unpublish for post {post_id}"));
     }
@@ -266,14 +305,13 @@ pub fn plan_delete(
     parsed_versions: &[PubkySocialPost],
     owner: &PubkyId,
 ) -> Result<DeletePlan, String> {
-    crate::common::validate_timestamp_id_format(post_id)?;
-    let mut copies = sorted_by_edit_id(v1_copies, |(_, p)| p.as_str())?;
-    // stable sort above keeps input order at equal editId; pin pub before priv explicitly
-    copies.sort_by(|a, b| {
-        a.0.as_bytes()
-            .cmp(b.0.as_bytes())
-            .then_with(|| (a.1 .0 == Root::Priv).cmp(&(b.1 .0 == Root::Priv)))
-    });
+    // pub before priv at equal editId, so the public copy goes first
+    let copies = sorted_versions(
+        post_id,
+        v1_copies,
+        |(root, p)| (*root, p.as_str()),
+        |a, b| (a.0 == Root::Priv).cmp(&(b.0 == Root::Priv)),
+    )?;
     let mut deletes = legacy_paths.to_vec();
     deletes.extend(copies.into_iter().map(|(_, (_, p))| p));
 
@@ -296,7 +334,7 @@ pub fn plan_delete(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PubkySocialAttachment;
+    use crate::{PubkySocialArticleContent, PubkySocialAttachment};
 
     const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
     const OTHER: &str = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
@@ -424,9 +462,81 @@ mod tests {
             "pubky://{OTHER}/priv/social/v1/files/0034A0X7NJ52G"
         ))]);
         let e = plan_publish(&id, &id, &foreign, &owner()).unwrap_err();
-        assert!(e.contains("author's own"), "{e}");
+        assert!(e.contains("another user"), "{e}");
+        // the owner's own private post in a media position is not media
+        let not_media = image(vec![att(&format!(
+            "pubky://{PK}/priv/social/v1/posts/{TS}"
+        ))]);
+        let e = plan_publish(&id, &id, &not_media, &owner()).unwrap_err();
+        assert!(e.contains("not media"), "{e}");
         assert!(plan_publish("not-an-id", &id, &reply, &owner()).is_err());
         assert!(plan_publish(&id, "not-an-id", &reply, &owner()).is_err());
+    }
+
+    #[test]
+    fn publish_rewrites_the_collection_cover_and_keeps_every_other_member() {
+        let cover = priv_file("0034A0X7NJ52G");
+        let content = format!(
+            r#"{{"name":"n","items":["pubky://{PK}/pub/social/v1/posts/{TS}"],"cover_image":"{cover}","layout":"carousel","future":1}}"#
+        );
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let id = post_id();
+        let plan = plan_publish(&id, &id, &collection, &owner()).unwrap();
+        assert_eq!(plan.media_copies.len(), 1);
+        let out: PubkySocialPost = serde_json::from_str(&plan.rewritten_post_json).unwrap();
+        let e: serde_json::Value = serde_json::from_str(&out.content).unwrap();
+        assert_eq!(e["cover_image"], pub_file("0034A0X7NJ52G"));
+        assert_eq!(e["layout"], "carousel");
+        assert_eq!(e["future"], 1);
+        assert_eq!(e["name"], "n");
+    }
+
+    #[test]
+    fn publish_dedupes_media_shared_by_attachment_and_cover() {
+        let file = priv_file("0034A0X7NJ52G");
+        let article = PubkySocialPost::new_article(
+            "t".into(),
+            "b".into(),
+            Some(file.clone()),
+            None,
+            None,
+            vec![att(&file)],
+            None,
+        );
+        let id = post_id();
+        let plan = plan_publish(&id, &id, &article, &owner()).unwrap();
+        assert_eq!(plan.media_copies.len(), 1);
+    }
+
+    #[test]
+    fn publish_refuses_a_non_canonical_media_spelling() {
+        let id = post_id();
+        let shouting = image(vec![att(&format!(
+            "PUBKY://{PK}/priv/social/v1/files/0034A0X7NJ52G"
+        ))]);
+        let e = plan_publish(&id, &id, &shouting, &owner()).unwrap_err();
+        assert!(e.contains("media reference"), "{e}");
+    }
+
+    #[test]
+    fn version_paths_must_belong_to_the_post_and_root() {
+        let other_post = format!("/pub/social/v1/posts/{E2}/{E2}.json");
+        assert!(plan_unpublish(TS, &[other_post], &[], None).is_err());
+        let wrong_root = vec![(Root::Priv, pub_v(TS))];
+        assert!(plan_delete(TS, &[], &wrong_root, &[], &owner()).is_err());
+        let nested = format!("/pub/social/v1/posts/{TS}/x/{TS}.json");
+        assert!(plan_unpublish(TS, &[nested], &[], None).is_err());
+        // a slugged leaf is a version like any other
+        let slugged = vec![
+            (
+                Root::Pub,
+                format!("/pub/social/v1/posts/{TS}/{E2}-hello.json"),
+            ),
+            (Root::Priv, priv_v(TS)),
+        ];
+        let plan = plan_delete(TS, &[], &slugged, &[], &owner()).unwrap();
+        assert_eq!(plan.deletes, vec![priv_v(TS), slugged[0].1.clone()]);
     }
 
     fn pub_v(e: &str) -> String {
@@ -466,7 +576,13 @@ mod tests {
                 format!("/priv/social/v1/posts/{TS}/{E3}-hello.json")
             )]
         );
-        assert!(plan_unpublish(TS, &["/pub/social/v1/posts/x/y.json".into()], &[], None).is_err());
+        assert!(plan_unpublish(
+            TS,
+            &[format!("/pub/social/v1/posts/{TS}/y.json")],
+            &[],
+            None
+        )
+        .is_err());
     }
 
     #[test]
