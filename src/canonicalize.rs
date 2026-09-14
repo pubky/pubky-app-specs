@@ -5,7 +5,7 @@
 //! acceptance (userinfo stripped, `..` collapsed, query and fragment ignored) and its behavior
 //! cannot be pinned across versions.
 
-use crate::common::{code_point_len, frozen_trim, is_frozen_whitespace};
+use crate::common::{ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace};
 use crate::limits::VALIDATION_LIMITS;
 use crate::types::PubkyId;
 
@@ -63,8 +63,9 @@ pub fn canonicalize_web_uri(raw: &str) -> Result<String, ()> {
     let after = s
         .strip_prefix("http://")
         .or_else(|| s.strip_prefix("https://"));
+    // The authority runs to the first `/`, `?` or `#` and must not be empty
     match after {
-        Some(rest) if rest.chars().next().is_some_and(|c| c != '/') => Ok(s.to_string()),
+        Some(rest) if !rest.starts_with(['/', '?', '#']) && !rest.is_empty() => Ok(s.to_string()),
         _ => Err(()),
     }
 }
@@ -86,6 +87,108 @@ pub fn canonicalize_target(raw: &str) -> Result<String, ()> {
         return Err(());
     }
     Ok(canonical)
+}
+
+/// The universal tier's third arm: any scheme-shaped URI that is not pubky, http or https
+/// (nostr, geo, ipfs, magnet, did). The scheme folds to lowercase; the rest is opaque, an
+/// identifier rather than a location this crate resolves.
+#[allow(clippy::result_unit_err)]
+pub fn canonicalize_external_uri(raw: &str) -> Result<String, ()> {
+    let s = frozen_trim(raw);
+    if s.chars()
+        .any(|c| c.is_ascii_control() || is_frozen_whitespace(c))
+    {
+        return Err(());
+    }
+    let colon = s.find(':').ok_or(())?;
+    if colon == 0 || colon + 1 == s.len() {
+        return Err(());
+    }
+    let (scheme, rest) = s.split_at(colon);
+    let mut cs = scheme.chars();
+    if !cs.next().ok_or(())?.is_ascii_alphabetic()
+        || !cs.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
+    {
+        return Err(());
+    }
+    let folded = ascii_fold(scheme);
+    // The pubky scheme space is reserved and http(s) has its own gate; dispatch claims both
+    // before this arm, so seeing one here means a caller bypassed it.
+    if folded.starts_with("pubky") || folded == "http" || folded == "https" {
+        return Err(());
+    }
+    Ok([&folded, rest].concat())
+}
+
+/// Universal dispatch: pubky (either form) and web through their own gates, everything else
+/// through the external arm. Capped like `canonicalize_target`.
+#[allow(clippy::result_unit_err)]
+pub fn canonicalize_universal(raw: &str) -> Result<String, ()> {
+    let canonical = if raw.starts_with("pubky") {
+        canonicalize_pubky_uri(raw)?
+    } else if raw.starts_with("http://") || raw.starts_with("https://") {
+        canonicalize_web_uri(raw)?
+    } else {
+        canonicalize_external_uri(raw)?
+    };
+    if code_point_len(&canonical) > VALIDATION_LIMITS.reference_uri_max_length {
+        return Err(());
+    }
+    Ok(canonical)
+}
+
+/// A stored reference is the fixed point of its own canonical spelling. Nothing rewrites it
+/// on the way in or out, so the SDK short form and any padding reject here.
+pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String> {
+    let max = VALIDATION_LIMITS.reference_uri_max_length;
+    let ok = canonicalize_pubky_uri(raw).is_ok_and(|c| c == raw) && code_point_len(raw) <= max;
+    if ok {
+        return Ok(());
+    }
+    Err(format!(
+        "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
+    ))
+}
+
+/// A reference to a post: public, versionless, and a fixed point of the parser's own emitter
+/// (which rejects the short form). Replies and collection items share it.
+pub(crate) fn check_post_reference(raw: &str) -> Result<(), String> {
+    let parsed = crate::ParsedUri::try_from(raw)
+        .map_err(|e| format!("must be a canonical post URI: {e}"))?;
+    match (parsed.visibility, &parsed.resource) {
+        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => {
+            if parsed.try_to_uri_str().as_deref() == Ok(raw) {
+                Ok(())
+            } else {
+                Err(format!("must be spelled in canonical form: {raw}"))
+            }
+        }
+        _ => Err(format!(
+            "must be a public, versionless post reference: {raw}"
+        )),
+    }
+}
+
+/// Same rule for the fields that also accept `http`/`https`; `canonicalize_target` caps.
+pub(crate) fn check_target_reference(field: &str, raw: &str) -> Result<(), String> {
+    if canonicalize_target(raw).is_ok_and(|c| c == raw) {
+        return Ok(());
+    }
+    Err(format!(
+        "Validation Error: {field} must be a canonical pubky or web URI of at most {} code points: {raw}",
+        VALIDATION_LIMITS.reference_uri_max_length
+    ))
+}
+
+/// Same rule for the universal fields; `canonicalize_universal` caps.
+pub(crate) fn check_universal_reference(field: &str, raw: &str) -> Result<(), String> {
+    if canonicalize_universal(raw).is_ok_and(|c| c == raw) {
+        return Ok(());
+    }
+    Err(format!(
+        "Validation Error: {field} must be a canonical URI of at most {} code points: {raw}",
+        VALIDATION_LIMITS.reference_uri_max_length
+    ))
 }
 
 #[cfg(test)]
@@ -176,6 +279,8 @@ mod tests {
             "HTTPS://x.com",
             "https://",
             "https:///path",
+            "https://?q=1",
+            "https://#frag",
             "ftp://x",
             "",
         ] {
@@ -196,5 +301,58 @@ mod tests {
         let long = p(&format!("/pub/{}", "a".repeat(1100)));
         assert!(canonicalize_pubky_uri(&long).is_ok());
         assert!(canonicalize_target(&long).is_err());
+    }
+
+    #[test]
+    fn test_canonicalize_external_uri() {
+        for (raw, want) in [
+            ("nostr:nevent1abc", "nostr:nevent1abc"),
+            ("geo:1,2", "geo:1,2"),
+            ("IPFS://x", "ipfs://x"),
+            ("did:key:z6Mk", "did:key:z6Mk"),
+            ("magnet:?xt=y", "magnet:?xt=y"),
+            (" ftp://x/y ", "ftp://x/y"),
+        ] {
+            let got = canonicalize_external_uri(raw).unwrap();
+            assert_eq!(got, want, "{raw}");
+            assert_eq!(
+                canonicalize_external_uri(&got),
+                Ok(got.clone()),
+                "idempotent {raw}"
+            );
+        }
+        for bad in [
+            "",
+            ":x",
+            "x:",
+            "1abc:x",
+            "a b:c",
+            "nostr:nev\tent",
+            "http://x",
+            "HTTPS://x",
+            "pubky://x",
+            "PUBKY:x",
+            "nocolon",
+        ] {
+            assert!(canonicalize_external_uri(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_canonicalize_universal_dispatch() {
+        assert_eq!(canonicalize_universal(&format!("pubky{HOST}")), Ok(p("")));
+        assert_eq!(
+            canonicalize_universal("https://x.com/a?b"),
+            Ok("https://x.com/a?b".into())
+        );
+        assert_eq!(canonicalize_universal("Nostr:abc"), Ok("nostr:abc".into()));
+        // A pubky-prefixed value never falls through to the external arm
+        assert!(canonicalize_universal("pubkyjunk:abc").is_err());
+        assert!(canonicalize_universal("https://?q").is_err());
+        let long = format!(
+            "nostr:{}",
+            "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
+        );
+        assert!(canonicalize_universal(&long).is_err());
     }
 }

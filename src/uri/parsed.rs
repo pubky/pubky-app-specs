@@ -570,8 +570,7 @@ mod tests {
         let err =
             PubkySocialObject::from_resource(&post(TS, None, None), b"{}", &PUB_CTX).unwrap_err();
         assert!(err.contains("versionless"), "{err}");
-        let body =
-            br#"{"content":"x","kind":"short","parent":null,"embed":null,"attachments":null}"#;
+        let body = br#"{"content":"x","kind":"note","parent":null,"embed":null,"attachments":[]}"#;
         assert!(
             PubkySocialObject::from_resource(&post(TS, Some(TS), None), body, &PUB_CTX).is_ok()
         );

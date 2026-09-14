@@ -267,18 +267,25 @@ impl PubkySpecsBuilder {
     // 4. PubkySocialPost
     // -----------------------------------------------------------------------------
 
-    /// Optional `lock`: `pubky://` URL with a host pointing at a lock server.
+    /// Optional `lock`: the canonical `pubky://` URI of the lock file.
     #[wasm_bindgen(js_name = createPost)]
     pub fn create_post(
         &self,
         content: String,
         kind: PubkySocialPostKind,
         parent: Option<String>,
-        embed: Option<PubkySocialPostEmbed>,
-        attachments: Option<Vec<String>>,
+        embed: Option<String>,
+        attachments: Option<Vec<PubkySocialAttachment>>,
         lock: Option<String>,
     ) -> Result<PostResult, String> {
-        let post = PubkySocialPost::new_with_lock(content, kind, parent, embed, attachments, lock);
+        let post = PubkySocialPost::new_with_lock(
+            content,
+            kind,
+            parent,
+            embed,
+            attachments.unwrap_or_default(),
+            lock,
+        );
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
 
@@ -311,7 +318,39 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
-    /// Creates a `kind = Collection` post — a curated list of URIs under
+    /// Creates a `kind = Article` post: builds the `{ title, body, cover_image }`
+    /// envelope and JSON-serializes it into `content`, so JS callers do not
+    /// stringify it themselves. Articles may reply, quote and carry attachments.
+    #[wasm_bindgen(js_name = createArticlePost)]
+    pub fn create_article_post(
+        &self,
+        title: String,
+        body: String,
+        cover_image: Option<String>,
+        parent: Option<String>,
+        embed: Option<String>,
+        attachments: Option<Vec<PubkySocialAttachment>>,
+        lock: Option<String>,
+    ) -> Result<PostResult, String> {
+        let post = PubkySocialPost::new_article(
+            title,
+            body,
+            cover_image,
+            parent,
+            embed,
+            attachments.unwrap_or_default(),
+            lock,
+        );
+        let post_id = post.create_id();
+        post.validate(Some(&post_id), &PUB_CTX)?;
+
+        let path = PubkySocialPost::create_path(&post_id);
+        let meta = Meta::from_object(Some(&post_id), self.pubky_id.clone(), path);
+
+        Ok(PostResult { post, meta })
+    }
+
+    /// Creates a `kind = Collection` post, a curated list of URIs under
     /// a name and optional description.
     ///
     /// Convenience wrapper around `createPost` that builds the
@@ -345,7 +384,8 @@ impl PubkySpecsBuilder {
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
 
-        let post = PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, None);
+        let post =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
 

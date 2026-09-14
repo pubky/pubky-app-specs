@@ -161,7 +161,11 @@ impl Validatable for PubkySocialTag {
         }
     }
 
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Validate the tag ID
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -182,6 +186,21 @@ mod tests {
     use super::*;
     use crate::traits::PUB_CTX;
     use crate::{post_uri_builder, traits::Validatable, user_uri_builder};
+
+    #[test]
+    fn test_in_memory_size_cap() {
+        // A URL past the object cap parses as a URL, so only the cap can reject it
+        let tag = PubkySocialTag {
+            uri: format!("https://x.com/{}", "a".repeat(PubkySocialTag::MAX_BYTES)),
+            created_at: 1627849723,
+            label: "cool".to_string(),
+        };
+        assert!(tag.validate_fields(None, &PUB_CTX).is_ok());
+        assert!(tag
+            .validate(None, &PUB_CTX)
+            .unwrap_err()
+            .contains("exceeds"));
+    }
 
     #[test]
     fn test_label_id() {

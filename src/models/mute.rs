@@ -55,7 +55,11 @@ impl PubkySocialMute {
 impl Json for PubkySocialMute {}
 
 impl Validatable for PubkySocialMute {
-    fn validate(&self, id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Validate the muteee ID
         if let Some(id) = id {
             PubkyId::try_from(id)?;

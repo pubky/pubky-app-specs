@@ -58,6 +58,7 @@ fn test_create_user_rust_api() {
         &to_value(&PubkySocialUserLink {
             title: "GitHub".to_string(),
             url: "https://github.com/alice".to_string(),
+            extra: Default::default(),
         })
         .unwrap(),
     );
@@ -65,6 +66,7 @@ fn test_create_user_rust_api() {
         &to_value(&PubkySocialUserLink {
             title: "Website".to_string(),
             url: "https://alice.dev".to_string(),
+            extra: Default::default(),
         })
         .unwrap(),
     );
@@ -160,10 +162,9 @@ fn test_post_from_json() {
     let post_json = r#"
     {
         "content": "Hello from JSON!",
-        "kind": "long",
+        "kind": "note",
         "parent": null,
-        "embed": null,
-        "attachments": null
+        "embed": null
     }
     "#;
     // Convert the JSON string into a JsValue.
@@ -172,9 +173,9 @@ fn test_post_from_json() {
     let post = PubkySocialPost::from_json(&js_value).expect("Post should deserialize successfully");
 
     assert_eq!(post.content, "Hello from JSON!");
-    assert_eq!(post.kind, PubkySocialPostKind::Long);
+    assert_eq!(post.kind, PubkySocialPostKind::Note);
     assert_eq!(post.embed, None);
-    assert_eq!(post.attachments, None);
+    assert!(post.attachments.is_empty());
 }
 
 #[wasm_bindgen_test]

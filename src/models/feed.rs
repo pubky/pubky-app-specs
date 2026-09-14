@@ -231,7 +231,11 @@ impl Validatable for PubkySocialFeedConfig {
         }
     }
 
-    fn validate(&self, _id: Option<&str>, _ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        _id: Option<&str>,
+        _ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // reach, layout and sort define the feed, so an unknown value rejects it.
         // An unknown content filter only degrades to "no filter", so it passes.
         if !self.reach.is_known() {
@@ -339,7 +343,11 @@ impl HasIdPath for PubkySocialFeed {
 }
 
 impl Validatable for PubkySocialFeed {
-    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
+    fn validate_fields(
+        &self,
+        id: Option<&str>,
+        ctx: &ValidationCtx,
+    ) -> Result<(), ValidationError> {
         // Content first, so an unrecognized value is reported as such and not as an id mismatch
         self.feed.validate(None, ctx)?;
 

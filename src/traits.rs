@@ -1,7 +1,9 @@
 use crate::common::{mint_timestamp_micros, timestamp, validate_timestamp_id_format};
+use crate::limits::VALIDATION_LIMITS;
 use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
@@ -120,19 +122,46 @@ pub const PUB_CTX: ValidationCtx = ValidationCtx { root: Root::Pub };
 /// structured enum in a later breaking pass.
 pub type ValidationError = String;
 
-pub trait Validatable: Sized + DeserializeOwned {
+pub trait Validatable: Sized + Serialize + DeserializeOwned {
+    /// Total serialized size cap. One cap on the whole object bounds the `extra` map without
+    /// counting newer known fields against the extension budget; tightening it later is a break.
+    const MAX_BYTES: usize = VALIDATION_LIMITS.object_max_bytes;
+
     fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
+        check_size(blob.len(), Self::MAX_BYTES)?;
         let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance = instance.sanitize();
         instance.validate(Some(id), ctx)?;
         Ok(instance)
     }
 
-    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError>;
+    /// The cap first, then the model's own rules, so no in-memory path (builders, JSON
+    /// import) can skip the cap. On the read path this re-serializes an object whose raw
+    /// bytes already passed; that cost is accepted for one code path.
+    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
+        self.validate_size()?;
+        self.validate_fields(id, ctx)
+    }
+
+    /// The model's own rules, without the size cap.
+    fn validate_fields(&self, id: Option<&str>, ctx: &ValidationCtx)
+        -> Result<(), ValidationError>;
 
     fn sanitize(self) -> Self {
         self
     }
+
+    fn validate_size(&self) -> Result<(), ValidationError> {
+        let len = serde_json::to_vec(self).map_err(|e| e.to_string())?.len();
+        check_size(len, Self::MAX_BYTES)
+    }
+}
+
+fn check_size(len: usize, max: usize) -> Result<(), ValidationError> {
+    if len > max {
+        return Err(format!("Validation Error: object exceeds {max} bytes"));
+    }
+    Ok(())
 }
 
 pub trait HasPath {
@@ -148,9 +177,7 @@ pub trait HasIdPath {
 }
 
 #[cfg(target_arch = "wasm32")]
-use serde::Serialize;
-#[cfg(target_arch = "wasm32")]
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::from_value;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 
@@ -158,7 +185,10 @@ use wasm_bindgen::JsValue;
 #[cfg(target_arch = "wasm32")]
 pub trait Json: Serialize + DeserializeOwned + Validatable {
     fn export_json(&self) -> Result<JsValue, String> {
-        to_value(&self).map_err(|e| format!("JSON serialization error: {}", e))
+        // A flattened `extra` makes serde emit the struct as a map; keep it a plain object
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        self.serialize(&serializer)
+            .map_err(|e| format!("JSON serialization error: {}", e))
     }
 
     fn import_json(js_value: &JsValue) -> Result<Self, String> {
