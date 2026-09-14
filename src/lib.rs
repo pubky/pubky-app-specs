@@ -9,7 +9,7 @@ mod uri;
 
 // Re-export constants
 pub use constants::{
-    epoch_segment, social_path, PROTOCOL, SOCIAL_EPOCH, SOCIAL_NAMESPACE, VERSION,
+    epoch_segment, namespace_path, social_path, PROTOCOL, SOCIAL_EPOCH, SOCIAL_NAMESPACE, VERSION,
 };
 // Re-export common utilities
 pub use canonicalize::{
@@ -35,7 +35,7 @@ pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
 pub use models::mute::PubkySocialMute;
 pub use models::post::{
-    PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
+    MintedVersion, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
     PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
 };
 pub use models::tag::PubkySocialTag;

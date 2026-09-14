@@ -102,7 +102,7 @@ fn is_epoch_segment(s: &str) -> bool {
 }
 
 /// The optional readable tail of a post version leaf: 1 to 64 chars of `[a-z0-9-]`.
-fn is_valid_label(l: &str) -> bool {
+pub(crate) fn is_valid_label(l: &str) -> bool {
     !l.is_empty()
         && l.len() <= VALIDATION_LIMITS.post_slug_max_length
         && l.bytes()

@@ -12,17 +12,23 @@ pub fn epoch_segment() -> String {
     format!("v{SOCIAL_EPOCH}")
 }
 
-/// "/{root}/social/v1/{leaf}". The single path-assembly point.
-pub fn social_path(root: crate::traits::Root, leaf: &str) -> String {
+/// "/{root}/{namespace}/v1/{leaf}". The single path-assembly point; the epoch is this
+/// crate's, whatever the namespace.
+pub fn namespace_path(root: crate::traits::Root, namespace: &str, leaf: &str) -> String {
     [
         "/",
         root.segment(),
         "/",
-        SOCIAL_NAMESPACE,
+        namespace,
         "/",
         &epoch_segment(),
         "/",
         leaf,
     ]
     .concat()
+}
+
+/// "/{root}/social/v1/{leaf}".
+pub fn social_path(root: crate::traits::Root, leaf: &str) -> String {
+    namespace_path(root, SOCIAL_NAMESPACE, leaf)
 }

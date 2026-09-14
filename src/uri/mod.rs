@@ -17,6 +17,7 @@ pub use builders::{
 };
 
 // Strict
+pub(crate) use parsed::is_valid_label;
 pub use parsed::{ParsedUri, Visibility};
 pub use resource::Resource;
 

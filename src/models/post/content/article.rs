@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::canonicalize::{checked, AllowedSchemes};
 use crate::common::check_extra_keys;
 use crate::traits::ValidationCtx;
 
@@ -34,10 +33,10 @@ pub struct PubkySocialArticleContent {
 }
 
 /// Validates the envelope of a `kind = Article` post. The post-level rules (references,
-/// attachments) run before this in `PubkySocialPost::validate`.
+/// the cover included, attachments) run before this in `PubkySocialPost::validate`.
 pub(crate) fn validate_article_post(
     post: &PubkySocialPost,
-    ctx: &ValidationCtx,
+    _ctx: &ValidationCtx,
 ) -> Result<(), String> {
     if code_point_len(&post.content) > VALIDATION_LIMITS.article_content_max_length {
         return Err(format!(
@@ -74,16 +73,7 @@ pub(crate) fn validate_article_post(
             VALIDATION_LIMITS.article_body_max_length
         ));
     }
-    if let Some(cover) = &envelope.cover_image {
-        checked(
-            "cover_image",
-            cover,
-            AllowedSchemes::PubkyHttpHttps,
-            VALIDATION_LIMITS.image_url_max_length,
-            ctx,
-            None,
-        )?;
-    }
+    // The cover is a reference position and runs through the post-level gate
     Ok(())
 }
 
