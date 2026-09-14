@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
 pub mod content;
+pub mod lifecycle;
 
 pub use content::{
     PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionLayout,

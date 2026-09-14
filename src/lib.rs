@@ -34,6 +34,9 @@ pub use models::feed::{
 pub use models::file::{PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
 pub use models::mute::PubkySocialMute;
+pub use models::post::lifecycle::{
+    plan_delete, plan_publish, plan_unpublish, DeletePlan, PublishPlan, UnpublishPlan,
+};
 pub use models::post::{
     MintedVersion, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
     PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,

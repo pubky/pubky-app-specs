@@ -111,7 +111,7 @@ pub(crate) fn is_valid_label(l: &str) -> bool {
 
 /// Splits a post version leaf: strips `.json`, then splits at the FIRST `-`. The head must be
 /// a canonical TimestampId; the optional tail is the label.
-fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)> {
+pub(crate) fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)> {
     let stem = leaf.strip_suffix(".json")?;
     let (version, label) = match stem.split_once('-') {
         Some((v, l)) if is_valid_label(l) => (v, Some(l.to_string())),
