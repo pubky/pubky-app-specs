@@ -202,7 +202,7 @@ pass removes it once the owner agrees (Part C).
 
   | Field | Tier |
   |---|---|
-  | `post.parent` | pubky-only |
+  | `post.parent` | universal |
   | `post.embed` | universal |
   | `post.lock` | pubky-only |
   | `collection.items[].uri` | universal |
@@ -335,8 +335,10 @@ v0 `pub/pubky.app/posts/{id}` (one flat file, overwritten on edit) -> v1
   scheme-shaped identifier (`nostr:`, `geo:`, `ipfs:`, `did:`) through a pinned opaque gate
   (lowercased scheme + rest verbatim, no engine parsing). The indexer attaches the post to the same External Resource
   nodes (its graph records for non-pubky targets) that it builds
-  for external tag targets. `parent` stays pubky-only (a reply is a social-graph edge with
-  thread semantics that exist only between posts). This also keeps migration total (every real v0 record has a valid v1 image; nothing fails to
+  for external tag targets. `parent` takes the same tier, so a thread can be rooted at any
+  resource (a web page, a nostr event, a user) and tagging, quoting and replying are three edges
+  to one target with one vocabulary; a post reference in any of these positions must be
+  versionless (it names the logical post, not a version). This also keeps migration total (every real v0 record has a valid v1 image; nothing fails to
   migrate): v0's `Url::parse` accepted arbitrary schemes, so real v0 data can carry them.
 - **`attachments`** become `Vec<{uri, alt?, name?}>`, always `[]` never null. Objects, not strings,
   so per-item metadata (alt text now; hash/blurhash later) is additive; ships two committed fields.
