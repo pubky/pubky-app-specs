@@ -1,6 +1,4 @@
-use crate::canonicalize::{
-    check_post_reference, check_pubky_reference, check_target_reference, check_universal_reference,
-};
+use crate::canonicalize::{checked, AllowedSchemes};
 use crate::common::{check_extra_keys, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
@@ -310,7 +308,7 @@ impl Validatable for PubkySocialPost {
     fn validate_fields(
         &self,
         id: Option<&str>,
-        _ctx: &ValidationCtx,
+        ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
         if let Some(id) = id {
             self.validate_id(id)?;
@@ -325,20 +323,22 @@ impl Validatable for PubkySocialPost {
             return Err("Validation Error: post kind is unknown".into());
         }
 
+        // A thread may be rooted at anything, a post, a user, a web page, a nostr event, and a
+        // quote may point at anything; both share the tag target's tier. `lock` is a pubky
+        // object of the author's.
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
         if let Some(parent) = &self.parent {
-            // A reply is a thread edge, so the target must be a post
-            check_post_reference(parent).map_err(|e| format!("Validation Error: parent {e}"))?;
-        }
-        if let Some(lock) = &self.lock {
-            check_pubky_reference("lock", lock)?;
+            checked("parent", parent, AllowedSchemes::Universal, max, ctx, None)?;
         }
         if let Some(embed) = &self.embed {
-            // A quote of anything: nostr, geo, ipfs. Attachments and covers stay pubky+web.
-            check_universal_reference("embed", embed)?;
+            checked("embed", embed, AllowedSchemes::Universal, max, ctx, None)?;
+        }
+        if let Some(lock) = &self.lock {
+            checked("lock", lock, AllowedSchemes::PubkyOnly, max, ctx, None)?;
         }
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
-            return content::collection::validate_collection_post(self);
+            return content::collection::validate_collection_post(self, ctx);
         }
 
         if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
@@ -349,7 +349,14 @@ impl Validatable for PubkySocialPost {
         }
         for (index, attachment) in self.attachments.iter().enumerate() {
             check_extra_keys(&attachment.extra, &["uri", "alt", "name"])?;
-            check_target_reference(&format!("attachments[{index}].uri"), &attachment.uri)?;
+            checked(
+                &format!("attachments[{index}].uri"),
+                &attachment.uri,
+                AllowedSchemes::PubkyHttpHttps,
+                max,
+                ctx,
+                None,
+            )?;
             if let Some(alt) = &attachment.alt {
                 if code_point_len(alt) > VALIDATION_LIMITS.attachment_alt_max_length {
                     return Err(format!(
@@ -370,7 +377,7 @@ impl Validatable for PubkySocialPost {
         }
 
         if matches!(self.kind, PubkySocialPostKind::Article) {
-            return content::article::validate_article_post(self);
+            return content::article::validate_article_post(self, ctx);
         }
 
         // Note, Image, Video, Link, File: untyped content
@@ -725,25 +732,76 @@ mod tests {
     // ---- references ----
 
     #[test]
-    fn test_parent_is_pubky_only_and_canonical() {
-        let mut ok = post(PubkySocialPostKind::Note, Some(&post_uri()), None, vec![]);
-        ok.content = "re".into();
-        assert!(validate(&ok).is_ok());
-        for bad in [
+    fn test_parent_is_universal_and_versionless() {
+        // A thread can be rooted at a post, a user, a web page or an external resource
+        for ok in [
+            post_uri(),
+            p(""),
             "https://example.com/post".to_string(),
+            "nostr:nevent1abc".to_string(),
+        ] {
+            let mut reply = post(PubkySocialPostKind::Note, Some(&ok), None, vec![]);
+            reply.content = "re".into();
+            assert!(validate(&reply).is_ok(), "{ok}");
+        }
+        for bad in [
             format!("pubky{PK}/pub/social/v1/posts/0032SSN7Q4EVG"),
             p("/pub/social/v1/posts/../profile.json"),
             p("/pub/social/v1/posts/00%32"),
-            p("/pub/social/v1/profile.json"),
             p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json"),
             p("/priv/social/v1/posts/0032SSN7Q4EVG"),
-            p(""),
+            " https://example.com".to_string(),
+            "IPFS://x".to_string(),
             String::new(),
         ] {
             let mut reply = post(PubkySocialPostKind::Note, Some(&bad), None, vec![]);
             reply.content = "re".into();
             assert!(err(&reply).contains("parent"), "{bad}");
         }
+    }
+
+    #[test]
+    fn test_root_rule_on_every_reference_position() {
+        let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
+        let priv_file = p("/priv/social/v1/files/0034A0X7NJ52G");
+        let priv_ctx = ValidationCtx { root: Root::Priv };
+        let id = PubkySocialPost::default().create_id();
+        let mut reply = post(PubkySocialPostKind::Note, Some(&private), None, vec![]);
+        reply.content = "re".into();
+        let quote = post(PubkySocialPostKind::Note, None, Some(&private), vec![]);
+        let with_file = post(
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att(&priv_file)],
+        );
+        let mut locked = note("x");
+        locked.lock = Some(private.clone());
+        for (name, p) in [
+            ("parent", reply),
+            ("embed", quote),
+            ("attachments[0].uri", with_file),
+            ("lock", locked),
+        ] {
+            assert!(
+                p.validate(Some(&id), &priv_ctx).is_ok(),
+                "{name} under priv"
+            );
+            let e = p.validate(Some(&id), &PUB_CTX).unwrap_err();
+            assert!(
+                e.contains(name) && e.contains("public object"),
+                "{name}: {e}"
+            );
+        }
+        // a web attachment is root-indifferent
+        let web = post(
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att("https://x.com/a.png")],
+        );
+        assert!(web.validate(Some(&id), &priv_ctx).is_ok());
+        assert!(web.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]

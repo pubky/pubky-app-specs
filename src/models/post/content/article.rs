@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::canonicalize::check_target_reference;
+use crate::canonicalize::{checked, AllowedSchemes};
 use crate::common::check_extra_keys;
+use crate::traits::ValidationCtx;
 
 use super::super::PubkySocialPost;
 
@@ -34,7 +35,10 @@ pub struct PubkySocialArticleContent {
 
 /// Validates the envelope of a `kind = Article` post. The post-level rules (references,
 /// attachments) run before this in `PubkySocialPost::validate`.
-pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String> {
+pub(crate) fn validate_article_post(
+    post: &PubkySocialPost,
+    ctx: &ValidationCtx,
+) -> Result<(), String> {
     if code_point_len(&post.content) > VALIDATION_LIMITS.article_content_max_length {
         return Err(format!(
             "Validation Error: Article content must be at most {} code points",
@@ -71,14 +75,14 @@ pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String
         ));
     }
     if let Some(cover) = &envelope.cover_image {
-        // The tighter image cap first, so the error names the bound that applies
-        if code_point_len(cover) > VALIDATION_LIMITS.image_url_max_length {
-            return Err(format!(
-                "Validation Error: cover_image must be at most {} code points",
-                VALIDATION_LIMITS.image_url_max_length
-            ));
-        }
-        check_target_reference("cover_image", cover)?;
+        checked(
+            "cover_image",
+            cover,
+            AllowedSchemes::PubkyHttpHttps,
+            VALIDATION_LIMITS.image_url_max_length,
+            ctx,
+            None,
+        )?;
     }
     Ok(())
 }
