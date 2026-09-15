@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::common::check_extra_keys;
+use crate::common::check_extra;
 use crate::traits::ValidationCtx;
 
 use super::super::PubkySocialPost;
@@ -47,7 +47,7 @@ pub(crate) fn validate_article_post(
     let envelope: PubkySocialArticleContent = serde_json::from_str(&post.content).map_err(|e| {
         format!("Validation Error: Article content must be a valid JSON envelope: {e}")
     })?;
-    check_extra_keys(&envelope.extra, &["title", "body", "cover_image"])?;
+    check_extra(&envelope.extra, &["title", "body", "cover_image"])?;
     // Other controls escape to six characters and would break the two-to-one envelope bound
     let is_control = |c: char| c.is_ascii_control() && !matches!(c, '\t' | '\n' | '\r');
     if envelope.title.chars().any(is_control) || envelope.body.chars().any(is_control) {

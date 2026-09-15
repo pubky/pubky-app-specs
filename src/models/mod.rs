@@ -12,8 +12,11 @@
 //! 3. Unknown members are preserved, not only tolerated. A wire model carries
 //!    a flattened `extra` map that a read-modify-write carries through
 //!    untouched, so an older client never drops a newer client's data. It is
-//!    opaque: never validated beyond one rule, it must not shadow a known
-//!    field, and never written by builders. Deliberate extensions live under
+//!    opaque: never validated beyond two rules, it must not shadow a known
+//!    field and its integers must be JSON-safe (the 53-bit rule every known
+//!    integer already obeys, so any JSON engine carries the value back), and
+//!    never written by builders. Member order and escape spelling are not
+//!    part of the contract; values are. Deliberate extensions live under
 //!    the reserved `ext` member and are hostile input until the extension's
 //!    own rules have checked them. Post, attachment, the article envelope,
 //!    user and user link carry it today; the other models adopt it with

@@ -186,11 +186,16 @@ pub fn plan_publish(
         attachment.uri = to_public(&attachment.uri, owner);
     }
     // The cover lives inside the envelope: respell it in place and re-serialize the object as
-    // parsed, so every other member survives verbatim; only when the cover changes
+    // parsed, so every other member comes back with its value (validation already bounded the
+    // integers to the JSON-safe range); only when the cover changes
     if let Some(cover) = cover_of(&post) {
         let public = to_public(&cover, owner);
         if public != cover {
             let mut envelope = envelope_of(&post).ok_or("unreachable: the cover parsed")?;
+            // Until every envelope validates its unknown members, the planner refuses to
+            // re-emit an integer a JSON engine cannot carry back
+            crate::common::check_safe_numbers(&serde_json::Value::Object(envelope.clone()))
+                .map_err(|e| format!("cannot publish: {e}"))?;
             envelope.insert("cover_image".into(), serde_json::Value::String(public));
             post.content = serde_json::Value::Object(envelope).to_string();
         }
@@ -504,6 +509,13 @@ mod tests {
         assert_eq!(e["layout"], "carousel");
         assert_eq!(e["future"], 1);
         assert_eq!(e["name"], "n");
+        // an integer no JSON engine carries back is refused, not re-spelled
+        let content =
+            format!(r#"{{"name":"n","items":[],"cover_image":"{cover}","big":9007199254740992}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let e = plan_publish(&id, &id, &collection, &owner()).unwrap_err();
+        assert!(e.contains("JSON-safe"), "{e}");
     }
 
     #[test]

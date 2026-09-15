@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
-    common::{check_extra_keys, code_point_len, frozen_trim, sanitize_url},
+    common::{check_extra, code_point_len, frozen_trim, sanitize_url},
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
 };
@@ -183,7 +183,7 @@ impl Validatable for PubkySocialUser {
         _id: Option<&str>,
         _ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
-        check_extra_keys(&self.extra, &["name", "bio", "image", "links", "status"])?;
+        check_extra(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
         // Validate name length
         let name_length = code_point_len(&self.name);
@@ -263,7 +263,7 @@ impl Validatable for PubkySocialUserLink {
         _id: Option<&str>,
         _ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
-        check_extra_keys(&self.extra, &["title", "url"])?;
+        check_extra(&self.extra, &["title", "url"])?;
         if frozen_trim(&self.title).is_empty() {
             return Err("Validation Error: Link title cannot be empty".into());
         }

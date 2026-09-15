@@ -1,5 +1,5 @@
 use crate::canonicalize::{checked, AllowedSchemes};
-use crate::common::{check_extra_keys, code_point_len, frozen_trim};
+use crate::common::{check_extra, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
@@ -422,7 +422,7 @@ impl Validatable for PubkySocialPost {
         if let Some(id) = id {
             self.validate_id(id)?;
         }
-        check_extra_keys(
+        check_extra(
             &self.extra,
             &["content", "kind", "parent", "embed", "attachments", "lock"],
         )?;
@@ -445,7 +445,7 @@ impl Validatable for PubkySocialPost {
             ));
         }
         for (index, attachment) in self.attachments.iter().enumerate() {
-            check_extra_keys(&attachment.extra, &["uri", "alt", "name"])?;
+            check_extra(&attachment.extra, &["uri", "alt", "name"])?;
             if let Some(alt) = &attachment.alt {
                 if code_point_len(alt) > VALIDATION_LIMITS.attachment_alt_max_length {
                     return Err(format!(
