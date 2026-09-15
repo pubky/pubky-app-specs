@@ -94,7 +94,11 @@ pub struct PubkySocialCollectionContent {
 }
 
 /// Validates a `kind = Collection` post, including its JSON content envelope.
-pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), String> {
+// `ctx` is unused until the items and the cover join the reference gate
+pub(crate) fn validate_collection_post(
+    post: &PubkySocialPost,
+    _ctx: &crate::traits::ValidationCtx,
+) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }

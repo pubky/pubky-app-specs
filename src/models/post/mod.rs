@@ -1,14 +1,15 @@
-use crate::canonicalize::{
-    check_post_reference, check_pubky_reference, check_target_reference, check_universal_reference,
-};
-use crate::common::{check_extra_keys, code_point_len, frozen_trim};
+use crate::canonicalize::{checked, AllowedSchemes};
+use crate::common::{check_extra, code_point_len, frozen_trim};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
+use crate::types::PubkyId;
+use crate::uri::is_valid_label;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
 pub mod content;
+pub mod lifecycle;
 
 pub use content::{
     PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionLayout,
@@ -287,7 +288,113 @@ impl HasIdPath for PubkySocialPost {
     const PATH_SEGMENT: &'static str = "posts/";
 
     fn create_path(id: &str) -> String {
-        social_path(Self::ROOT, &format!("{}{id}/{id}.json", Self::PATH_SEGMENT))
+        Self::create_path_in(Self::ROOT, id, id, None)
+    }
+}
+
+/// Where one version of a post is stored. A call result, not a wire type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MintedVersion {
+    pub id: String,
+    pub edit_id: String,
+    pub path: String,
+}
+
+impl PubkySocialPost {
+    /// "/{root}/social/v1/posts/{id}/{editId}[-{slug}].json". Creation writes `editId == id`,
+    /// deterministic so migration never invents a value. The slug is readable decoration on
+    /// the file name, never part of the identity; the builders validate it, this assembles.
+    pub fn create_path_in(root: Root, id: &str, edit_id: &str, slug: Option<&str>) -> String {
+        let leaf = match slug {
+            Some(slug) => format!("{}{id}/{edit_id}-{slug}.json", Self::PATH_SEGMENT),
+            None => format!("{}{id}/{edit_id}.json", Self::PATH_SEGMENT),
+        };
+        social_path(root, &leaf)
+    }
+
+    /// Creation: mints the post id, validates against the destination root with the author
+    /// in scope, returns `posts/{id}/{id}.json`.
+    pub fn create_version(
+        &self,
+        root: Root,
+        owner: &PubkyId,
+        slug: Option<&str>,
+    ) -> Result<MintedVersion, String> {
+        let id = self.create_id();
+        self.mint(id.clone(), id, root, owner, slug)
+    }
+
+    /// Edit: keeps `id`, mints a fresh editId. Ids are strictly increasing per session, so
+    /// two versions minted in the same microsecond still differ.
+    pub fn edit_version(
+        &self,
+        id: &str,
+        root: Root,
+        owner: &PubkyId,
+        slug: Option<&str>,
+    ) -> Result<MintedVersion, String> {
+        self.mint(id.to_string(), self.create_id(), root, owner, slug)
+    }
+
+    fn mint(
+        &self,
+        id: String,
+        edit_id: String,
+        root: Root,
+        owner: &PubkyId,
+        slug: Option<&str>,
+    ) -> Result<MintedVersion, String> {
+        if let Some(slug) = slug {
+            if !is_valid_label(slug) {
+                return Err(format!(
+                    "Validation Error: slug must be 1..={} chars of a-z, 0-9 and -: {slug}",
+                    VALIDATION_LIMITS.post_slug_max_length
+                ));
+            }
+        }
+        let ctx = ValidationCtx { root };
+        self.validate(Some(&id), &ctx)?;
+        // The ownership rule, which plain validate has no author for
+        self.check_references(&ctx, Some(owner))?;
+        let path = Self::create_path_in(root, &id, &edit_id, slug);
+        Ok(MintedVersion { id, edit_id, path })
+    }
+
+    /// Every reference position through the one gate: `parent` and `embed` universal, `lock`
+    /// pubky, attachments and the article cover pubky or web. `owner` enables the ownership
+    /// rule; validation passes `None`, the builders pass the author.
+    pub(crate) fn check_references(
+        &self,
+        ctx: &ValidationCtx,
+        owner: Option<&PubkyId>,
+    ) -> Result<(), String> {
+        use AllowedSchemes::*;
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        if let Some(parent) = &self.parent {
+            checked("parent", parent, Universal, max, ctx, owner)?;
+        }
+        if let Some(embed) = &self.embed {
+            checked("embed", embed, Universal, max, ctx, owner)?;
+        }
+        if let Some(lock) = &self.lock {
+            checked("lock", lock, PubkyOnly, max, ctx, owner)?;
+        }
+        for (index, attachment) in self.attachments.iter().enumerate() {
+            let field = format!("attachments[{index}].uri");
+            checked(&field, &attachment.uri, PubkyHttpHttps, max, ctx, owner)?;
+        }
+        if matches!(self.kind, PubkySocialPostKind::Article) {
+            // An unparsable envelope is the article validator's error, not a reference error
+            if let Ok(envelope) =
+                serde_json::from_str::<content::article::PubkySocialArticleContent>(&self.content)
+            {
+                if let Some(cover) = &envelope.cover_image {
+                    let max = VALIDATION_LIMITS.image_url_max_length;
+                    checked("cover_image", cover, PubkyHttpHttps, max, ctx, owner)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -310,12 +417,12 @@ impl Validatable for PubkySocialPost {
     fn validate_fields(
         &self,
         id: Option<&str>,
-        _ctx: &ValidationCtx,
+        ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
         if let Some(id) = id {
             self.validate_id(id)?;
         }
-        check_extra_keys(
+        check_extra(
             &self.extra,
             &["content", "kind", "parent", "embed", "attachments", "lock"],
         )?;
@@ -325,20 +432,10 @@ impl Validatable for PubkySocialPost {
             return Err("Validation Error: post kind is unknown".into());
         }
 
-        if let Some(parent) = &self.parent {
-            // A reply is a thread edge, so the target must be a post
-            check_post_reference(parent).map_err(|e| format!("Validation Error: parent {e}"))?;
-        }
-        if let Some(lock) = &self.lock {
-            check_pubky_reference("lock", lock)?;
-        }
-        if let Some(embed) = &self.embed {
-            // A quote of anything: nostr, geo, ipfs. Attachments and covers stay pubky+web.
-            check_universal_reference("embed", embed)?;
-        }
+        self.check_references(ctx, None)?;
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
-            return content::collection::validate_collection_post(self);
+            return content::collection::validate_collection_post(self, ctx);
         }
 
         if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
@@ -348,8 +445,7 @@ impl Validatable for PubkySocialPost {
             ));
         }
         for (index, attachment) in self.attachments.iter().enumerate() {
-            check_extra_keys(&attachment.extra, &["uri", "alt", "name"])?;
-            check_target_reference(&format!("attachments[{index}].uri"), &attachment.uri)?;
+            check_extra(&attachment.extra, &["uri", "alt", "name"])?;
             if let Some(alt) = &attachment.alt {
                 if code_point_len(alt) > VALIDATION_LIMITS.attachment_alt_max_length {
                     return Err(format!(
@@ -370,7 +466,7 @@ impl Validatable for PubkySocialPost {
         }
 
         if matches!(self.kind, PubkySocialPostKind::Article) {
-            return content::article::validate_article_post(self);
+            return content::article::validate_article_post(self, ctx);
         }
 
         // Note, Image, Video, Link, File: untyped content
@@ -725,25 +821,86 @@ mod tests {
     // ---- references ----
 
     #[test]
-    fn test_parent_is_pubky_only_and_canonical() {
-        let mut ok = post(PubkySocialPostKind::Note, Some(&post_uri()), None, vec![]);
-        ok.content = "re".into();
-        assert!(validate(&ok).is_ok());
-        for bad in [
+    fn test_parent_is_universal_and_versionless() {
+        // A thread can be rooted at a post, a user, a web page or an external resource
+        for ok in [
+            post_uri(),
+            p(""),
             "https://example.com/post".to_string(),
+            "nostr:nevent1abc".to_string(),
+        ] {
+            let mut reply = post(PubkySocialPostKind::Note, Some(&ok), None, vec![]);
+            reply.content = "re".into();
+            assert!(validate(&reply).is_ok(), "{ok}");
+        }
+        for bad in [
             format!("pubky{PK}/pub/social/v1/posts/0032SSN7Q4EVG"),
             p("/pub/social/v1/posts/../profile.json"),
             p("/pub/social/v1/posts/00%32"),
-            p("/pub/social/v1/profile.json"),
             p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json"),
             p("/priv/social/v1/posts/0032SSN7Q4EVG"),
-            p(""),
+            " https://example.com".to_string(),
+            "IPFS://x".to_string(),
             String::new(),
         ] {
             let mut reply = post(PubkySocialPostKind::Note, Some(&bad), None, vec![]);
             reply.content = "re".into();
             assert!(err(&reply).contains("parent"), "{bad}");
         }
+    }
+
+    #[test]
+    fn test_root_rule_on_every_reference_position() {
+        let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
+        let priv_file = p("/priv/social/v1/files/0034A0X7NJ52G");
+        let priv_ctx = ValidationCtx { root: Root::Priv };
+        let id = PubkySocialPost::default().create_id();
+        let mut reply = post(PubkySocialPostKind::Note, Some(&private), None, vec![]);
+        reply.content = "re".into();
+        let quote = post(PubkySocialPostKind::Note, None, Some(&private), vec![]);
+        let with_file = post(
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att(&priv_file)],
+        );
+        let mut locked = note("x");
+        locked.lock = Some(private.clone());
+        let covered = PubkySocialPost::new_article(
+            "t".into(),
+            "b".into(),
+            Some(priv_file.clone()),
+            None,
+            None,
+            vec![],
+            None,
+        );
+        for (name, p) in [
+            ("parent", reply),
+            ("embed", quote),
+            ("attachments[0].uri", with_file),
+            ("lock", locked),
+            ("cover_image", covered),
+        ] {
+            assert!(
+                p.validate(Some(&id), &priv_ctx).is_ok(),
+                "{name} under priv"
+            );
+            let e = p.validate(Some(&id), &PUB_CTX).unwrap_err();
+            assert!(
+                e.contains(name) && e.contains("public object"),
+                "{name}: {e}"
+            );
+        }
+        // a web attachment is root-indifferent
+        let web = post(
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![att("https://x.com/a.png")],
+        );
+        assert!(web.validate(Some(&id), &priv_ctx).is_ok());
+        assert!(web.validate(Some(&id), &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -763,6 +920,128 @@ mod tests {
             let quote = post(PubkySocialPostKind::Note, None, Some(bad), vec![]);
             assert!(err(&quote).contains("embed"), "{bad}");
         }
+    }
+
+    // ---- storage builders ----
+
+    fn owner() -> PubkyId {
+        PubkyId::try_from(PK).unwrap()
+    }
+
+    #[test]
+    fn test_create_version_mints_first_version_under_either_root() {
+        let n = note("hi");
+        let pub_v = n.create_version(Root::Pub, &owner(), None).unwrap();
+        assert_eq!(pub_v.edit_id, pub_v.id);
+        assert_eq!(
+            pub_v.path,
+            format!("/pub/social/v1/posts/{}/{}.json", pub_v.id, pub_v.id)
+        );
+        assert_eq!(pub_v.path, PubkySocialPost::create_path(&pub_v.id));
+        let priv_v = n.create_version(Root::Priv, &owner(), None).unwrap();
+        assert!(priv_v.path.starts_with("/priv/social/v1/posts/"));
+    }
+
+    #[test]
+    fn test_edit_version_keeps_id_and_mints_increasing_edit_ids() {
+        let n = note("hi");
+        let first = n.create_version(Root::Pub, &owner(), None).unwrap();
+        let mut prev = first.edit_id.clone();
+        for _ in 0..3 {
+            let v = n
+                .edit_version(&first.id, Root::Pub, &owner(), None)
+                .unwrap();
+            assert_eq!(v.id, first.id);
+            assert!(
+                v.edit_id.as_bytes() > prev.as_bytes(),
+                "{} > {prev}",
+                v.edit_id
+            );
+            assert!(v
+                .path
+                .starts_with(&format!("/pub/social/v1/posts/{}/", first.id)));
+            prev = v.edit_id;
+        }
+        // an alias spelling of the id is not an id
+        let alias = first.id.replace('0', "O");
+        assert!(n.edit_version(&alias, Root::Pub, &owner(), None).is_err());
+    }
+
+    #[test]
+    fn test_slug_is_validated_and_reparses() {
+        let n = note("hi");
+        let long = "a".repeat(VALIDATION_LIMITS.post_slug_max_length);
+        let v = n.create_version(Root::Pub, &owner(), Some(&long)).unwrap();
+        assert!(v.path.ends_with(&format!("/{}-{long}.json", v.edit_id)));
+        let uri = format!("pubky://{PK}{}", v.path);
+        let parsed = crate::ParsedUri::try_from(uri.as_str()).unwrap();
+        assert_eq!(
+            parsed.resource,
+            crate::Resource::Post {
+                id: v.id.clone(),
+                version: Some(v.edit_id.clone()),
+                label: Some(long.clone()),
+            }
+        );
+        assert_eq!(parsed.try_to_uri_str().unwrap(), uri);
+        for bad in [
+            format!("{long}a"),
+            "Bad Slug".into(),
+            String::new(),
+            "a_b".into(),
+        ] {
+            let e = n
+                .create_version(Root::Pub, &owner(), Some(&bad))
+                .unwrap_err();
+            assert!(e.contains("slug"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn test_builders_enforce_ownership_where_validate_cannot() {
+        let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+        let foreign_private = format!("pubky://{other}/priv/social/v1/posts/0032SSN7Q4EVG");
+        let mut draft = post(
+            PubkySocialPostKind::Note,
+            Some(&foreign_private),
+            None,
+            vec![],
+        );
+        draft.content = "re".into();
+        let id = draft.create_id();
+        // No author in scope: only the root rule applies, and a private draft may hold it
+        assert!(draft
+            .validate(Some(&id), &ValidationCtx { root: Root::Priv })
+            .is_ok());
+        let e = draft
+            .create_version(Root::Priv, &owner(), None)
+            .unwrap_err();
+        assert!(e.contains("parent") && e.contains("another user"), "{e}");
+        // A public destination is refused by the root rule before ownership is considered
+        let e = draft.create_version(Root::Pub, &owner(), None).unwrap_err();
+        assert!(e.contains("public object"), "{e}");
+    }
+
+    #[test]
+    fn test_builders_check_the_article_cover_with_the_owner() {
+        let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+        let cover = format!("pubky://{other}/priv/social/v1/files/0034A0X7NJ52G");
+        let article = PubkySocialPost::new_article(
+            "t".into(),
+            "b".into(),
+            Some(cover),
+            None,
+            None,
+            vec![],
+            None,
+        );
+        let e = article
+            .create_version(Root::Priv, &owner(), None)
+            .unwrap_err();
+        assert!(
+            e.contains("cover_image") && e.contains("another user"),
+            "{e}"
+        );
     }
 
     #[test]
