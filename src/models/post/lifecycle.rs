@@ -221,6 +221,16 @@ fn edit_id_of(post_id: &str, root: Root, path: &str) -> Result<String, String> {
         .ok_or_else(|| format!("not a post version path: {path}"))
 }
 
+/// A legacy (pre-epoch) path of this post: its last segments are `posts/{post_id}`, the v0
+/// leaf, so a sibling post or another object never rides along into a delete list.
+fn check_legacy_paths(post_id: &str, paths: &[String]) -> Result<(), String> {
+    let leaf = format!("/{}{post_id}", PubkySocialPost::PATH_SEGMENT);
+    match paths.iter().find(|p| !p.ends_with(&leaf)) {
+        Some(p) => Err(format!("not a legacy path of post {post_id}: {p}")),
+        None => Ok(()),
+    }
+}
+
 /// Same version leaf under the other root.
 fn under(root: Root, path: &str) -> String {
     let after_root = path
@@ -264,6 +274,8 @@ pub fn plan_unpublish(
     legacy_public_paths: &[String],
     private_head_path: Option<&str>,
 ) -> Result<UnpublishPlan, String> {
+    crate::common::validate_timestamp_id_format(post_id)?;
+    check_legacy_paths(post_id, legacy_public_paths)?;
     let public = sorted_versions(
         post_id,
         public_v1_paths,
@@ -305,6 +317,8 @@ pub fn plan_delete(
     parsed_versions: &[PubkySocialPost],
     owner: &PubkyId,
 ) -> Result<DeletePlan, String> {
+    crate::common::validate_timestamp_id_format(post_id)?;
+    check_legacy_paths(post_id, legacy_paths)?;
     // pub before priv at equal editId, so the public copy goes first
     let copies = sorted_versions(
         post_id,
@@ -517,6 +531,19 @@ mod tests {
         ))]);
         let e = plan_publish(&id, &id, &shouting, &owner()).unwrap_err();
         assert!(e.contains("media reference"), "{e}");
+    }
+
+    #[test]
+    fn legacy_paths_and_the_post_id_are_checked_too() {
+        let sibling = format!("/pub/pubky.app/posts/{E2}");
+        assert!(plan_unpublish(TS, &[pub_v(TS)], std::slice::from_ref(&sibling), None).is_err());
+        assert!(plan_delete(TS, &[sibling], &[], &[], &owner()).is_err());
+        let mine = format!("/pub/pubky.app/posts/{TS}");
+        assert!(plan_delete(TS, &[mine], &[], &[], &owner()).is_ok());
+        // a non-canonical post id never matches a listing, however the paths are spelled
+        let odd = "/pub/social/v1/posts/x/0032SSN7Q4EVG.json".to_string();
+        assert!(plan_unpublish("x", std::slice::from_ref(&odd), &[], None).is_err());
+        assert!(plan_delete("x", &[], &[(Root::Pub, odd)], &[], &owner()).is_err());
     }
 
     #[test]
