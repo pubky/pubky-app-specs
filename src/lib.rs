@@ -41,7 +41,7 @@ pub use models::post::{
     MintedVersion, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
     PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
 };
-pub use models::tag::PubkySocialTag;
+pub use models::tag::{sanitize_tag_label, validate_tag_label, PubkySocialTag};
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};
 pub use models::PubkySocialObject;
 pub use types::PubkyId;
