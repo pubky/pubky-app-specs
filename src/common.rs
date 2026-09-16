@@ -68,15 +68,38 @@ pub fn code_point_len(s: &str) -> usize {
 
 /// A preserved-members map must not carry a known field name: serde would emit the key
 /// twice and the reader would reject the object. Only in-process mutation can get here.
-pub(crate) fn check_extra_keys(
+/// The two rules on an `extra` map: no key shadows a known field, and every integer inside it
+/// is within the JSON-safe range, so a read-modify-write through any JSON engine, this crate's
+/// or a JS caller's, carries the member back with its value intact.
+pub(crate) fn check_extra(
     extra: &serde_json::Map<String, serde_json::Value>,
     known: &[&str],
 ) -> Result<(), String> {
-    match extra.keys().find(|k| known.contains(&k.as_str())) {
-        Some(k) => Err(format!(
+    if let Some(k) = extra.keys().find(|k| known.contains(&k.as_str())) {
+        return Err(format!(
             "Validation Error: extra must not shadow the field {k}"
-        )),
-        None => Ok(()),
+        ));
+    }
+    for (k, v) in extra {
+        check_safe_numbers(v).map_err(|e| format!("{e} (in extra member {k})"))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn check_safe_numbers(v: &serde_json::Value) -> Result<(), String> {
+    use serde_json::Value::*;
+    match v {
+        Number(n) => match (n.as_i64(), n.as_u64()) {
+            (Some(i), _) => validate_safe_json_int(i),
+            (None, Some(_)) => Err(format!(
+                "Validation Error: integer {n} outside the JSON-safe range"
+            )),
+            // a float, or an integer literal every JSON engine already reads as one
+            (None, None) => Ok(()),
+        },
+        Array(items) => items.iter().try_for_each(check_safe_numbers),
+        Object(map) => map.values().try_for_each(check_safe_numbers),
+        _ => Ok(()),
     }
 }
 
@@ -150,6 +173,35 @@ pub fn mint_timestamp_micros() -> i64 {
     mint_from(timestamp(), &LAST_MINTED_MICROS)
 }
 
+/// Ids may sit this far ahead of the reader's clock and still validate.
+pub const MAX_FUTURE_MICROS: i64 = 2 * 60 * 60 * 1_000_000;
+
+/// How far above a floor a salted successor may land: one minute, so two clients behind the
+/// same head have that much room to diverge while staying well inside the validity bound.
+const SUCCESSOR_SPREAD_MICROS: i64 = 60 * 1_000_000;
+
+/// The same mint with a floor. When the clock is past the floor this is the ordinary mint.
+/// When it is not, as it is when a post was created by a faster clock, the successor lands at
+/// `floor + 1 + (salt mod room)`: the clock cannot separate two clients that are both behind
+/// the head, so the salt does, and callers derive it from the bytes being written so only
+/// identical writes share a path. `room` is bounded by the validity window, and a floor with
+/// no room left is an error rather than an id no reader accepts. A floor far ahead does not
+/// poison later mints: the rollback tolerance treats the next clock reading as a correction.
+pub fn mint_timestamp_micros_above(floor: i64, salt: u64) -> Result<i64, String> {
+    let now = timestamp();
+    if now > floor {
+        return Ok(mint_from(now, &LAST_MINTED_MICROS));
+    }
+    let room = (now + MAX_FUTURE_MICROS)
+        .checked_sub(floor)
+        .and_then(|r| r.checked_sub(1))
+        .filter(|r| *r > 0)
+        .ok_or("Validation Error: the current version leaves no room for a newer id")?;
+    let spread = room.min(SUCCESSOR_SPREAD_MICROS) as u64;
+    let target = floor + 1 + (salt % spread) as i64;
+    Ok(mint_from(target, &LAST_MINTED_MICROS))
+}
+
 fn mint_from(now: i64, last_minted: &AtomicI64) -> i64 {
     let bump = |last: i64| {
         if now > last || last - now > CLOCK_ROLLBACK_TOLERANCE_MICROS {
@@ -181,6 +233,32 @@ pub fn validate_safe_json_int(v: i64) -> Result<(), String> {
 mod tests {
     use super::*;
     use base32::{decode, encode, Alphabet};
+
+    #[test]
+    fn extra_rejects_shadowing_and_unsafe_integers() {
+        let ok: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
+            r#"{"ext":{"n":9007199254740991,"neg":-9007199254740991,"f":1.5,"big":1e30,"l":[1,{"x":2}]}}"#,
+        )
+        .unwrap();
+        assert!(check_extra(&ok, &["name"]).is_ok());
+        let shadow: serde_json::Map<_, _> = serde_json::from_str(r#"{"name":1}"#).unwrap();
+        assert!(check_extra(&shadow, &["name"])
+            .unwrap_err()
+            .contains("shadow"));
+        for bad in [
+            r#"{"n":9007199254740992}"#,
+            r#"{"n":-9007199254740992}"#,
+            r#"{"n":18446744073709551615}"#,
+            r#"{"deep":[{"n":9007199254740992}]}"#,
+        ] {
+            let m: serde_json::Map<_, _> = serde_json::from_str(bad).unwrap();
+            let e = check_extra(&m, &[]).unwrap_err();
+            assert!(
+                e.contains("JSON-safe") && e.contains("extra member"),
+                "{bad}: {e}"
+            );
+        }
+    }
 
     const TS_LOWER_BOUND: i64 = 1727740800000000;
 

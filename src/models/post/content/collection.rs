@@ -1,7 +1,6 @@
 use crate::limits::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use url::Url;
 
 #[cfg(target_arch = "wasm32")]
 use tsify_next::Tsify;
@@ -94,7 +93,11 @@ pub struct PubkySocialCollectionContent {
 }
 
 /// Validates a `kind = Collection` post, including its JSON content envelope.
-pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), String> {
+// `ctx` is unused until the items join the reference gate
+pub(crate) fn validate_collection_post(
+    post: &PubkySocialPost,
+    _ctx: &crate::traits::ValidationCtx,
+) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
@@ -144,32 +147,7 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
             ));
         }
     }
-    if let Some(cover) = &envelope.cover_image {
-        if cover.chars().count() > VALIDATION_LIMITS.image_url_max_length {
-            return Err(format!(
-                "Validation Error: Collection cover_image URL exceeds {} characters",
-                VALIDATION_LIMITS.image_url_max_length
-            ));
-        }
-        let parsed = Url::parse(cover).map_err(|_| {
-            "Validation Error: Collection cover_image must be a valid URL".to_string()
-        })?;
-        if !VALIDATION_LIMITS
-            .post_allowed_attachment_protocols
-            .iter()
-            .any(|&protocol| parsed.scheme().eq_ignore_ascii_case(protocol))
-        {
-            let allowed = VALIDATION_LIMITS
-                .post_allowed_attachment_protocols
-                .iter()
-                .map(|p| format!("{p}://"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(format!(
-                "Validation Error: Collection cover_image must use one of the allowed protocols: {allowed}"
-            ));
-        }
-    }
+    // The cover is a reference position and runs through the post-level gate
     if envelope.items.len() > VALIDATION_LIMITS.collection_items_max_count {
         return Err(format!(
             "Validation Error: Collection cannot have more than {} items",
@@ -363,10 +341,7 @@ mod tests {
         let post = make_collection_post_with_cover(Some("not a url"));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(
-            err.contains("cover_image must be a valid URL"),
-            "got: {err}"
-        );
+        assert!(err.contains("cover_image must be"), "got: {err}");
     }
 
     #[test]
@@ -374,10 +349,7 @@ mod tests {
         let post = make_collection_post_with_cover(Some("ftp://example.com/cover.png"));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(
-            err.contains("cover_image must use one of the allowed protocols"),
-            "got: {err}"
-        );
+        assert!(err.contains("cover_image must be"), "got: {err}");
     }
 
     #[test]
@@ -387,7 +359,10 @@ mod tests {
         let post = make_collection_post_with_cover(Some(&too_long));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("cover_image URL exceeds"), "got: {err}");
+        assert!(
+            err.contains("cover_image must be") && err.contains("300"),
+            "got: {err}"
+        );
     }
 
     #[test]

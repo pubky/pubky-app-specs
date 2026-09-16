@@ -61,8 +61,8 @@ pub struct ValidationLimits {
     /// Maximum length of a reference URI field: parent, embed, lock, attachment URIs.
     /// Tag and bookmark targets adopt it with their 1.0 validators.
     pub reference_uri_max_length: usize,
-    /// Allowed protocols for a collection cover image until its validator moves to the
-    /// canonicalizers; attachments no longer read this.
+    /// Retired: every media reference runs through the reference gate now. Kept in the
+    /// limits asset so its key stays pinned; nothing reads it.
     pub post_allowed_attachment_protocols: &'static [&'static str],
     /// Maximum scalar count (`chars().count()`, not bytes) for the JSON
     /// envelope content of a Collection post. Sized to hold a

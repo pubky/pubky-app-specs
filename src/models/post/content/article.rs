@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::canonicalize::check_target_reference;
-use crate::common::check_extra_keys;
+use crate::common::check_extra;
+use crate::traits::ValidationCtx;
 
 use super::super::PubkySocialPost;
 
@@ -33,8 +33,11 @@ pub struct PubkySocialArticleContent {
 }
 
 /// Validates the envelope of a `kind = Article` post. The post-level rules (references,
-/// attachments) run before this in `PubkySocialPost::validate`.
-pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String> {
+/// the cover included, attachments) run before this in `PubkySocialPost::validate`.
+pub(crate) fn validate_article_post(
+    post: &PubkySocialPost,
+    _ctx: &ValidationCtx,
+) -> Result<(), String> {
     if code_point_len(&post.content) > VALIDATION_LIMITS.article_content_max_length {
         return Err(format!(
             "Validation Error: Article content must be at most {} code points",
@@ -44,7 +47,7 @@ pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String
     let envelope: PubkySocialArticleContent = serde_json::from_str(&post.content).map_err(|e| {
         format!("Validation Error: Article content must be a valid JSON envelope: {e}")
     })?;
-    check_extra_keys(&envelope.extra, &["title", "body", "cover_image"])?;
+    check_extra(&envelope.extra, &["title", "body", "cover_image"])?;
     // Other controls escape to six characters and would break the two-to-one envelope bound
     let is_control = |c: char| c.is_ascii_control() && !matches!(c, '\t' | '\n' | '\r');
     if envelope.title.chars().any(is_control) || envelope.body.chars().any(is_control) {
@@ -70,16 +73,7 @@ pub(crate) fn validate_article_post(post: &PubkySocialPost) -> Result<(), String
             VALIDATION_LIMITS.article_body_max_length
         ));
     }
-    if let Some(cover) = &envelope.cover_image {
-        // The tighter image cap first, so the error names the bound that applies
-        if code_point_len(cover) > VALIDATION_LIMITS.image_url_max_length {
-            return Err(format!(
-                "Validation Error: cover_image must be at most {} code points",
-                VALIDATION_LIMITS.image_url_max_length
-            ));
-        }
-        check_target_reference("cover_image", cover)?;
-    }
+    // The cover is a reference position and runs through the post-level gate
     Ok(())
 }
 
@@ -198,7 +192,18 @@ mod tests {
         let file = p("/pub/social/v1/files/0034A0X7NJ52G");
         assert!(validate(&article("t", "b", Some(&file))).is_ok());
         assert!(validate(&article("t", "b", Some("https://example.com/c.png"))).is_ok());
-        for bad in ["ftp://x/c.png", " https://example.com/c.png", ""] {
+        let short = format!(
+            "pubky{}/pub/social/v1/files/0034A0X7NJ52G",
+            &p("")["pubky://".len()..]
+        );
+        let versioned = p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json");
+        for bad in [
+            "ftp://x/c.png",
+            " https://example.com/c.png",
+            "",
+            short.as_str(),
+            versioned.as_str(),
+        ] {
             assert!(
                 err(&article("t", "b", Some(bad))).contains("cover_image"),
                 "{bad}"

@@ -7,6 +7,7 @@
 
 use crate::common::{ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace};
 use crate::limits::VALIDATION_LIMITS;
+use crate::traits::{Root, ValidationCtx};
 use crate::types::PubkyId;
 
 /// One fold-point for every pubky URI. Accepts the full form `pubky://<pk>[/<path>]` and the
@@ -137,21 +138,127 @@ pub fn canonicalize_universal(raw: &str) -> Result<String, ()> {
     Ok(canonical)
 }
 
-/// A stored reference is the fixed point of its own canonical spelling. Nothing rewrites it
-/// on the way in or out, so the SDK short form and any padding reject here.
-pub(crate) fn check_pubky_reference(field: &str, raw: &str) -> Result<(), String> {
-    let max = VALIDATION_LIMITS.reference_uri_max_length;
-    let ok = canonicalize_pubky_uri(raw).is_ok_and(|c| c == raw) && code_point_len(raw) <= max;
-    if ok {
-        return Ok(());
+/// The per-field scheme sets of the reference tier. An API argument, never a wire value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AllowedSchemes {
+    /// `lock`, and collection items until they move to the universal tier
+    PubkyOnly,
+    /// `attachments[].uri`, cover images, `user.image`
+    PubkyHttpHttps,
+    /// `user.links[].url`
+    HttpHttps,
+    /// `parent`, `embed`, `tag.uri`, bookmark target: any scheme through the external gate
+    Universal,
+}
+
+impl AllowedSchemes {
+    fn describe(self) -> &'static str {
+        match self {
+            AllowedSchemes::PubkyOnly => "pubky",
+            AllowedSchemes::PubkyHttpHttps => "pubky or web",
+            AllowedSchemes::HttpHttps => "web",
+            AllowedSchemes::Universal => "",
+        }
     }
-    Err(format!(
-        "Validation Error: {field} must be a canonical pubky URI of at most {max} code points: {raw}"
-    ))
+}
+
+/// The one reference gate: scheme dispatch under `schemes`, canonical form, the cap on that
+/// form, then for pubky values the root rule (a pub-rooted object never references a priv
+/// URI), the ownership rule (a priv URI whose host is not the author resolves for nobody, so it
+/// is invalid in any object) and the versionless rule (a social post reference names the
+/// logical post, never a stored version). `owner: None` skips only the ownership rule: plain
+/// `validate(id, ctx)` has no author in scope, so builders and ingest pass `Some`. Returns the
+/// canonical form.
+pub fn validate_reference(
+    uri: &str,
+    schemes: AllowedSchemes,
+    max_code_points: usize,
+    ctx: &ValidationCtx,
+    owner: Option<&PubkyId>,
+) -> Result<String, String> {
+    use AllowedSchemes::*;
+    let shape = || {
+        let what = schemes.describe();
+        let sep = if what.is_empty() { "" } else { " " };
+        format!(
+            "must be a canonical{sep}{what} URI of at most {max_code_points} code points: {uri}"
+        )
+    };
+    let is_pubky = uri.starts_with("pubky");
+    let canonical = if is_pubky {
+        if schemes == HttpHttps {
+            return Err(shape());
+        }
+        canonicalize_pubky_uri(uri).map_err(|_| shape())?
+    } else if uri.starts_with("http://") || uri.starts_with("https://") {
+        if schemes == PubkyOnly {
+            return Err(shape());
+        }
+        canonicalize_web_uri(uri).map_err(|_| shape())?
+    } else {
+        if schemes != Universal {
+            return Err(shape());
+        }
+        canonicalize_external_uri(uri).map_err(|_| shape())?
+    };
+    if code_point_len(&canonical) > max_code_points {
+        return Err(shape());
+    }
+    if !is_pubky {
+        return Ok(canonical);
+    }
+    // ASCII-safe: the canonicalizer validated the host
+    let rest = &canonical["pubky://".len()..];
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let priv_rooted = path == crate::constants::PRIVATE_ROOT
+        || path.starts_with(&format!("{}/", crate::constants::PRIVATE_ROOT));
+    if priv_rooted {
+        if ctx.root == Root::Pub {
+            return Err(format!(
+                "a public object cannot reference a private one: {uri}"
+            ));
+        }
+        if let Some(owner) = owner {
+            if host != owner.as_ref() {
+                return Err(format!(
+                    "references a private object of another user: {uri}"
+                ));
+            }
+        }
+    }
+    if let Ok(parsed) = crate::ParsedUri::try_from(canonical.as_str()) {
+        if let crate::Resource::Post {
+            version: Some(_), ..
+        } = parsed.resource
+        {
+            return Err(format!("a post reference must be versionless: {uri}"));
+        }
+    }
+    Ok(canonical)
+}
+
+/// A stored reference is the fixed point of its own canonical spelling: nothing rewrites it on
+/// the way in or out, so the SDK short form and any padding reject here.
+pub(crate) fn checked(
+    field: &str,
+    uri: &str,
+    schemes: AllowedSchemes,
+    max_code_points: usize,
+    ctx: &ValidationCtx,
+    owner: Option<&PubkyId>,
+) -> Result<(), String> {
+    match validate_reference(uri, schemes, max_code_points, ctx, owner) {
+        Ok(c) if c == uri => Ok(()),
+        Ok(_) => Err(format!(
+            "Validation Error: {field} must be spelled in canonical form: {uri}"
+        )),
+        Err(e) => Err(format!("Validation Error: {field} {e}")),
+    }
 }
 
 /// A reference to a post: public, versionless, and a fixed point of the parser's own emitter
-/// (which rejects the short form). Replies and collection items share it.
+/// (which rejects the short form). Collection items use it until they join the universal tier.
 pub(crate) fn check_post_reference(raw: &str) -> Result<(), String> {
     let parsed = crate::ParsedUri::try_from(raw)
         .map_err(|e| format!("must be a canonical post URI: {e}"))?;
@@ -167,28 +274,6 @@ pub(crate) fn check_post_reference(raw: &str) -> Result<(), String> {
             "must be a public, versionless post reference: {raw}"
         )),
     }
-}
-
-/// Same rule for the fields that also accept `http`/`https`; `canonicalize_target` caps.
-pub(crate) fn check_target_reference(field: &str, raw: &str) -> Result<(), String> {
-    if canonicalize_target(raw).is_ok_and(|c| c == raw) {
-        return Ok(());
-    }
-    Err(format!(
-        "Validation Error: {field} must be a canonical pubky or web URI of at most {} code points: {raw}",
-        VALIDATION_LIMITS.reference_uri_max_length
-    ))
-}
-
-/// Same rule for the universal fields; `canonicalize_universal` caps.
-pub(crate) fn check_universal_reference(field: &str, raw: &str) -> Result<(), String> {
-    if canonicalize_universal(raw).is_ok_and(|c| c == raw) {
-        return Ok(());
-    }
-    Err(format!(
-        "Validation Error: {field} must be a canonical URI of at most {} code points: {raw}",
-        VALIDATION_LIMITS.reference_uri_max_length
-    ))
 }
 
 #[cfg(test)]
@@ -354,5 +439,233 @@ mod tests {
             "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
         );
         assert!(canonicalize_universal(&long).is_err());
+    }
+
+    fn ctx(root: Root) -> ValidationCtx {
+        ValidationCtx { root }
+    }
+
+    #[test]
+    fn reference_scheme_matrix() {
+        use AllowedSchemes::*;
+        let pk = p("/pub/social/v1/posts/0032SSN7Q4EVG");
+        let web = "https://x.com/a";
+        let ext = "ipfs://bafy";
+        let bad = "https://?q";
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        let ok = |s: AllowedSchemes, u: &str| {
+            validate_reference(u, s, max, &ctx(Root::Pub), None).is_ok()
+        };
+        for (set, want) in [
+            (PubkyOnly, [true, false, false, false, false]),
+            (PubkyHttpHttps, [true, true, false, false, false]),
+            (HttpHttps, [false, true, false, false, false]),
+            (Universal, [true, true, true, false, false]),
+        ] {
+            // an uppercase web scheme is neither the web gate's nor the external arm's
+            let got = [
+                ok(set, &pk),
+                ok(set, web),
+                ok(set, ext),
+                ok(set, bad),
+                ok(set, "HTTP://x"),
+            ];
+            assert_eq!(got, want, "{set:?}");
+        }
+    }
+
+    #[test]
+    fn reference_cap_is_measured_on_the_canonical_form() {
+        let max = 60 + HOST.len();
+        // short form: canonical spelling is three code points longer than the input
+        let path = "a".repeat(max - "pubky://".len() - HOST.len() - 1);
+        let short = format!("pubky{HOST}/{path}");
+        let got = validate_reference(
+            &short,
+            AllowedSchemes::PubkyOnly,
+            max,
+            &ctx(Root::Pub),
+            None,
+        );
+        assert_eq!(got, Ok(format!("pubky://{HOST}/{path}")));
+        let short = format!("pubky{HOST}/{path}a");
+        assert!(validate_reference(
+            &short,
+            AllowedSchemes::PubkyOnly,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn reference_root_rule() {
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        let owner = PubkyId::try_from(HOST).unwrap();
+        let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
+        for owner in [None, Some(&owner)] {
+            assert!(validate_reference(
+                &private,
+                AllowedSchemes::Universal,
+                max,
+                &ctx(Root::Priv),
+                owner
+            )
+            .is_ok());
+            let e = validate_reference(
+                &private,
+                AllowedSchemes::Universal,
+                max,
+                &ctx(Root::Pub),
+                owner,
+            )
+            .unwrap_err();
+            assert!(e.contains("public object"), "{e}");
+        }
+        let public = p("/pub/social/v1/posts/0032SSN7Q4EVG");
+        assert!(validate_reference(
+            &public,
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+        assert!(validate_reference(
+            &public,
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Priv),
+            None
+        )
+        .is_ok());
+        // bare host is not priv-rooted; the priv root itself is
+        assert!(validate_reference(
+            &p(""),
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+        assert!(validate_reference(
+            &p("/priv"),
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_err());
+        assert!(validate_reference(
+            &p("/private/x"),
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn reference_ownership_rule() {
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        let other =
+            PubkyId::try_from("8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo").unwrap();
+        let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
+        // The root rule runs first, it needs no owner; ownership is the private-root verdict
+        for (root, reason) in [(Root::Pub, "public object"), (Root::Priv, "another user")] {
+            let e = validate_reference(
+                &private,
+                AllowedSchemes::Universal,
+                max,
+                &ctx(root),
+                Some(&other),
+            )
+            .unwrap_err();
+            assert!(e.contains(reason), "{e}");
+        }
+        assert!(validate_reference(
+            &private,
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Priv),
+            None
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn reference_post_must_be_versionless() {
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        let versioned = p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json");
+        for set in [AllowedSchemes::Universal, AllowedSchemes::PubkyOnly] {
+            let e = validate_reference(&versioned, set, max, &ctx(Root::Pub), None).unwrap_err();
+            assert!(e.contains("versionless"), "{e}");
+        }
+        assert!(validate_reference(
+            &p("/pub/social/v1/posts/0032SSN7Q4EVG"),
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+        // a file path carries no version and is not a post
+        assert!(validate_reference(
+            &p("/pub/social/v1/files/0034A0X7NJ52G"),
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn checked_requires_the_fixed_point() {
+        let max = VALIDATION_LIMITS.reference_uri_max_length;
+        assert!(checked(
+            "f",
+            &p(""),
+            AllowedSchemes::PubkyOnly,
+            max,
+            &ctx(Root::Pub),
+            None
+        )
+        .is_ok());
+        let e = checked(
+            "f",
+            &format!("pubky{HOST}"),
+            AllowedSchemes::PubkyOnly,
+            max,
+            &ctx(Root::Pub),
+            None,
+        )
+        .unwrap_err();
+        assert!(e.starts_with("Validation Error: f must be spelled"), "{e}");
+        let e = checked(
+            "f",
+            "IPFS://x",
+            AllowedSchemes::Universal,
+            max,
+            &ctx(Root::Pub),
+            None,
+        )
+        .unwrap_err();
+        assert!(e.contains("spelled"), "{e}");
+        let e = checked(
+            "f",
+            "ipfs://x",
+            AllowedSchemes::PubkyOnly,
+            max,
+            &ctx(Root::Pub),
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            e.starts_with("Validation Error: f must be a canonical pubky URI"),
+            "{e}"
+        );
     }
 }
