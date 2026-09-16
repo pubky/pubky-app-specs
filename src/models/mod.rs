@@ -316,12 +316,7 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
-        let tag_id = tag::PubkySocialTag {
-            uri: post_uri.clone(),
-            label: "cool".to_string(),
-            created_at: 0,
-        }
-        .create_id();
+        let tag_id = tag::PubkySocialTag::new(post_uri.clone(), "cool".to_string()).create_id();
         let uri = tag_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
             tag_id,

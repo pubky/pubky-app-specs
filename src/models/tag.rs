@@ -1,12 +1,15 @@
+use crate::canonicalize::{checked, AllowedSchemes};
 use crate::constants::social_path;
-use crate::traits::{Root, ValidationCtx, ValidationError};
+use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
-    common::timestamp,
+    common::{
+        ascii_fold, check_extra, code_point_len, frozen_trim, is_frozen_whitespace, timestamp,
+        validate_safe_json_int,
+    },
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, HashId, Validatable},
 };
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -34,6 +37,10 @@ pub struct PubkySocialTag {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub label: String,
     pub created_at: i64,
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[serde(flatten)]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PubkySocialTag {
@@ -43,6 +50,7 @@ impl PubkySocialTag {
             uri,
             label,
             created_at,
+            extra: Default::default(),
         }
         .sanitize()
     }
@@ -88,23 +96,28 @@ impl HasIdPath for PubkySocialTag {
 }
 
 impl HashId for PubkySocialTag {
-    /// Tag ID is created based on the hash of the URI tagged and the label used
+    /// Identity input: "{uri}:{label}". The stored uri is already canonical (validation
+    /// requires the fixed point), so nothing is re-derived here. Unambiguous only because the
+    /// label rejects ':'; that restriction may never be lifted while this id format stands.
+    /// Not migration-invariant for social targets (the embedded path prefix changes across
+    /// epochs): indexers dedup by normalized target, never by raw HashId.
     fn get_id_data(&self) -> String {
         format!("{}:{}", self.uri, self.label)
     }
 }
 
-/// Sanitizes a single tag label by trimming whitespace and converting to lowercase.
-/// This function is public so it can be reused by other models that use tags (e.g., Feed).
+/// Frozen-trim + ASCII-only lowercase. Full-Unicode lowercasing is not version-pinnable across
+/// engines and would fork content-addressed ids; non-Latin labels are stored case-sensitively.
+/// Shared with the feed config.
 pub fn sanitize_tag_label(tag: &str) -> String {
-    tag.trim().to_lowercase()
+    ascii_fold(frozen_trim(tag))
 }
 
 /// Validates a single tag label according to PubkySocialTag rules.
 /// Returns an error message if validation fails, or Ok(()) if valid.
 /// This function is public so it can be reused by other models that use tags (e.g., Feed).
 pub fn validate_tag_label(tag: &str) -> Result<(), String> {
-    let tag_len = tag.chars().count();
+    let tag_len = code_point_len(tag);
 
     // Validate tag length
     if tag_len > VALIDATION_LIMITS.tag_label_max_length {
@@ -120,8 +133,8 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
         ));
     }
 
-    // Validate tag chars: disallow whitespace or invalid characters.
-    if tag.chars().any(|c| c.is_whitespace()) {
+    // The frozen whitespace set, not the engine's notion of whitespace
+    if tag.chars().any(is_frozen_whitespace) {
         return Err(format!(
             "Validation Error: Tag '{}' contains whitespace characters",
             tag
@@ -143,21 +156,10 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
 
 impl Validatable for PubkySocialTag {
     fn sanitize(self) -> Self {
-        // Sanitize label: trim whitespace and lowercase
-        let label = sanitize_tag_label(&self.label);
-
-        // Sanitize URI
-        let uri = match Url::parse(&self.uri) {
-            // If the URL is valid, reformat it to a sanitized string representation
-            Ok(url) => url.to_string(),
-            // If the URL is invalid, return as-is for error reporting later
-            Err(_) => self.uri.trim().to_string(),
-        };
-
+        // The label folds; the uri is stored as written and validation requires it canonical
         PubkySocialTag {
-            uri,
-            label,
-            created_at: self.created_at,
+            label: sanitize_tag_label(&self.label),
+            ..self
         }
     }
 
@@ -166,326 +168,214 @@ impl Validatable for PubkySocialTag {
         id: Option<&str>,
         _ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
-        // Validate the tag ID
         if let Some(id) = id {
             self.validate_id(id)?;
         }
-
-        // Validate label
+        check_extra(&self.extra, &["uri", "label", "created_at"])?;
         validate_tag_label(&self.label)?;
-
-        // Validate URI format
-        Url::parse(&self.uri)
-            .map(|_| ())
-            .map_err(|_| format!("Validation Error: Invalid URI format: {}", self.uri))
+        // Any public resource: a social object, another app's, or an external URI. Tags are
+        // public objects, so a private target fails the root rule whatever ctx says.
+        checked(
+            "uri",
+            &self.uri,
+            AllowedSchemes::Universal,
+            VALIDATION_LIMITS.reference_uri_max_length,
+            &PUB_CTX,
+            None,
+        )?;
+        validate_safe_json_int(self.created_at)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::PUB_CTX;
-    use crate::{post_uri_builder, traits::Validatable, user_uri_builder};
+    use crate::traits::Validatable;
+    use crate::{post_uri_builder, user_uri_builder};
 
-    #[test]
-    fn test_in_memory_size_cap() {
-        // A URL past the object cap parses as a URL, so only the cap can reject it
-        let tag = PubkySocialTag {
-            uri: format!("https://x.com/{}", "a".repeat(PubkySocialTag::MAX_BYTES)),
-            created_at: 1627849723,
-            label: "cool".to_string(),
-        };
-        assert!(tag.validate_fields(None, &PUB_CTX).is_ok());
-        assert!(tag
-            .validate(None, &PUB_CTX)
-            .unwrap_err()
-            .contains("exceeds"));
-    }
+    const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    const TS: &str = "0032FNCGXE3R0";
 
-    #[test]
-    fn test_label_id() {
-        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-        // Precomputed earlier
-        let tag_id = "KGQV0AN2WFM2C4V8NF2RZPMQM8";
-        // Create new tag
-        let tag = PubkySocialTag {
-            uri: post_uri.clone(),
-            created_at: 1627849723,
-            label: "cool".to_string(),
-        };
-
-        let new_tag_id = tag.create_id();
-        assert!(!tag_id.is_empty());
-
-        // Check if the tag ID is correct
-        assert_eq!(new_tag_id, tag_id);
-
-        let wrong_tag = PubkySocialTag {
-            uri: post_uri,
-            created_at: 1627849723,
-            label: "co0l".to_string(),
-        };
-
-        // Assure that the new tag has wrong ID
-        assert_ne!(wrong_tag.create_id(), tag_id);
-    }
-
-    #[test]
-    fn test_create_id() {
-        let tag = PubkySocialTag {
-            uri: "https://example.com/post/1".to_string(),
+    fn tag(uri: &str, label: &str) -> PubkySocialTag {
+        PubkySocialTag {
+            uri: uri.into(),
+            label: label.into(),
             created_at: 1627849723000,
-            label: "cool".to_string(),
-        };
+            extra: Default::default(),
+        }
+    }
 
-        let tag_id = tag.create_id();
-        println!("Generated Tag ID: {}", tag_id);
+    fn post_uri() -> String {
+        post_uri_builder(PK.into(), TS.into())
+    }
 
-        // Assert that the tag ID is of expected length
-        // The length depends on your implementation of create_id
-        assert!(!tag_id.is_empty());
+    fn validate(t: &PubkySocialTag) -> Result<(), String> {
+        t.validate(Some(&t.create_id()), &PUB_CTX)
     }
 
     #[test]
-    fn test_new() {
-        let uri = "https://example.com/post/1".to_string();
-        let label = "interesting".to_string();
-        let tag = PubkySocialTag::new(uri.clone(), label.clone());
+    fn test_label_id_kat() {
+        // Pinned: blake3("{uri}:cool")[..16] in Crockford, over the v1 post reference
+        let t = tag(&post_uri(), "cool");
+        assert_eq!(t.create_id(), "ES26HNPH6M0CYFFW65PCRC107W");
+        assert_ne!(tag(&post_uri(), "co0l").create_id(), t.create_id());
+    }
 
-        assert_eq!(tag.uri, uri);
-        assert_eq!(tag.label, label);
-        // Check that created_at is recent
+    #[test]
+    fn test_id_reads_the_stored_uri_and_the_label_is_the_only_separator() {
+        let t = tag(&post_uri(), "cool");
+        assert_eq!(t.get_id_data(), format!("{}:cool", post_uri()));
+        // ':' in a label would make "{uri}:{label}" ambiguous from the right
+        assert!(validate(&tag(&post_uri(), "a:b")).is_err());
+        assert!(VALIDATION_LIMITS.tag_invalid_chars.contains(&':'));
+    }
+
+    #[test]
+    fn test_uri_is_a_fixed_point_of_the_universal_gate() {
+        for ok in [
+            post_uri(),
+            user_uri_builder(PK.into()),
+            "https://example.com/x".into(),
+            "ipfs://bafy".into(),
+            "nostr:nevent1abc".into(),
+            format!("pubky://{PK}/pub/pubky.app/posts/{TS}"),
+        ] {
+            assert!(validate(&tag(&ok, "cool")).is_ok(), "{ok}");
+        }
+        for bad in [
+            format!("pubky{PK}/pub/social/v1/posts/{TS}"),
+            " https://example.com/x".into(),
+            "NOSTR:X".into(),
+            "invalid_uri".into(),
+            format!("pubky://{PK}/priv/social/v1/posts/{TS}"),
+            format!("pubky://{PK}/pub/social/v1/posts/{TS}/{TS}.json"),
+            format!(
+                "nostr:{}",
+                "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
+            ),
+        ] {
+            let e = validate(&tag(&bad, "cool")).unwrap_err();
+            assert!(e.starts_with("Validation Error: uri"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn test_one_target_one_id_and_the_epoch_fork() {
+        // two tags over the canonical spelling of one target share an id
+        assert_eq!(
+            tag("https://example.com/x", "cool").create_id(),
+            tag("https://example.com/x", "cool").create_id()
+        );
+        // the short form is not stored, so it never mints a second id for the same target
+        let short = format!("pubky{PK}/pub/social/v1/posts/{TS}");
+        assert!(validate(&tag(&short, "cool")).is_err());
+        // a social target spelled in two epochs is two ids; the indexer collapses them by
+        // normalized target
+        assert_ne!(
+            tag(&format!("pubky://{PK}/pub/pubky.app/posts/{TS}"), "cool").create_id(),
+            tag(&post_uri(), "cool").create_id()
+        );
+    }
+
+    #[test]
+    fn test_label_folding() {
+        for (input, want) in [
+            ("CoOl", "cool"),
+            ("  CoOl  ", "cool"),
+            ("\u{3000}tag\u{00A0}", "tag"),
+            ("İX", "İx"),
+            ("\u{200B}a", "\u{200B}a"),
+        ] {
+            assert_eq!(sanitize_tag_label(input), want, "{input:?}");
+        }
+        assert!(validate(&tag(&post_uri(), "\u{200B}a")).is_ok());
+    }
+
+    #[test]
+    fn test_label_rules_count_code_points_and_the_frozen_set() {
+        let max = VALIDATION_LIMITS.tag_label_max_length;
+        assert!(validate(&tag(&post_uri(), &"🦀".repeat(max))).is_ok());
+        let e = validate(&tag(&post_uri(), &"🦀".repeat(max + 1))).unwrap_err();
+        assert!(e.contains("exceeds maximum length"), "{e}");
+        assert!(validate(&tag(&post_uri(), "")).is_err());
+        let e = validate(&tag(&post_uri(), "a\u{00A0}b")).unwrap_err();
+        assert!(e.contains("whitespace"), "{e}");
+        for c in VALIDATION_LIMITS.tag_invalid_chars {
+            assert!(
+                validate(&tag(&post_uri(), &format!("a{c}b"))).is_err(),
+                "{c:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_created_at_is_json_safe() {
+        let mut t = tag(&post_uri(), "cool");
+        t.created_at = i64::MAX;
+        assert!(validate(&t).unwrap_err().contains("JSON-safe"));
+    }
+
+    #[test]
+    fn test_new_folds_the_label_and_keeps_the_uri() {
+        let t = PubkySocialTag::new("https://example.com/post/1".into(), "  Interesting ".into());
+        assert_eq!(t.uri, "https://example.com/post/1");
+        assert_eq!(t.label, "interesting");
         let now = timestamp();
-
-        assert!(tag.created_at <= now && tag.created_at >= now - 1_000_000); // within 1 second
+        assert!(t.created_at <= now && t.created_at >= now - 1_000_000);
     }
 
     #[test]
     fn test_create_path() {
-        let post_uri = post_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "0032FNCGXE3R0".into(),
-        );
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            created_at: 1627849723000,
-            label: "cool".to_string(),
-        };
-
-        let expected_id = tag.create_id();
-        let expected_path = format!("/pub/social/v1/tags/{}.json", expected_id);
-        let path = PubkySocialTag::create_path(&expected_id);
-
-        assert_eq!(path, expected_path);
-    }
-
-    #[test]
-    fn test_sanitize() {
-        // Test sanitization: lowercase conversion and whitespace trimming
-        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let test_cases = vec![
-            ("CoOl", "cool"),
-            ("  CoOl  ", "cool"),
-            ("UPPERCASE", "uppercase"),
-        ];
-
-        for (input, expected) in test_cases {
-            let tag = PubkySocialTag {
-                uri: post_uri.clone(),
-                label: input.to_string(),
-                created_at: 1627849723000,
-            };
-            let sanitized_tag = tag.sanitize();
-            assert_eq!(sanitized_tag.label, expected, "Failed for input: {}", input);
-        }
-    }
-
-    #[test]
-    fn test_validate() {
-        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            label: "cool".to_string(),
-            created_at: 1627849723000,
-        };
-
-        let id = tag.create_id();
-        let result = tag.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_invalid_label_length() {
-        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            label: "a".repeat(VALIDATION_LIMITS.tag_label_max_length + 1),
-            created_at: 1627849723000,
-        };
-
-        let id = tag.create_id();
-        let result = tag.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        let error_msg = result.unwrap_err();
-        assert!(
-            error_msg.contains("exceeds maximum length"),
-            "Expected error about maximum length, got: {}",
-            error_msg
-        );
-    }
-
-    #[test]
-    fn test_validate_invalid_id() {
-        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            label: "cool".to_string(),
-            created_at: 1627849723000,
-        };
-
-        let invalid_id = "INVALIDID";
-        let result = tag.validate(Some(invalid_id), &PUB_CTX);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_invalid_char() {
-        let post_uri = post_uri_builder("user_id".into(), "0000000000000".into());
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            label: format!("invalidchar{}", VALIDATION_LIMITS.tag_invalid_chars[0]),
-            created_at: 1627849723000,
-        };
-
-        let id = tag.create_id();
-        let result = tag.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_invalid_uri() {
-        let tag = PubkySocialTag {
-            uri: "user_id/pub/pubky.app/posts/post_id".into(),
-            label: "cool".to_string(),
-            created_at: 1627849723000,
-        };
-
-        let id = tag.create_id();
-        let result = tag.validate(Some(&id), &PUB_CTX);
-        assert!(result
-            .unwrap_err()
-            .starts_with("Validation Error: Invalid URI format"));
-    }
-
-    #[test]
-    fn test_try_from_valid() {
-        let user_uri = user_uri_builder("user_pubky_id".into());
-        let tag_label = "CoolTag".to_string();
-        let tag_json = format!(
-            r#"
-            {{
-                "uri": "{user_uri}",
-                "label": "{tag_label}",
-                "created_at": 1627849723000
-            }}
-        "#
-        );
-
-        let id = PubkySocialTag::new(user_uri.clone(), tag_label.clone()).create_id();
-
-        let blob = tag_json.as_bytes();
-        let sanitized_validated_tag =
-            <PubkySocialTag as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
-        assert_eq!(sanitized_validated_tag.uri, user_uri);
-        assert_eq!(sanitized_validated_tag.label, "cooltag");
-    }
-
-    #[test]
-    fn test_try_from_invalid_uri() {
-        let tag_json = r#"
-        {
-            "uri": "invalid_uri",
-            "label": "CoolTag",
-            "created_at": 1627849723000
-        }
-        "#;
-
-        let id = "D2DV4EZDA03Q3KCRMVGMDYZ8C0";
-        let blob = tag_json.as_bytes();
-        let result = <PubkySocialTag as Validatable>::try_from(blob, id, &PUB_CTX);
-        assert!(result.is_err());
+        let id = tag(&post_uri(), "cool").create_id();
         assert_eq!(
-            result.unwrap_err().to_string(),
-            "Validation Error: Invalid URI format: invalid_uri"
+            PubkySocialTag::create_path(&id),
+            format!("/pub/social/v1/tags/{id}.json")
         );
     }
 
     #[test]
-    fn test_whitespace_handling() {
-        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-
-        // Leading/trailing whitespace should be trimmed and pass validation
-        let trim_cases = vec![" cool", "cool ", "cool\n", "  cool  "];
-        for label in trim_cases {
-            let tag = PubkySocialTag {
-                uri: post_uri.clone(),
-                created_at: 1627849723,
-                label: label.to_string(),
-            };
-            let sanitized = tag.sanitize();
-            assert_eq!(sanitized.label, "cool", "Failed for: {}", label);
-            assert!(
-                sanitized.validate(None, &PUB_CTX).is_ok(),
-                "Should pass after trimming: {}",
-                label
-            );
-        }
-
-        // Internal whitespace cannot be trimmed and should fail validation
-        let tag = PubkySocialTag {
-            uri: post_uri,
-            created_at: 1627849723,
-            label: "   co ol ".to_string(),
-        };
-        let sanitized = tag.sanitize();
-        assert_eq!(sanitized.label, "co ol"); // Only leading/trailing whitespace trimmed
-        assert!(sanitized.validate(None, &PUB_CTX).is_err()); // Internal space should fail validation
+    fn test_try_from_folds_validates_and_preserves() {
+        let user_uri = user_uri_builder(PK.into());
+        let blob = format!(
+            r#"{{"uri":"{user_uri}","label":"CoolTag","created_at":1627849723000,"ext":{{"badge":1}}}}"#
+        );
+        let id = PubkySocialTag::new(user_uri.clone(), "CoolTag".into()).create_id();
+        let t = <PubkySocialTag as Validatable>::try_from(blob.as_bytes(), &id, &PUB_CTX).unwrap();
+        assert_eq!(t.uri, user_uri);
+        assert_eq!(t.label, "cooltag");
+        assert_eq!(t.extra["ext"]["badge"], 1);
+        assert!(serde_json::to_string(&t)
+            .unwrap()
+            .contains(r#""ext":{"badge":1}"#));
+        // the id is over the folded label, so the writer's id verifies
+        assert!(validate(&t).is_ok());
+        let mut shadow = t.clone();
+        shadow.extra.insert("label".into(), "x".into());
+        assert!(validate(&shadow).unwrap_err().contains("shadow"));
     }
 
     #[test]
-    fn test_unicode_tag_labels() {
-        let post_uri = post_uri_builder("user_id".into(), "post_id".into());
-
-        // Unicode tags should work (emoji, non-latin scripts)
-        let unicode_cases = vec![
-            ("比特币", "比特币"),             // Chinese characters
-            ("ビットコイン", "ビットコイン"), // Japanese katakana
-            ("🚀", "🚀"),                     // Single emoji
-            ("café", "café"),                 // Accented characters
-        ];
-
-        for (input, expected) in unicode_cases {
-            let tag = PubkySocialTag::new(post_uri.clone(), input.to_string());
-            assert_eq!(tag.label, expected, "Failed for input: {}", input);
-            assert!(
-                tag.validate(None, &PUB_CTX).is_ok(),
-                "Should accept Unicode tag: {}",
-                input
-            );
-        }
-
-        // Test max length with multi-byte characters
-        // tag_label_max_length is 20, so 20 emoji should pass
-        let max_emoji_tag: String = "🔥".repeat(VALIDATION_LIMITS.tag_label_max_length);
-        assert_eq!(
-            max_emoji_tag.chars().count(),
-            VALIDATION_LIMITS.tag_label_max_length
-        );
-        let tag = PubkySocialTag::new(post_uri.clone(), max_emoji_tag);
+    fn test_try_from_invalid_uri_and_id() {
+        let blob = br#"{"uri":"invalid_uri","label":"CoolTag","created_at":1627849723000}"#;
+        let e =
+            <PubkySocialTag as Validatable>::try_from(blob, "D2DV4EZDA03Q3KCRMVGMDYZ8C0", &PUB_CTX)
+                .unwrap_err();
         assert!(
-            tag.validate(None, &PUB_CTX).is_ok(),
-            "Should accept {} emoji characters as tag",
-            VALIDATION_LIMITS.tag_label_max_length
+            e.starts_with("Validation Error: uri must be a canonical URI"),
+            "{e}"
         );
+        assert!(tag(&post_uri(), "cool")
+            .validate(Some("INVALIDID"), &PUB_CTX)
+            .is_err());
+    }
+
+    #[test]
+    fn test_in_memory_size_cap() {
+        // Every field passes on its own; only the total cap can reject
+        let mut t = tag(&post_uri(), "cool");
+        t.extra
+            .insert("ext".into(), "a".repeat(PubkySocialTag::MAX_BYTES).into());
+        assert!(t.validate_fields(None, &PUB_CTX).is_ok());
+        assert!(t.validate(None, &PUB_CTX).unwrap_err().contains("exceeds"));
     }
 }
