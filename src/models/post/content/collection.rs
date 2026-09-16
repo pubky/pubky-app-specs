@@ -66,6 +66,7 @@ pub struct PubkySocialCollectionItem {
 }
 
 impl PubkySocialCollectionItem {
+    /// An item over a canonical `uri` with an optional curator `note`; no unknown members.
     pub fn new(uri: String, note: Option<String>) -> Self {
         Self {
             uri,
