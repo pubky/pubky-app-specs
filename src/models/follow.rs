@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::{check_extra_keys, timestamp, validate_safe_json_int},
+    common::{check_extra, timestamp, validate_safe_json_int},
     traits::{HasIdPath, Validatable},
     PubkyId,
 };
@@ -73,7 +73,7 @@ impl Validatable for PubkySocialFollow {
         if let Some(id) = id {
             PubkyId::try_from(id)?;
         }
-        check_extra_keys(&self.extra, &["created_at"])?;
+        check_extra(&self.extra, &["created_at"])?;
         validate_safe_json_int(self.created_at)?;
         Ok(())
     }
