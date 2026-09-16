@@ -231,6 +231,14 @@ pass removes it once the owner agrees (Part C).
   destroying another client's data. Tolerating without preserving would let any older client drop
   every field added after it shipped.
 
+  Preservation is of values, not bytes. A rewrite may reorder members and respell escapes; what
+  it carries back is every member with its value. That needs one bound on the members
+  themselves: an unknown member may not shadow a declared one, and any integer inside it, at any
+  depth, is within the same JSON-safe range (2^53 - 1) every declared integer already obeys.
+  Without the second rule an integer beyond that range is rewritten by any JSON engine, this
+  crate's or a JavaScript caller's, and preservation would be a promise no implementation can
+  keep. Any other content of an unknown member is never inspected.
+
   Preservation fixes exactly one failure: a client deserializing into its own older types and
   writing back, silently destroying fields it never modeled. It does not fix concurrency.
   Concurrent writers still clobber whole files under last-write-wins wherever that is the
