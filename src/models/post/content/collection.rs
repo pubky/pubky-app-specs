@@ -1,7 +1,5 @@
-use crate::canonicalize::{checked, AllowedSchemes};
 use crate::common::{check_extra, code_point_len, frozen_trim};
 use crate::limits::VALIDATION_LIMITS;
-use crate::traits::ValidationCtx;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -52,13 +50,14 @@ impl FromStr for PubkySocialCollectionLayout {
 
 /// One curated item: any URI on the universal tier, with an optional note. An object rather
 /// than a string so per-item metadata stays additive.
-#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkySocialCollectionItem {
     /// Reference tier, universal: a social object, another app's object, or an external URI.
     pub uri: String,
-    /// Curator's note on this item, at most `collection_item_note_max_length` code points.
+    /// Curator's note on this item, `1..=collection_item_note_max_length` code points and not
+    /// whitespace-only: an empty note is an absent one, spelled once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
@@ -107,11 +106,9 @@ pub struct PubkySocialCollectionContent {
 }
 
 /// Validates a `kind = Collection` post, including its JSON content envelope. The cover and
-/// every item uri are reference positions and run through the post-level gate before this.
-pub(crate) fn validate_collection_post(
-    post: &PubkySocialPost,
-    ctx: &ValidationCtx,
-) -> Result<(), String> {
+/// every item uri are reference positions and run through the post-level gate before this,
+/// with the author in scope when there is one; nothing here re-gates them.
+pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
@@ -135,13 +132,10 @@ pub(crate) fn validate_collection_post(
                 e
             )
         })?;
-    validate_collection_envelope(&envelope, ctx)
+    validate_collection_envelope(&envelope)
 }
 
-fn validate_collection_envelope(
-    envelope: &PubkySocialCollectionContent,
-    ctx: &ValidationCtx,
-) -> Result<(), String> {
+fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Result<(), String> {
     check_extra(
         &envelope.extra,
         &["name", "description", "items", "cover_image", "layout"],
@@ -176,21 +170,11 @@ fn validate_collection_envelope(
     }
     for (index, item) in envelope.items.iter().enumerate() {
         check_extra(&item.extra, &["uri", "note"])?;
-        // The gate ran at the post level with the author when one was in scope; here it
-        // pins the verdict for an envelope validated on its own
-        checked(
-            &format!("items[{index}].uri"),
-            &item.uri,
-            AllowedSchemes::Universal,
-            VALIDATION_LIMITS.reference_uri_max_length,
-            ctx,
-            None,
-        )?;
         if let Some(note) = &item.note {
-            if code_point_len(note) > VALIDATION_LIMITS.collection_item_note_max_length {
+            let max = VALIDATION_LIMITS.collection_item_note_max_length;
+            if frozen_trim(note).is_empty() || code_point_len(note) > max {
                 return Err(format!(
-                    "Validation Error: items[{index}].note must be at most {} code points",
-                    VALIDATION_LIMITS.collection_item_note_max_length
+                    "Validation Error: items[{index}].note must be 1..={max} code points and not blank"
                 ));
             }
         }
@@ -659,10 +643,18 @@ mod tests {
         let post = PubkySocialPost::new(long, PubkySocialPostKind::Collection, None, None, vec![]);
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(err.contains("items[0].note"), "got: {err}");
+        // an empty or blank note is an absent one and has exactly one spelling
+        for blank in ["", " ", "\u{00A0}"] {
+            let content = format!(r#"{{"name":"X","items":[{{"uri":"{uri}","note":"{blank}"}}]}}"#);
+            let post =
+                PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+            let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+            assert!(err.contains("items[0].note"), "{blank:?}: {err}");
+        }
         // an unknown member may not shadow a declared one, in the item or the envelope
         let mut shadow = envelope.clone();
         shadow.items[0].extra.insert("uri".into(), "x".into());
-        assert!(validate_collection_envelope(&shadow, &PUB_CTX)
+        assert!(validate_collection_envelope(&shadow)
             .unwrap_err()
             .contains("shadow"));
     }

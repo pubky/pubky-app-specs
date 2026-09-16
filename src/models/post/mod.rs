@@ -482,7 +482,7 @@ impl Validatable for PubkySocialPost {
         self.check_references(ctx, None)?;
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
-            return content::collection::validate_collection_post(self, ctx);
+            return content::collection::validate_collection_post(self);
         }
 
         if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {

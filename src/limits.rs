@@ -81,7 +81,8 @@ pub struct ValidationLimits {
     /// Maximum number of items per Collection.
     pub collection_items_max_count: usize,
     /// Maximum code points of a collection item's `note`, the same bound as an attachment's
-    /// `alt`.
+    /// `alt`. A single-field bound: the envelope cap (`collection_content_max_length`) binds
+    /// first for a long list, as `post_max_bytes` does for attachments.
     pub collection_item_note_max_length: usize,
     /// Maximum number of tags allowed in a feed.
     pub feed_tags_max_count: usize,

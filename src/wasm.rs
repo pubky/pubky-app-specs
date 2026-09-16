@@ -350,13 +350,13 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
-    /// Creates a `kind = Collection` post, a curated list of URIs under
-    /// a name and optional description.
+    /// Creates a `kind = Collection` post, a curated list of items under a name and
+    /// optional description.
     ///
-    /// Convenience wrapper around `createPost` that builds the
-    /// `PubkySocialCollectionContent` envelope (`{ name, description, items,
-    /// cover_image, layout }`) and JSON-serializes it into `content` internally,
-    /// so JS callers don't have to stringify the envelope themselves.
+    /// Convenience wrapper around `createPost` that builds the `PubkySocialCollectionContent`
+    /// envelope (`{ name, description?, items: [{uri, note?}], cover_image?, layout? }`) and
+    /// JSON-serializes it into `content`. Items are given as URI strings and stored as
+    /// `{uri}`; notes are authored through the function-shaped surface.
     ///
     /// `layout` is one of `"grid" | "list" | "visual"`.
     ///
