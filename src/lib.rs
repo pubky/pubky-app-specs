@@ -39,7 +39,7 @@ pub use models::post::lifecycle::{
 };
 pub use models::post::{
     MintedVersion, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
-    PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialCollectionItem, PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
 };
 pub use models::tag::{sanitize_tag_label, validate_tag_label, PubkySocialTag};
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};

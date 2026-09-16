@@ -360,7 +360,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           "Posts worth revisiting",
           "Collection description should match"
         );
-        assert.deepStrictEqual(envelope.items, [collectionItemUri], "Collection items should match");
+        assert.deepStrictEqual(envelope.items, [{ uri: collectionItemUri }], "Collection items are objects");
         assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
       });
 

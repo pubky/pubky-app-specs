@@ -257,25 +257,6 @@ pub(crate) fn checked(
     }
 }
 
-/// A reference to a post: public, versionless, and a fixed point of the parser's own emitter
-/// (which rejects the short form). Collection items use it until they join the universal tier.
-pub(crate) fn check_post_reference(raw: &str) -> Result<(), String> {
-    let parsed = crate::ParsedUri::try_from(raw)
-        .map_err(|e| format!("must be a canonical post URI: {e}"))?;
-    match (parsed.visibility, &parsed.resource) {
-        (crate::Visibility::Public, crate::Resource::Post { version: None, .. }) => {
-            if parsed.try_to_uri_str().as_deref() == Ok(raw) {
-                Ok(())
-            } else {
-                Err(format!("must be spelled in canonical form: {raw}"))
-            }
-        }
-        _ => Err(format!(
-            "must be a public, versionless post reference: {raw}"
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

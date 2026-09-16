@@ -377,9 +377,15 @@ impl PubkySpecsBuilder {
         let envelope = PubkySocialCollectionContent {
             name,
             description,
-            items: items.unwrap_or_default(),
+            // Notes are authored through the function-shaped surface that replaces this one
+            items: items
+                .unwrap_or_default()
+                .into_iter()
+                .map(|uri| PubkySocialCollectionItem::new(uri, None))
+                .collect(),
             cover_image,
             layout,
+            extra: Default::default(),
         };
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;

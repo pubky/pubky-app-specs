@@ -4,7 +4,6 @@
 //! operations for the caller to execute, across both roots. Paths are owner-relative
 //! (`/pub/social/v1/...`), the form a homeserver LIST returns.
 
-use super::content::collection::PubkySocialCollectionContent;
 use super::{PubkySocialPost, PubkySocialPostKind};
 use crate::canonicalize::{validate_reference, AllowedSchemes};
 use crate::constants::{social_path, PROTOCOL};
@@ -95,11 +94,7 @@ fn other_refs(post: &PubkySocialPost) -> Vec<String> {
         .flatten()
         .cloned()
         .collect();
-    if matches!(post.kind, PubkySocialPostKind::Collection) {
-        if let Ok(e) = serde_json::from_str::<PubkySocialCollectionContent>(&post.content) {
-            refs.extend(e.items);
-        }
-    }
+    refs.extend(post.collection_item_uris());
     refs
 }
 
@@ -502,7 +497,7 @@ mod tests {
     fn publish_rewrites_the_collection_cover_and_keeps_every_other_member() {
         let cover = priv_file("0034A0X7NJ52G");
         let content = format!(
-            r#"{{"name":"n","items":["pubky://{PK}/pub/social/v1/posts/{TS}"],"cover_image":"{cover}","layout":"carousel","future":1}}"#
+            r#"{{"name":"n","items":[{{"uri":"pubky://{PK}/pub/social/v1/posts/{TS}","note":"x","rating":5}}],"cover_image":"{cover}","layout":"carousel","future":1}}"#
         );
         let collection =
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
@@ -515,6 +510,7 @@ mod tests {
         assert_eq!(e["layout"], "carousel");
         assert_eq!(e["future"], 1);
         assert_eq!(e["name"], "n");
+        assert_eq!(e["items"][0]["rating"], 5);
         // an integer no JSON engine carries back is refused, not re-spelled
         let content =
             format!(r#"{{"name":"n","items":[],"cover_image":"{cover}","big":9007199254740992}}"#);
