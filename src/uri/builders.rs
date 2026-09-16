@@ -41,7 +41,7 @@ pub fn follow_uri_builder(author_id: String, follow_id: String) -> String {
     [PROTOCOL, &author_id, &follow_path].concat()
 }
 
-/// Builds a Mute URI of the form "pubky://<author_id>/pub/social/v1/mutes/<mute_id>.json\"
+/// Builds a Mute URI of the form "pubky://<author_id>/priv/social/v1/mutes/<mute_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = muteUriBuilder))]
 pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
     let mute_path = PubkySocialMute::create_path(&mute_id);

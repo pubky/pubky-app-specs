@@ -58,7 +58,12 @@ impl ParsedUri {
                 (Some(v), Some(l)) => format!("posts/{id}/{v}-{l}.json"),
             },
             Resource::Follow(pk) => format!("follows/{pk}.json"),
-            Resource::Mute(pk) => format!("mutes/{pk}.json"),
+            Resource::Mute(pk) => {
+                if root == Root::Pub {
+                    return Err("mutes live under the private root".to_string());
+                }
+                format!("mutes/{pk}.json")
+            }
             Resource::Bookmark(id) => format!("bookmarks/{id}.json"),
             Resource::Tag(id) => format!("tags/{id}.json"),
             Resource::File(id) => format!("files/{id}.json"),
@@ -173,7 +178,7 @@ fn dispatch(root: Root, rest: &[&str]) -> Resource {
             },
             _ => Resource::Unknown,
         },
-        (Root::Pub, ["mutes", leaf]) => match leaf.strip_suffix(".json") {
+        (Root::Priv, ["mutes", leaf]) => match leaf.strip_suffix(".json") {
             Some(pk) => match PubkyId::try_from(pk) {
                 Ok(pk) => Resource::Mute(pk),
                 Err(_) => Resource::Unknown,
@@ -329,7 +334,7 @@ mod tests {
             (p("/pub/social/v1/tags/8Z8CWH8NVYQY39ZEBFGKQWWEK.json"), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/follows/{HOST}.json")), Some((Public, Resource::Follow(pk())))),
             (p(&format!("/pub/social/v1/follows/{}.json", HOST.to_uppercase())), Some((Public, Resource::Unknown))),
-            (p(&format!("/pub/social/v1/mutes/{HOST}.json")), Some((Public, Resource::Mute(pk())))),
+            (p(&format!("/priv/social/v1/mutes/{HOST}.json")), Some((Private, Resource::Mute(pk())))),
             (p(&format!("/pub/social/v1/bookmarks/{H26}.json")), Some((Public, Resource::Bookmark(H26.into())))),
             // v0-shaped media under the epoch (collapsed later)
             (p(&format!("/pub/social/v1/files/{TS}.json")), Some((Public, Resource::File(TS.into())))),
@@ -380,7 +385,7 @@ mod tests {
             (format!("pubky://{}/pub/social/v1/profile.json", HOST.to_uppercase()), None),
             (p("/priv/social/v1/profile.json"), Some((Private, Resource::Unknown))),
             (p(&format!("/priv/social/v1/follows/{HOST}.json")), Some((Private, Resource::Unknown))),
-            (p(&format!("/priv/social/v1/mutes/{HOST}.json")), Some((Private, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/mutes/{HOST}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/priv/social/v1/bookmarks/{H26}.json")), Some((Private, Resource::Unknown))),
             (p(&format!("/pub/social/v1/files/{H26}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/blobs/{H26}.json")), Some((Public, Resource::Unknown))),
@@ -500,7 +505,7 @@ mod tests {
             (Visibility::Public, post(TS, None, None)),
             (Visibility::Private, post(TS, Some(TS2), Some("hello"))),
             (Visibility::Public, Resource::Follow(pk())),
-            (Visibility::Public, Resource::Mute(pk())),
+            (Visibility::Private, Resource::Mute(pk())),
             (Visibility::Public, Resource::Bookmark(H26.into())),
             (Visibility::Public, Resource::Tag(H26.into())),
             (Visibility::Private, Resource::File(TS.into())),
@@ -531,6 +536,7 @@ mod tests {
     fn unspeakable_values_are_refused() {
         let cases = [
             (Visibility::Private, Resource::User),
+            (Visibility::Public, Resource::Mute(pk())),
             (Visibility::Private, Resource::Tag(H26.into())),
             (Visibility::Public, Resource::Tag("bad".into())),
             (Visibility::Public, post(TS, None, Some("orphan"))),

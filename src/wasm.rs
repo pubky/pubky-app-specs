@@ -1,5 +1,5 @@
 use crate::limits::VALIDATION_LIMITS;
-use crate::traits::{HasIdPath, HasPath, HashId, TimestampId, Validatable};
+use crate::traits::{HasIdPath, HasPath, HashId, Root, TimestampId, Validatable, ValidationCtx};
 use crate::*;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
@@ -450,7 +450,7 @@ impl PubkySpecsBuilder {
     #[wasm_bindgen(js_name = createMute)]
     pub fn create_mute(&self, mutee_id: String) -> Result<MuteResult, String> {
         let mute = PubkySocialMute::new();
-        mute.validate(Some(&mutee_id), &PUB_CTX)?;
+        mute.validate(Some(&mutee_id), &ValidationCtx { root: Root::Priv })?;
 
         let path = PubkySocialMute::create_path(&mutee_id);
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
