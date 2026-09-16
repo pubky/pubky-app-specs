@@ -1,7 +1,8 @@
-//! Pure planners for the post lifecycle across the two roots: publish a private draft,
-//! unpublish a public post, delete a post everywhere. No I/O: each planner takes the listings
-//! the caller already fetched and returns ordered operations for the caller to execute. Paths
-//! are owner-relative (`/pub/social/v1/...`), the form a homeserver LIST returns.
+//! Pure planners for publishing, unpublishing and deleting a post.
+//!
+//! No I/O: each planner takes the listings the caller already fetched and returns ordered
+//! operations for the caller to execute, across both roots. Paths are owner-relative
+//! (`/pub/social/v1/...`), the form a homeserver LIST returns.
 
 use super::content::collection::PubkySocialCollectionContent;
 use super::{PubkySocialPost, PubkySocialPostKind};
@@ -77,10 +78,7 @@ fn envelope_of(post: &PubkySocialPost) -> Option<serde_json::Map<String, serde_j
 }
 
 fn cover_of(post: &PubkySocialPost) -> Option<String> {
-    envelope_of(post)?
-        .get("cover_image")?
-        .as_str()
-        .map(str::to_string)
+    post.envelope_cover()
 }
 
 /// Media positions in reference order: attachments, then the cover.
@@ -226,11 +224,11 @@ fn edit_id_of(post_id: &str, root: Root, path: &str) -> Result<String, String> {
         .ok_or_else(|| format!("not a post version path: {path}"))
 }
 
-/// A legacy (pre-epoch) path of this post: its last segments are `posts/{post_id}`, the v0
-/// leaf, so a sibling post or another object never rides along into a delete list.
+/// The one legacy (pre-epoch) path of this post, `/pub/pubky.app/posts/{id}`: ids are stable
+/// across epochs, and nothing else may ride along into a delete list.
 fn check_legacy_paths(post_id: &str, paths: &[String]) -> Result<(), String> {
-    let leaf = format!("/{}{post_id}", PubkySocialPost::PATH_SEGMENT);
-    match paths.iter().find(|p| !p.ends_with(&leaf)) {
+    let legacy = format!("/pub/pubky.app/{}{post_id}", PubkySocialPost::PATH_SEGMENT);
+    match paths.iter().find(|p| **p != legacy) {
         Some(p) => Err(format!("not a legacy path of post {post_id}: {p}")),
         None => Ok(()),
     }
@@ -552,6 +550,20 @@ mod tests {
         assert!(plan_delete(TS, &[sibling], &[], &[], &owner()).is_err());
         let mine = format!("/pub/pubky.app/posts/{TS}");
         assert!(plan_delete(TS, &[mine], &[], &[], &owner()).is_ok());
+        for near in [
+            format!("/priv/pubky.app/posts/{TS}"),
+            format!("/pub/other.app/posts/{TS}"),
+            format!("/pub/pubky.app/posts/{TS}/"),
+        ] {
+            assert!(
+                plan_delete(TS, std::slice::from_ref(&near), &[], &[], &owner()).is_err(),
+                "{near}"
+            );
+            assert!(
+                plan_unpublish(TS, &[pub_v(TS)], std::slice::from_ref(&near), None).is_err(),
+                "{near}"
+            );
+        }
         // a non-canonical post id never matches a listing, however the paths are spelled
         let odd = "/pub/social/v1/posts/x/0032SSN7Q4EVG.json".to_string();
         assert!(plan_unpublish("x", std::slice::from_ref(&odd), &[], None).is_err());

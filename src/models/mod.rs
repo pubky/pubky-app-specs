@@ -82,7 +82,13 @@ impl PubkySocialObject {
         let ctx = ValidationCtx {
             root: parsed_uri.visibility.root(),
         };
-        Self::from_resource(&parsed_uri.resource, blob, &ctx)
+        let object = Self::from_resource(&parsed_uri.resource, blob, &ctx)?;
+        // The URI names the author, so the ownership rule can run here where a bare
+        // `Resource` cannot supply it
+        if let PubkySocialObject::Post(post) = &object {
+            post.check_references(&ctx, Some(&parsed_uri.user_id))?;
+        }
+        Ok(object)
     }
 
     /// Given a Resource and a blob (raw data from the homeserver),

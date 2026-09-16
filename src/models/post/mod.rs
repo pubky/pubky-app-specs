@@ -383,18 +383,24 @@ impl PubkySocialPost {
             let field = format!("attachments[{index}].uri");
             checked(&field, &attachment.uri, PubkyHttpHttps, max, ctx, owner)?;
         }
-        if matches!(self.kind, PubkySocialPostKind::Article) {
-            // An unparsable envelope is the article validator's error, not a reference error
-            if let Ok(envelope) =
-                serde_json::from_str::<content::article::PubkySocialArticleContent>(&self.content)
-            {
-                if let Some(cover) = &envelope.cover_image {
-                    let max = VALIDATION_LIMITS.image_url_max_length;
-                    checked("cover_image", cover, PubkyHttpHttps, max, ctx, owner)?;
-                }
-            }
+        // Either envelope's cover; an unparsable envelope is that validator's error
+        if let Some(cover) = self.envelope_cover() {
+            let max = VALIDATION_LIMITS.image_url_max_length;
+            checked("cover_image", &cover, PubkyHttpHttps, max, ctx, owner)?;
         }
         Ok(())
+    }
+
+    /// `cover_image` of the article or collection envelope, when the content parses.
+    pub(crate) fn envelope_cover(&self) -> Option<String> {
+        if !matches!(
+            self.kind,
+            PubkySocialPostKind::Article | PubkySocialPostKind::Collection
+        ) {
+            return None;
+        }
+        let envelope: serde_json::Value = serde_json::from_str(&self.content).ok()?;
+        envelope.get("cover_image")?.as_str().map(str::to_string)
     }
 }
 
@@ -1036,6 +1042,63 @@ mod tests {
             None,
         );
         let e = article
+            .create_version(Root::Priv, &owner(), None)
+            .unwrap_err();
+        assert!(
+            e.contains("cover_image") && e.contains("another user"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn test_ingest_by_uri_applies_the_ownership_rule() {
+        let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+        let foreign_private = format!("pubky://{other}/priv/social/v1/posts/0032SSN7Q4EVG");
+        let mut draft = post(
+            PubkySocialPostKind::Note,
+            Some(&foreign_private),
+            None,
+            vec![],
+        );
+        draft.content = "re".into();
+        let id = draft.create_id();
+        let blob = serde_json::to_vec(&draft).unwrap();
+        let uri = format!("pubky://{PK}/priv/social/v1/posts/{id}/{id}.json");
+        // by resource alone there is no author, so only the root rule applies
+        let ctx = ValidationCtx { root: Root::Priv };
+        let resource = crate::ParsedUri::try_from(uri.as_str()).unwrap().resource;
+        assert!(crate::PubkySocialObject::from_resource(&resource, &blob, &ctx).is_ok());
+        let e = crate::PubkySocialObject::from_uri(&uri, &blob).unwrap_err();
+        assert!(e.contains("parent") && e.contains("another user"), "{e}");
+        // the author's own private reference ingests
+        let mine = p("/priv/social/v1/posts/0032SSN7Q4EVG");
+        let mut draft = post(PubkySocialPostKind::Note, Some(&mine), None, vec![]);
+        draft.content = "re".into();
+        let blob = serde_json::to_vec(&draft).unwrap();
+        assert!(crate::PubkySocialObject::from_uri(&uri, &blob).is_ok());
+    }
+
+    #[test]
+    fn test_collection_cover_is_a_media_reference_position() {
+        let id = PubkySocialPost::default().create_id();
+        let mine = p("/priv/social/v1/files/0034A0X7NJ52G");
+        let content = format!(r#"{{"name":"n","items":[],"cover_image":"{mine}"}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        assert!(collection
+            .validate(Some(&id), &ValidationCtx { root: Root::Priv })
+            .is_ok());
+        let e = collection.validate(Some(&id), &PUB_CTX).unwrap_err();
+        assert!(
+            e.contains("cover_image") && e.contains("public object"),
+            "{e}"
+        );
+        let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+        let theirs = format!("pubky://{other}/priv/social/v1/files/0034A0X7NJ52G");
+        let content = format!(r#"{{"name":"n","items":[],"cover_image":"{theirs}"}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let e = collection
             .create_version(Root::Priv, &owner(), None)
             .unwrap_err();
         assert!(
