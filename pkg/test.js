@@ -513,6 +513,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(muteMeta.url, "Mute should have a URL");
       const muteChunks = muteMeta.url.split("/")
       assert.strictEqual(muteChunks[2], OTTO, "URL should contain user ID");
+      assert.strictEqual(muteChunks[3], "priv", "mutes live under the private root");
       assert.strictEqual(muteChunks[6], "mutes", "URL should contain mutes path");
       assert.strictEqual(muteChunks[7], muteMeta.id + ".json", "URL should contain mute ID");
 

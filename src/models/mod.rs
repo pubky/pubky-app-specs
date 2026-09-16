@@ -19,8 +19,8 @@
 //!    part of the contract; values are. Deliberate extensions live under
 //!    the reserved `ext` member and are hostile input until the extension's
 //!    own rules have checked them. Post, attachment, the article envelope,
-//!    user and user link carry it today; the other models adopt it with
-//!    their own wire changes.
+//!    user, user link, follow and mute carry it today; the other models
+//!    adopt it with their own wire changes.
 //! 4. One total size cap per object (`Validatable::MAX_BYTES`), checked on
 //!    the raw bytes before parsing and on the serialized bytes in every
 //!    `validate`, so builders and JSON import cannot skip it. It bounds the open-ended `extra`

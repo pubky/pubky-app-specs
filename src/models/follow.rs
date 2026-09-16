@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::timestamp,
+    common::{check_extra, timestamp, validate_safe_json_int},
     traits::{HasIdPath, Validatable},
     PubkyId,
 };
@@ -30,16 +30,19 @@ use utoipa::ToSchema;
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialFollow {
     pub created_at: i64,
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[serde(flatten)]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
-
-// #[cfg(target_arch = "wasm32")]
-// impl Json for PubkySocialFollow {}
 
 impl PubkySocialFollow {
     /// Creates a new `PubkySocialFollow` instance.
     pub fn new() -> Self {
-        let created_at = timestamp();
-        Self { created_at }
+        Self {
+            created_at: timestamp(),
+            extra: Default::default(),
+        }
     }
 }
 
@@ -70,7 +73,8 @@ impl Validatable for PubkySocialFollow {
         if let Some(id) = id {
             PubkyId::try_from(id)?;
         }
-        // TODO: additional follow validation? E.g., validate `created_at`?
+        check_extra(&self.extra, &["created_at"])?;
+        validate_safe_json_int(self.created_at)?;
         Ok(())
     }
 }
@@ -92,6 +96,28 @@ mod tests {
     use super::*;
     use crate::traits::Validatable;
     use crate::traits::PUB_CTX;
+
+    #[test]
+    fn test_unknown_members_survive_and_created_at_is_safe() {
+        const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+        let blob = br#"{"created_at":1727740800000000,"ext":{"list":"friends"}}"#;
+        let follow = <PubkySocialFollow as Validatable>::try_from(blob, PK, &PUB_CTX).unwrap();
+        assert_eq!(follow.extra["ext"]["list"], "friends");
+        let back = serde_json::to_string(&follow).unwrap();
+        assert!(back.contains(r#""ext":{"list":"friends"}"#), "{back}");
+        let mut shadow = PubkySocialFollow::new();
+        shadow.extra.insert("created_at".into(), 1.into());
+        assert!(shadow
+            .validate(Some(PK), &PUB_CTX)
+            .unwrap_err()
+            .contains("shadow"));
+        let mut huge = PubkySocialFollow::new();
+        huge.created_at = i64::MAX;
+        assert!(huge
+            .validate(Some(PK), &PUB_CTX)
+            .unwrap_err()
+            .contains("JSON-safe"));
+    }
 
     #[test]
     fn test_new() {

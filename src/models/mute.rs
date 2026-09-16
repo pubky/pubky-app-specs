@@ -1,7 +1,7 @@
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::timestamp,
+    common::{check_extra, timestamp, validate_safe_json_int},
     traits::{HasIdPath, Validatable},
     PubkyId,
 };
@@ -16,24 +16,30 @@ use wasm_bindgen::prelude::*;
 use utoipa::ToSchema;
 
 /// Represents raw homeserver Mute object with timestamp
-/// URI: /pub/social/v1/mutes/:user_id.json
+/// URI: /priv/social/v1/mutes/:user_id.json
 ///
 /// Example URI:
 ///
-/// `/pub/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
+/// `/priv/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialMute {
     pub created_at: i64,
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[serde(flatten)]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PubkySocialMute {
     /// Creates a new `PubkySocialMute` instance.
     pub fn new() -> Self {
-        let created_at = timestamp();
-        Self { created_at }
+        Self {
+            created_at: timestamp(),
+            extra: Default::default(),
+        }
     }
 }
 
@@ -64,13 +70,14 @@ impl Validatable for PubkySocialMute {
         if let Some(id) = id {
             PubkyId::try_from(id)?;
         }
-        // TODO: additional Mute validation? E.g., validate `created_at` ?
+        check_extra(&self.extra, &["created_at"])?;
+        validate_safe_json_int(self.created_at)?;
         Ok(())
     }
 }
 
 impl HasIdPath for PubkySocialMute {
-    const ROOT: Root = Root::Pub;
+    const ROOT: Root = Root::Priv;
     const PATH_SEGMENT: &'static str = "mutes/";
 
     fn create_path(pubky_id: &str) -> String {
@@ -84,9 +91,10 @@ impl HasIdPath for PubkySocialMute {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    const PRIV_CTX: ValidationCtx = ValidationCtx { root: Root::Priv };
     use crate::common::timestamp;
     use crate::traits::Validatable;
-    use crate::traits::PUB_CTX;
 
     #[test]
     fn test_new() {
@@ -103,8 +111,43 @@ mod tests {
             PubkySocialMute::create_path("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo");
         assert_eq!(
             path,
-            "/pub/social/v1/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo.json"
+            "/priv/social/v1/mutes/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo.json"
         );
+        // the builder emits the private root and the parser reads it back
+        let uri = crate::mute_uri_builder(PK.into(), PK.into());
+        let parsed = crate::ParsedUri::try_from(uri.as_str()).unwrap();
+        assert_eq!(parsed.visibility, crate::Visibility::Private);
+        assert!(matches!(parsed.resource, crate::Resource::Mute(_)));
+        assert_eq!(parsed.try_to_uri_str().unwrap(), uri);
+        // a public mute path is not a mute
+        let public = uri.replace("/priv/", "/pub/");
+        let parsed = crate::ParsedUri::try_from(public.as_str()).unwrap();
+        assert!(matches!(parsed.resource, crate::Resource::Unknown));
+    }
+
+    #[test]
+    fn test_unknown_members_survive_and_created_at_is_safe() {
+        let blob = br#"{"created_at":1727740800000000,"ext":{"reason":"spam"}}"#;
+        let mute = <PubkySocialMute as Validatable>::try_from(blob, PK, &PRIV_CTX).unwrap();
+        assert_eq!(mute.extra["ext"]["reason"], "spam");
+        let back = serde_json::to_string(&mute).unwrap();
+        assert!(back.contains(r#""ext":{"reason":"spam"}"#), "{back}");
+        let mut shadow = PubkySocialMute::new();
+        shadow.extra.insert("created_at".into(), 1.into());
+        assert!(shadow
+            .validate(Some(PK), &PRIV_CTX)
+            .unwrap_err()
+            .contains("shadow"));
+        let mut huge = PubkySocialMute::new();
+        huge.created_at = i64::MAX;
+        assert!(huge
+            .validate(Some(PK), &PRIV_CTX)
+            .unwrap_err()
+            .contains("JSON-safe"));
+        // ingest by URI under the private root; the public spelling is not a mute
+        let uri = crate::mute_uri_builder(PK.into(), PK.into());
+        assert!(crate::PubkySocialObject::from_uri(&uri, blob).is_ok());
+        assert!(crate::PubkySocialObject::from_uri(uri.replace("/priv/", "/pub/"), blob).is_err());
     }
 
     #[test]
@@ -112,7 +155,7 @@ mod tests {
         let mute = PubkySocialMute::new();
         let result = mute.validate(
             Some("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"),
-            &PUB_CTX,
+            &PRIV_CTX,
         );
         assert!(result.is_ok());
     }
@@ -120,7 +163,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("not_a_valid_pubky_id"), &PUB_CTX);
+        let result = mute.validate(Some("not_a_valid_pubky_id"), &PRIV_CTX);
         assert!(result.is_err());
     }
 
@@ -136,7 +179,7 @@ mod tests {
         let mute_parsed = <PubkySocialMute as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
-            &PUB_CTX,
+            &PRIV_CTX,
         )
         .unwrap();
 

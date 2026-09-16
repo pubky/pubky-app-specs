@@ -17,6 +17,14 @@ pub fn list_prefix_builder(user_id: String) -> String {
     [PROTOCOL, &user_id, &prefix].concat()
 }
 
+/// The private v1 LIST prefix, "pubky://<user_id>/priv/social/v1/", where mutes live. A
+/// capability scoped to the public prefix alone cannot read or write them.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = privateListPrefixBuilder))]
+pub fn private_list_prefix_builder(user_id: String) -> String {
+    let prefix = social_path(Root::Priv, "");
+    [PROTOCOL, &user_id, &prefix].concat()
+}
+
 /// Builds an User URI of the form "pubky://<user_pubky_id>/pub/social/v1/profile.json"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = userUriBuilder))]
 pub fn user_uri_builder(user_id: String) -> String {
@@ -41,7 +49,7 @@ pub fn follow_uri_builder(author_id: String, follow_id: String) -> String {
     [PROTOCOL, &author_id, &follow_path].concat()
 }
 
-/// Builds a Mute URI of the form "pubky://<author_id>/pub/social/v1/mutes/<mute_id>.json\"
+/// Builds a Mute URI of the form "pubky://<author_id>/priv/social/v1/mutes/<mute_id>.json\"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = muteUriBuilder))]
 pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
     let mute_path = PubkySocialMute::create_path(&mute_id);

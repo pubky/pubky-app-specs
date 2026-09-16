@@ -48,8 +48,9 @@ pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{
     blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder, follow_uri_builder,
-    is_pubky_scheme, list_prefix_builder, mute_uri_builder, post_uri_builder, tag_uri_builder,
-    user_uri_builder, ParsedUri, Resource, Visibility,
+    is_pubky_scheme, list_prefix_builder, mute_uri_builder, post_uri_builder,
+    private_list_prefix_builder, tag_uri_builder, user_uri_builder, ParsedUri, Resource,
+    Visibility,
 };
 
 // Our WASM module
