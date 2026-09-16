@@ -1,5 +1,5 @@
 use crate::canonicalize::{checked, AllowedSchemes};
-use crate::common::{check_extra, code_point_len, frozen_trim};
+use crate::common::{check_extra, code_point_len, frozen_trim, validate_timestamp_id_format};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
@@ -324,16 +324,27 @@ impl PubkySocialPost {
         self.mint(id.clone(), id, root, owner, slug)
     }
 
-    /// Edit: keeps `id`, mints a fresh editId. Ids are strictly increasing per session, so
-    /// two versions minted in the same microsecond still differ.
+    /// Edit: keeps `id`, mints an editId strictly above `head`, the current newest version
+    /// (the id itself for a never-edited post). The newest version is the bytewise greatest,
+    /// so an editId below the head would hide the edit; a head created by a faster clock is a
+    /// floor, and a head already at the validity bound makes the edit an error rather than an
+    /// id no reader accepts.
     pub fn edit_version(
         &self,
         id: &str,
+        head: &str,
         root: Root,
         owner: &PubkyId,
         slug: Option<&str>,
     ) -> Result<MintedVersion, String> {
-        self.mint(id.to_string(), self.create_id(), root, owner, slug)
+        validate_timestamp_id_format(id)?;
+        if head.as_bytes() < id.as_bytes() {
+            return Err(format!(
+                "Validation Error: head {head} is older than the post id {id}"
+            ));
+        }
+        let edit_id = self.create_id_above(head)?;
+        self.mint(id.to_string(), edit_id, root, owner, slug)
     }
 
     fn mint(
@@ -354,6 +365,8 @@ impl PubkySocialPost {
         }
         let ctx = ValidationCtx { root };
         self.validate(Some(&id), &ctx)?;
+        // The editId is a TimestampId too, so the validity bound applies to it
+        self.validate_id(&edit_id)?;
         // The ownership rule, which plain validate has no author for
         self.check_references(&ctx, Some(owner))?;
         let path = Self::create_path_in(root, &id, &edit_id, slug);
@@ -955,7 +968,7 @@ mod tests {
         let mut prev = first.edit_id.clone();
         for _ in 0..3 {
             let v = n
-                .edit_version(&first.id, Root::Pub, &owner(), None)
+                .edit_version(&first.id, &prev, Root::Pub, &owner(), None)
                 .unwrap();
             assert_eq!(v.id, first.id);
             assert!(
@@ -970,7 +983,36 @@ mod tests {
         }
         // an alias spelling of the id is not an id
         let alias = first.id.replace('0', "O");
-        assert!(n.edit_version(&alias, Root::Pub, &owner(), None).is_err());
+        assert!(n
+            .edit_version(&alias, &alias, Root::Pub, &owner(), None)
+            .is_err());
+        // a head that predates the post is not this post's head
+        assert!(n
+            .edit_version(&first.id, "0032SSN7Q4EVG", Root::Pub, &owner(), None)
+            .is_err());
+    }
+
+    #[test]
+    fn test_edit_version_stays_above_a_head_minted_by_a_faster_clock() {
+        use crate::common::timestamp;
+        let n = note("hi");
+        let encode =
+            |micros: i64| base32::encode(base32::Alphabet::Crockford, &micros.to_be_bytes());
+        let hour = 60 * 60 * 1_000_000;
+        // created an hour ahead of this clock: the edit must still sort after it
+        let ahead = encode(timestamp() + hour);
+        let v = n
+            .edit_version(&ahead, &ahead, Root::Pub, &owner(), None)
+            .unwrap();
+        assert!(
+            v.edit_id.as_bytes() > ahead.as_bytes(),
+            "{} > {ahead}",
+            v.edit_id
+        );
+        // and the floor does not drag later mints into the future
+        assert!(n.create_id().as_bytes() < ahead.as_bytes());
+        // The head-at-the-bound branch (no valid editId above it) needs a clock the tests
+        // cannot pin; `mint` validates the editId like the id, which is the rejection.
     }
 
     #[test]

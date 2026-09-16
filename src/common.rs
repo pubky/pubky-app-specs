@@ -173,6 +173,14 @@ pub fn mint_timestamp_micros() -> i64 {
     mint_from(timestamp(), &LAST_MINTED_MICROS)
 }
 
+/// The same mint with a floor: the result is strictly above `floor` even when the clock is
+/// behind it, as it is when a post was created by a faster clock (ids may sit up to two hours
+/// ahead). A floor far ahead does not poison later mints: the rollback tolerance treats the
+/// next clock reading as a correction and follows it.
+pub fn mint_timestamp_micros_above(floor: i64) -> i64 {
+    mint_from(timestamp().max(floor + 1), &LAST_MINTED_MICROS)
+}
+
 fn mint_from(now: i64, last_minted: &AtomicI64) -> i64 {
     let bump = |last: i64| {
         if now > last || last - now > CLOCK_ROLLBACK_TOLERANCE_MICROS {

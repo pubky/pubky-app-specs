@@ -1,21 +1,29 @@
-use crate::common::{mint_timestamp_micros, timestamp, validate_timestamp_id_format};
+use crate::common::{
+    mint_timestamp_micros, mint_timestamp_micros_above, timestamp, validate_timestamp_id_format,
+};
 use crate::limits::VALIDATION_LIMITS;
 use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+/// Big-endian microseconds in Crockford base32: bytewise order is chronological order.
+fn encode_timestamp_id(micros: i64) -> String {
+    encode(Alphabet::Crockford, &micros.to_be_bytes())
+}
+
 pub trait TimestampId {
     /// Creates a unique identifier based on the current timestamp.
     fn create_id(&self) -> String {
         // Strictly increasing per session, so same-instant mints never share a path
-        let now = mint_timestamp_micros();
+        encode_timestamp_id(mint_timestamp_micros())
+    }
 
-        // Convert to big-endian bytes
-        let bytes = now.to_be_bytes();
-
-        // Encode the bytes using Base32 with the Crockford alphabet
-        encode(Alphabet::Crockford, &bytes)
+    /// An id strictly above `floor` in bytewise order, for versions of an object whose
+    /// current head may sit ahead of this clock.
+    fn create_id_above(&self, floor: &str) -> Result<String, String> {
+        let floor = validate_timestamp_id_format(floor)?;
+        Ok(encode_timestamp_id(mint_timestamp_micros_above(floor)))
     }
 
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
