@@ -343,7 +343,14 @@ impl PubkySocialPost {
                 "Validation Error: head {head} is older than the post id {id}"
             ));
         }
-        let edit_id = self.create_id_above(head)?;
+        let salt = {
+            let bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(head.as_bytes());
+            hasher.update(&bytes);
+            u64::from_le_bytes(hasher.finalize().as_bytes()[..8].try_into().unwrap())
+        };
+        let edit_id = self.create_id_above(head, salt)?;
         self.mint(id.to_string(), edit_id, root, owner, slug)
     }
 
@@ -1011,8 +1018,31 @@ mod tests {
         );
         // and the floor does not drag later mints into the future
         assert!(n.create_id().as_bytes() < ahead.as_bytes());
-        // The head-at-the-bound branch (no valid editId above it) needs a clock the tests
-        // cannot pin; `mint` validates the editId like the id, which is the rejection.
+        // behind the head, different bytes land on different successors; the same bytes on the
+        // same one, so a duplicate write is harmless and a different write is never lost
+        let again = note("hi")
+            .edit_version(&ahead, &ahead, Root::Pub, &owner(), None)
+            .unwrap();
+        let other = note("bye")
+            .edit_version(&ahead, &ahead, Root::Pub, &owner(), None)
+            .unwrap();
+        assert_ne!(v.edit_id, other.edit_id);
+        assert!(again.edit_id.as_bytes() > ahead.as_bytes());
+        // a head past the validity window is not a head
+        let e = n
+            .edit_version(
+                &ahead,
+                &encode(timestamp() + 3 * hour),
+                Root::Pub,
+                &owner(),
+                None,
+            )
+            .unwrap_err();
+        assert!(e.contains("future"), "{e}");
+        // a canonical spelling of i64::MAX is not a head either, and never overflows
+        assert!(n
+            .edit_version(&ahead, "FZZZZZZZZZZZY", Root::Pub, &owner(), None)
+            .is_err());
     }
 
     #[test]

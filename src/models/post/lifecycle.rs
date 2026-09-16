@@ -172,7 +172,12 @@ pub fn plan_publish(
     owner: &PubkyId,
 ) -> Result<PublishPlan, String> {
     chosen_version.validate_id(post_id)?;
-    crate::common::validate_timestamp_id_format(chosen_edit_id)?;
+    chosen_version.validate_id(chosen_edit_id)?;
+    if chosen_edit_id.as_bytes() < post_id.as_bytes() {
+        return Err(format!(
+            "Validation Error: editId {chosen_edit_id} predates the post id {post_id}"
+        ));
+    }
     let media = private_media_refs(chosen_version, owner)?;
     let media_copies = media
         .iter()
@@ -488,6 +493,9 @@ mod tests {
         assert!(e.contains("not media"), "{e}");
         assert!(plan_publish("not-an-id", &id, &reply, &owner()).is_err());
         assert!(plan_publish(&id, "not-an-id", &reply, &owner()).is_err());
+        // a canonical editId outside the validity window, or older than the post, is refused
+        assert!(plan_publish(&id, "FZZZZZZZZZZZY", &reply, &owner()).is_err());
+        assert!(plan_publish(&id, TS, &reply, &owner()).is_err());
     }
 
     #[test]

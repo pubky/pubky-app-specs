@@ -173,12 +173,33 @@ pub fn mint_timestamp_micros() -> i64 {
     mint_from(timestamp(), &LAST_MINTED_MICROS)
 }
 
-/// The same mint with a floor: the result is strictly above `floor` even when the clock is
-/// behind it, as it is when a post was created by a faster clock (ids may sit up to two hours
-/// ahead). A floor far ahead does not poison later mints: the rollback tolerance treats the
-/// next clock reading as a correction and follows it.
-pub fn mint_timestamp_micros_above(floor: i64) -> i64 {
-    mint_from(timestamp().max(floor + 1), &LAST_MINTED_MICROS)
+/// Ids may sit this far ahead of the reader's clock and still validate.
+pub const MAX_FUTURE_MICROS: i64 = 2 * 60 * 60 * 1_000_000;
+
+/// How far above a floor a salted successor may land: one minute, so two clients behind the
+/// same head have that much room to diverge while staying well inside the validity bound.
+const SUCCESSOR_SPREAD_MICROS: i64 = 60 * 1_000_000;
+
+/// The same mint with a floor. When the clock is past the floor this is the ordinary mint.
+/// When it is not, as it is when a post was created by a faster clock, the successor lands at
+/// `floor + 1 + (salt mod room)`: the clock cannot separate two clients that are both behind
+/// the head, so the salt does, and callers derive it from the bytes being written so only
+/// identical writes share a path. `room` is bounded by the validity window, and a floor with
+/// no room left is an error rather than an id no reader accepts. A floor far ahead does not
+/// poison later mints: the rollback tolerance treats the next clock reading as a correction.
+pub fn mint_timestamp_micros_above(floor: i64, salt: u64) -> Result<i64, String> {
+    let now = timestamp();
+    if now > floor {
+        return Ok(mint_from(now, &LAST_MINTED_MICROS));
+    }
+    let room = (now + MAX_FUTURE_MICROS)
+        .checked_sub(floor)
+        .and_then(|r| r.checked_sub(1))
+        .filter(|r| *r > 0)
+        .ok_or("Validation Error: the current version leaves no room for a newer id")?;
+    let spread = room.min(SUCCESSOR_SPREAD_MICROS) as u64;
+    let target = floor + 1 + (salt % spread) as i64;
+    Ok(mint_from(target, &LAST_MINTED_MICROS))
 }
 
 fn mint_from(now: i64, last_minted: &AtomicI64) -> i64 {
