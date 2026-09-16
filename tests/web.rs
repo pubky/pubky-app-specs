@@ -14,6 +14,18 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
+fn test_create_mute_under_the_private_root() {
+    let specs =
+        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+            .expect("Valid pubky ID");
+    let result = specs
+        .create_mute("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
+        .expect("create_mute should not fail");
+    let url = result.meta().url();
+    assert!(url.contains("/priv/social/v1/mutes/"), "{url}");
+}
+
+#[wasm_bindgen_test]
 fn test_create_follow() {
     let specs =
         PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())

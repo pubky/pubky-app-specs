@@ -95,7 +95,6 @@ mod tests {
     const PRIV_CTX: ValidationCtx = ValidationCtx { root: Root::Priv };
     use crate::common::timestamp;
     use crate::traits::Validatable;
-    use crate::traits::PUB_CTX;
 
     #[test]
     fn test_new() {
@@ -164,7 +163,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let mute = PubkySocialMute::new();
-        let result = mute.validate(Some("not_a_valid_pubky_id"), &PUB_CTX);
+        let result = mute.validate(Some("not_a_valid_pubky_id"), &PRIV_CTX);
         assert!(result.is_err());
     }
 
@@ -180,7 +179,7 @@ mod tests {
         let mute_parsed = <PubkySocialMute as Validatable>::try_from(
             blob,
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
-            &PUB_CTX,
+            &PRIV_CTX,
         )
         .unwrap();
 

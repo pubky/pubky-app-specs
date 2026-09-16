@@ -36,9 +36,6 @@ pub struct PubkySocialFollow {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-// #[cfg(target_arch = "wasm32")]
-// impl Json for PubkySocialFollow {}
-
 impl PubkySocialFollow {
     /// Creates a new `PubkySocialFollow` instance.
     pub fn new() -> Self {

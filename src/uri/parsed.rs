@@ -273,7 +273,9 @@ mod tests {
     use super::*;
     use crate::models::{post::PubkySocialPost, user::PubkySocialUser};
     use crate::traits::{HasIdPath, HasPath, PUB_CTX};
-    use crate::uri::builders::{list_prefix_builder, post_uri_builder};
+    use crate::uri::builders::{
+        list_prefix_builder, post_uri_builder, private_list_prefix_builder,
+    };
     use crate::PubkySocialObject;
 
     const HOST: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
@@ -599,6 +601,10 @@ mod tests {
         assert_eq!(
             list_prefix_builder(HOST.into()),
             format!("pubky://{HOST}/pub/social/v1/")
+        );
+        assert_eq!(
+            private_list_prefix_builder(HOST.into()),
+            format!("pubky://{HOST}/priv/social/v1/")
         );
     }
 

@@ -17,6 +17,14 @@ pub fn list_prefix_builder(user_id: String) -> String {
     [PROTOCOL, &user_id, &prefix].concat()
 }
 
+/// The private v1 LIST prefix, "pubky://<user_id>/priv/social/v1/", where mutes live. A
+/// capability scoped to the public prefix alone cannot read or write them.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = privateListPrefixBuilder))]
+pub fn private_list_prefix_builder(user_id: String) -> String {
+    let prefix = social_path(Root::Priv, "");
+    [PROTOCOL, &user_id, &prefix].concat()
+}
+
 /// Builds an User URI of the form "pubky://<user_pubky_id>/pub/social/v1/profile.json"
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = userUriBuilder))]
 pub fn user_uri_builder(user_id: String) -> String {
