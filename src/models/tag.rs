@@ -46,13 +46,13 @@ pub struct PubkySocialTag {
 impl PubkySocialTag {
     pub fn new(uri: String, label: String) -> Self {
         let created_at = timestamp();
+        // The builder folds; ingest never does
         Self {
             uri,
-            label,
+            label: sanitize_tag_label(&label),
             created_at,
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -106,9 +106,10 @@ impl HashId for PubkySocialTag {
     }
 }
 
-/// Frozen-trim + ASCII-only lowercase. Full-Unicode lowercasing is not version-pinnable across
-/// engines and would fork content-addressed ids; non-Latin labels are stored case-sensitively.
-/// Shared with the feed config.
+/// Frozen-trim + ASCII-only lowercase, applied by builders; a stored label must already be its
+/// own fold. Full-Unicode lowercasing is not version-pinnable across engines and would fork
+/// content-addressed ids; non-Latin labels are stored case-sensitively. Shared with the feed
+/// config.
 pub fn sanitize_tag_label(tag: &str) -> String {
     ascii_fold(frozen_trim(tag))
 }
@@ -155,13 +156,8 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
 }
 
 impl Validatable for PubkySocialTag {
-    fn sanitize(self) -> Self {
-        // The label folds; the uri is stored as written and validation requires it canonical
-        PubkySocialTag {
-            label: sanitize_tag_label(&self.label),
-            ..self
-        }
-    }
+    // No sanitize: both fields are stored as written and validation requires the canonical
+    // form, so the bytes on the homeserver and the object in memory never disagree
 
     fn validate_fields(
         &self,
@@ -172,6 +168,12 @@ impl Validatable for PubkySocialTag {
             self.validate_id(id)?;
         }
         check_extra(&self.extra, &["uri", "label", "created_at"])?;
+        if self.label != sanitize_tag_label(&self.label) {
+            return Err(format!(
+                "Validation Error: Tag '{}' must be stored folded (trimmed, ASCII lowercase)",
+                self.label
+            ));
+        }
         validate_tag_label(&self.label)?;
         // Any public resource: a social object, another app's, or an external URI. Tags are
         // public objects, so a private target fails the root rule whatever ctx says.
@@ -261,11 +263,6 @@ mod tests {
 
     #[test]
     fn test_one_target_one_id_and_the_epoch_fork() {
-        // two tags over the canonical spelling of one target share an id
-        assert_eq!(
-            tag("https://example.com/x", "cool").create_id(),
-            tag("https://example.com/x", "cool").create_id()
-        );
         // the short form is not stored, so it never mints a second id for the same target
         let short = format!("pubky{PK}/pub/social/v1/posts/{TS}");
         assert!(validate(&tag(&short, "cool")).is_err());
@@ -289,6 +286,11 @@ mod tests {
             assert_eq!(sanitize_tag_label(input), want, "{input:?}");
         }
         assert!(validate(&tag(&post_uri(), "\u{200B}a")).is_ok());
+        // a stored label is its own fold: the builder folds, ingest never rewrites
+        for unfolded in ["CoOl", " cool", "cool "] {
+            let e = validate(&tag(&post_uri(), unfolded)).unwrap_err();
+            assert!(e.contains("stored folded"), "{unfolded:?}: {e}");
+        }
     }
 
     #[test]
@@ -334,11 +336,12 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_folds_validates_and_preserves() {
+    fn test_try_from_validates_and_preserves() {
         let user_uri = user_uri_builder(PK.into());
         let blob = format!(
-            r#"{{"uri":"{user_uri}","label":"CoolTag","created_at":1627849723000,"ext":{{"badge":1}}}}"#
+            r#"{{"uri":"{user_uri}","label":"cooltag","created_at":1627849723000,"ext":{{"badge":1}}}}"#
         );
+        // the builder folds, so its id is the id of the folded blob
         let id = PubkySocialTag::new(user_uri.clone(), "CoolTag".into()).create_id();
         let t = <PubkySocialTag as Validatable>::try_from(blob.as_bytes(), &id, &PUB_CTX).unwrap();
         assert_eq!(t.uri, user_uri);
@@ -347,8 +350,15 @@ mod tests {
         assert!(serde_json::to_string(&t)
             .unwrap()
             .contains(r#""ext":{"badge":1}"#));
-        // the id is over the folded label, so the writer's id verifies
         assert!(validate(&t).is_ok());
+        // an unfolded label on the wire is rejected, never repaired
+        let unfolded = blob.replace("cooltag", "CoolTag");
+        let e = <PubkySocialTag as Validatable>::try_from(unfolded.as_bytes(), &id, &PUB_CTX)
+            .unwrap_err();
+        assert!(
+            e.contains("Invalid ID") || e.contains("stored folded"),
+            "{e}"
+        );
         let mut shadow = t.clone();
         shadow.extra.insert("label".into(), "x".into());
         assert!(validate(&shadow).unwrap_err().contains("shadow"));
@@ -356,7 +366,9 @@ mod tests {
 
     #[test]
     fn test_try_from_invalid_uri_and_id() {
-        let blob = br#"{"uri":"invalid_uri","label":"CoolTag","created_at":1627849723000}"#;
+        // The pinned id is blake3("invalid_uri:cooltag"), so the id check passes and the uri
+        // verdict is the one reported
+        let blob = br#"{"uri":"invalid_uri","label":"cooltag","created_at":1627849723000}"#;
         let e =
             <PubkySocialTag as Validatable>::try_from(blob, "D2DV4EZDA03Q3KCRMVGMDYZ8C0", &PUB_CTX)
                 .unwrap_err();
