@@ -4,7 +4,6 @@
 //! operations for the caller to execute, across both roots. Paths are owner-relative
 //! (`/pub/social/v1/...`), the form a homeserver LIST returns.
 
-use super::content::collection::PubkySocialCollectionContent;
 use super::{PubkySocialPost, PubkySocialPostKind};
 use crate::canonicalize::{validate_reference, AllowedSchemes};
 use crate::constants::{social_path, PROTOCOL};
@@ -88,18 +87,16 @@ fn media_refs(post: &PubkySocialPost) -> Vec<String> {
     refs
 }
 
-/// Non-media reference positions: parent, embed, lock, collection items.
+/// Non-media reference positions: parent, embed, lock, collection items. An item is a
+/// reference to a thing, never a media position, so a private file curated as an item is a
+/// private reference and publish refuses it: publish the file, or the post carrying it, first.
 fn other_refs(post: &PubkySocialPost) -> Vec<String> {
     let mut refs: Vec<String> = [&post.parent, &post.embed, &post.lock]
         .into_iter()
         .flatten()
         .cloned()
         .collect();
-    if matches!(post.kind, PubkySocialPostKind::Collection) {
-        if let Ok(e) = serde_json::from_str::<PubkySocialCollectionContent>(&post.content) {
-            refs.extend(e.items);
-        }
-    }
+    refs.extend(post.collection_item_uris());
     refs
 }
 
@@ -502,7 +499,7 @@ mod tests {
     fn publish_rewrites_the_collection_cover_and_keeps_every_other_member() {
         let cover = priv_file("0034A0X7NJ52G");
         let content = format!(
-            r#"{{"name":"n","items":["pubky://{PK}/pub/social/v1/posts/{TS}"],"cover_image":"{cover}","layout":"carousel","future":1}}"#
+            r#"{{"name":"n","items":[{{"uri":"pubky://{PK}/pub/social/v1/posts/{TS}","note":"x","rating":5}}],"cover_image":"{cover}","layout":"carousel","future":1}}"#
         );
         let collection =
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
@@ -515,6 +512,7 @@ mod tests {
         assert_eq!(e["layout"], "carousel");
         assert_eq!(e["future"], 1);
         assert_eq!(e["name"], "n");
+        assert_eq!(e["items"][0]["rating"], 5);
         // an integer no JSON engine carries back is refused, not re-spelled
         let content =
             format!(r#"{{"name":"n","items":[],"cover_image":"{cover}","big":9007199254740992}}"#);
@@ -522,6 +520,26 @@ mod tests {
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
         let e = plan_publish(&id, &id, &collection, &owner()).unwrap_err();
         assert!(e.contains("JSON-safe"), "{e}");
+    }
+
+    #[test]
+    fn publish_refuses_a_private_file_curated_as_an_item() {
+        // An item is a link, not a media position: the cover is copied and respelled, an item
+        // is not, so a private draft pointing at the owner's own private file cannot publish
+        // until that file (or the post carrying it) is public.
+        let file = priv_file("0034A0X7NJ52G");
+        let content = format!(r#"{{"name":"n","items":[{{"uri":"{file}"}}]}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let id = post_id();
+        let e = plan_publish(&id, &id, &collection, &owner()).unwrap_err();
+        assert!(e.contains("private object"), "{e}");
+        // the same file as the cover publishes, and copies
+        let content = format!(r#"{{"name":"n","items":[],"cover_image":"{file}"}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let plan = plan_publish(&id, &id, &collection, &owner()).unwrap();
+        assert_eq!(plan.media_copies.len(), 1);
     }
 
     #[test]

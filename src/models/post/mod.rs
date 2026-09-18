@@ -12,7 +12,8 @@ pub mod content;
 pub mod lifecycle;
 
 pub use content::{
-    PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionLayout,
+    PubkySocialArticleContent, PubkySocialCollectionContent, PubkySocialCollectionItem,
+    PubkySocialCollectionLayout,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -408,7 +409,27 @@ impl PubkySocialPost {
             let max = VALIDATION_LIMITS.image_url_max_length;
             checked("cover_image", &cover, PubkyHttpHttps, max, ctx, owner)?;
         }
+        for (index, uri) in self.collection_item_uris().into_iter().enumerate() {
+            checked(
+                &format!("items[{index}].uri"),
+                &uri,
+                Universal,
+                max,
+                ctx,
+                owner,
+            )?;
+        }
         Ok(())
+    }
+
+    /// The item uris of the collection envelope, when the kind and the content say so.
+    pub(crate) fn collection_item_uris(&self) -> Vec<String> {
+        if !matches!(self.kind, PubkySocialPostKind::Collection) {
+            return vec![];
+        }
+        serde_json::from_str::<content::collection::PubkySocialCollectionContent>(&self.content)
+            .map(|e| e.items.into_iter().map(|i| i.uri).collect())
+            .unwrap_or_default()
     }
 
     /// `cover_image` of the article or collection envelope, when the content parses.
@@ -461,7 +482,7 @@ impl Validatable for PubkySocialPost {
         self.check_references(ctx, None)?;
 
         if matches!(self.kind, PubkySocialPostKind::Collection) {
-            return content::collection::validate_collection_post(self, ctx);
+            return content::collection::validate_collection_post(self);
         }
 
         if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {

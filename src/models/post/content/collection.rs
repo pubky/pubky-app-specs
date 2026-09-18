@@ -1,9 +1,12 @@
+use crate::common::{check_extra, code_point_len, frozen_trim};
 use crate::limits::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 #[cfg(target_arch = "wasm32")]
 use tsify_next::Tsify;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -47,57 +50,89 @@ impl FromStr for PubkySocialCollectionLayout {
     }
 }
 
+/// One curated item: any URI on the universal tier, with an optional note. An object rather
+/// than a string so per-item metadata stays additive, and a JS class for the same reason
+/// attachments are one: the shape crosses the wasm boundary with its fields intact.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub struct PubkySocialCollectionItem {
+    /// Reference tier, universal: a social object, another app's object, or an external URI.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    pub uri: String,
+    /// Curator's note on this item, `1..=collection_item_note_max_length` code points and not
+    /// whitespace-only: an empty note is an absent one, spelled once.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl PubkySocialCollectionItem {
+    /// An item over a canonical `uri` with an optional curator `note`; no unknown members.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(uri: String, note: Option<String>) -> Self {
+        Self {
+            uri,
+            note,
+            extra: Default::default(),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl PubkySocialCollectionItem {
+    #[wasm_bindgen(getter)]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn note(&self) -> Option<String> {
+        self.note.clone()
+    }
+}
+
 /// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Collection`.
 ///
-/// A collection post curates an ordered list of URIs (via `items`)
-/// under a `name` and optional `description`. The envelope is parsed and validated
-/// by the spec but never re-serialized as a top-level homeserver object.
-///
-/// **Construction**: this struct is deserialized from the post's `content` JSON
-/// envelope during validation and is **not** intended to be constructed by
-/// callers directly. It is re-exported publicly (via `lib.rs`) so SDK consumers
-/// can inspect the envelope shape (OpenAPI schema, type definitions), but the
-/// authoritative way to produce a Collection post is to author a `PubkySocialPost`
-/// with `kind: Collection` and a `content` string that JSON-parses into this
-/// shape.
-///
-/// Forward-compat: `#[serde(deny_unknown_fields)]` is intentionally NOT used so
-/// future minor versions can add fields (e.g. `cover_image`) without breaking
-/// older parsers. New fields must be additive and ignorable.
+/// A collection post curates an ordered list of items under a `name` and optional
+/// `description`. The envelope is parsed and validated by the spec but never re-serialized as
+/// a top-level homeserver object. Re-exported so SDK consumers can inspect the shape; the
+/// authoritative way to produce one is a `PubkySocialPost` with `kind: Collection` whose
+/// `content` JSON-parses into it. No `deny_unknown_fields`: unknown members are preserved.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkySocialCollectionContent {
-    /// Display name of the collection. Length bounded by
-    /// `VALIDATION_LIMITS.collection_name_{min,max}_length` (unicode scalars).
-    /// Whitespace-only names are rejected separately by the validator.
+    /// Display name; `collection_name_{min,max}_length` code points, not whitespace-only.
     pub name: String,
-    /// Optional human-readable description. Length bounded by
-    /// `VALIDATION_LIMITS.collection_description_max_length` (unicode scalars).
+    /// Optional description, at most `collection_description_max_length` code points.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Ordered list of Post URIs this collection curates. Count bounded by
-    /// `VALIDATION_LIMITS.collection_items_max_count`; each URI must be in
-    /// exact canonical form (see `validate_collection_item_uri`).
+    /// Ordered curated items, at most `collection_items_max_count`.
     #[serde(default)]
-    pub items: Vec<String>,
-    /// Optional hero/cover image URL. Length bounded by
-    /// `VALIDATION_LIMITS.image_url_max_length`; protocol must be in
-    /// `VALIDATION_LIMITS.post_allowed_attachment_protocols`.
+    pub items: Vec<PubkySocialCollectionItem>,
+    /// Optional cover, an image reference per the post-level gate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_image: Option<String>,
     /// Creator's preferred default layout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<PubkySocialCollectionLayout>,
+    /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Validates a `kind = Collection` post, including its JSON content envelope.
-// `ctx` is unused until the items join the reference gate
-pub(crate) fn validate_collection_post(
-    post: &PubkySocialPost,
-    _ctx: &crate::traits::ValidationCtx,
-) -> Result<(), String> {
+/// Validates a `kind = Collection` post, including its JSON content envelope. The cover and
+/// every item uri are reference positions and run through the post-level gate before this,
+/// with the author in scope when there is one; nothing here re-gates them.
+pub(crate) fn validate_collection_post(post: &PubkySocialPost) -> Result<(), String> {
     if post.parent.is_some() || post.embed.is_some() {
         return Err("Validation Error: Collection posts cannot have parent or embed".into());
     }
@@ -108,7 +143,7 @@ pub(crate) fn validate_collection_post(
                 .into(),
         );
     }
-    if post.content.chars().count() > VALIDATION_LIMITS.collection_content_max_length {
+    if code_point_len(&post.content) > VALIDATION_LIMITS.collection_content_max_length {
         return Err(format!(
             "Validation Error: Collection content exceeds max length {}",
             VALIDATION_LIMITS.collection_content_max_length
@@ -125,12 +160,16 @@ pub(crate) fn validate_collection_post(
 }
 
 fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Result<(), String> {
-    if envelope.name.trim().is_empty() {
+    check_extra(
+        &envelope.extra,
+        &["name", "description", "items", "cover_image", "layout"],
+    )?;
+    if frozen_trim(&envelope.name).is_empty() {
         return Err(
             "Validation Error: Collection name must contain non-whitespace characters".into(),
         );
     }
-    let name_chars = envelope.name.chars().count();
+    let name_chars = code_point_len(&envelope.name);
     let name_min = VALIDATION_LIMITS.collection_name_min_length;
     let name_max = VALIDATION_LIMITS.collection_name_max_length;
     if !(name_min..=name_max).contains(&name_chars) {
@@ -140,36 +179,31 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
         ));
     }
     if let Some(desc) = &envelope.description {
-        if desc.chars().count() > VALIDATION_LIMITS.collection_description_max_length {
+        if code_point_len(desc) > VALIDATION_LIMITS.collection_description_max_length {
             return Err(format!(
                 "Validation Error: Collection description exceeds {} characters",
                 VALIDATION_LIMITS.collection_description_max_length
             ));
         }
     }
-    // The cover is a reference position and runs through the post-level gate
     if envelope.items.len() > VALIDATION_LIMITS.collection_items_max_count {
         return Err(format!(
             "Validation Error: Collection cannot have more than {} items",
             VALIDATION_LIMITS.collection_items_max_count
         ));
     }
-    for (index, uri) in envelope.items.iter().enumerate() {
-        validate_collection_item_uri(uri)
-            .map_err(|e| format!("Validation Error: Collection item at index {index}: {e}"))?;
+    for (index, item) in envelope.items.iter().enumerate() {
+        check_extra(&item.extra, &["uri", "note"])?;
+        if let Some(note) = &item.note {
+            let max = VALIDATION_LIMITS.collection_item_note_max_length;
+            if frozen_trim(note).is_empty() || code_point_len(note) > max {
+                return Err(format!(
+                    "Validation Error: items[{index}].note must be 1..={max} code points and not blank"
+                ));
+            }
+        }
     }
     Ok(())
-}
-
-/// Strict canonical post-URI check for Collection items. Accepts only the
-/// exact form `pubky://<pubky-id>/pub/social/v1/posts/<post-id>`.
-///
-/// Delegates to the parser: the canonicalizer owns the reject set, and only a public,
-/// versionless post reference passes. The reference-tier widening comes with the collection
-/// rework.
-fn validate_collection_item_uri(uri: &str) -> Result<(), String> {
-    // The reference-tier widening comes with the collection rework
-    crate::canonicalize::check_post_reference(uri)
 }
 
 #[cfg(test)]
@@ -185,7 +219,10 @@ mod tests {
         serde_json::to_string(&PubkySocialCollectionContent {
             name: name.to_string(),
             description: description.map(|d| d.to_string()),
-            items: items.to_vec(),
+            items: items
+                .iter()
+                .map(|u| PubkySocialCollectionItem::new(u.clone(), None))
+                .collect(),
             ..Default::default()
         })
         .unwrap()
@@ -468,7 +505,7 @@ mod tests {
     #[test]
     fn test_collection_post_rejects_101_items() {
         let items: Vec<String> = (0..101)
-            .map(|i| format!("pubky://userA/pub/social/v1/posts/{:013}", i))
+            .map(|i| format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/{:013}", i))
             .collect();
         let post = make_collection_post("Too big", None, Some(items));
         let id = post.create_id();
@@ -539,132 +576,116 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_collection_post_rejects_non_post_uri() {
-        let post =
-            make_collection_post("X", None, Some(vec!["ftp://example.com/file".to_string()]));
+    fn item_err(uri: &str) -> String {
+        let post = make_collection_post("X", None, Some(vec![uri.to_string()]));
         let id = post.create_id();
-        let result = post.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Collection item"));
+        post.validate(Some(&id), &PUB_CTX).unwrap_err()
     }
 
     #[test]
-    fn test_collection_post_rejects_post_uri_with_invalid_post_id() {
-        // 13 chars but not valid Crockford: contains hyphens which aren't in the alphabet.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/abc-def-ghi-j");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("versionless post reference"), "got: {err}");
+    fn test_collection_items_are_universal_references() {
+        // any resource, any app, any scheme: a collection curates things, not only posts
+        for ok in [
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/abc-def-ghi-j"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/extra"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/pubky.app/posts/0034A0X7NJ52A"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/mapky/v1/reviews/0034A0X7NJ52A"),
+            format!("pubky://{TEST_PUBKY_ID}"),
+            "https://www.openstreetmap.org/node/1".to_string(),
+            "nostr:nevent1abc".to_string(),
+            "geo:48.85,2.35".to_string(),
+        ] {
+            let post = make_collection_post("X", None, Some(vec![ok.clone()]));
+            let id = post.create_id();
+            assert!(post.validate(Some(&id), &PUB_CTX).is_ok(), "{ok}");
+        }
     }
 
     #[test]
-    fn test_collection_post_rejects_post_uri_with_extra_path_segment() {
-        // An extra segment makes it a storage-shaped path, not a reference.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/extra");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("versionless post reference"), "got: {err}");
+    fn test_collection_items_must_be_canonical() {
+        // the gate's reject set, not a parser's repairs: each of these is a distinct spelling
+        for bad in [
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A?foo=bar"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A#frag"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/"),
+            format!("pubky://user@{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"),
+            format!("pubky{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"),
+            format!("pubky://{TEST_PUBKY_ID}/aa/bb/../../pub/social/v1/posts/0034A0X7NJ52A"),
+            format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/0034A0X7NJ52A.json"),
+            " https://example.com/x".to_string(),
+            "NOSTR:X".to_string(),
+            "not a uri".to_string(),
+            String::new(),
+        ] {
+            let err = item_err(&bad);
+            assert!(err.contains("items[0].uri"), "{bad}: {err}");
+        }
     }
 
     #[test]
-    fn test_collection_post_rejects_post_uri_with_query_string() {
-        // Query string lands inside the post-id slot and fails the Crockford
-        // check (`?` and `=` aren't in the alphabet, and the length is wrong).
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A?foo=bar");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_post_uri_with_fragment() {
-        // `#` is rejected by the canonicalizer before any dispatch.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A#frag");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_post_uri_with_trailing_slash() {
-        // A trailing slash bloats the post-id past 13 chars.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A/");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_post_uri_with_empty_post_id() {
-        // Empty post-id segment fails the 13-char Crockford check.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_userinfo_padding_bypass() {
-        // `Url::parse(...).host_str()` strips userinfo, which would smuggle
-        // arbitrary bytes past a parse-and-recheck approach. The strict
-        // validator keeps the `JUNK@` in the host slot, failing the 52-char
-        // PubkyId length check.
-        let uri = format!(
-            "pubky://AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A"
-        );
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_short_form_item_spelling() {
-        // The short form parses, but the stored string must be the canonical spelling.
-        let uri = format!("pubky{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A");
-        let post = make_collection_post("X", None, Some(vec![uri]));
-        let id = post.create_id();
-        let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical form"), "got: {err}");
-    }
-
-    #[test]
-    fn test_collection_post_rejects_private_item_reference() {
-        // Items are public references; a private post cannot be curated publicly yet.
+    fn test_collection_private_item_follows_the_root_rule() {
         let uri = format!("pubky://{TEST_PUBKY_ID}/priv/social/v1/posts/0034A0X7NJ52A");
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("public"), "got: {err}");
+        assert!(
+            err.contains("items[0].uri") && err.contains("public object"),
+            "got: {err}"
+        );
+        let priv_ctx = crate::traits::ValidationCtx {
+            root: crate::traits::Root::Priv,
+        };
+        assert!(post.validate(Some(&id), &priv_ctx).is_ok());
     }
 
     #[test]
-    fn test_collection_post_rejects_dot_dot_path_bypass() {
-        // `Url::parse(...)` collapses `..` segments before path inspection,
-        // which would smuggle a non-canonical raw path past a parse-and-recheck
-        // approach. The strict validator splits the raw string, so the extra
-        // segments land in the host slot and fail PubkyId.
-        let uri = format!("pubky://{TEST_PUBKY_ID}/aa/bb/../../pub/social/v1/posts/0034A0X7NJ52A");
-        let post = make_collection_post("X", None, Some(vec![uri]));
+    fn test_collection_item_note_and_unknown_members() {
+        let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A");
+        let max = VALIDATION_LIMITS.collection_item_note_max_length;
+        let ok = format!(
+            r#"{{"name":"X","items":[{{"uri":"{uri}","note":"{}","rating":5}}],"future":true}}"#,
+            "n".repeat(max)
+        );
+        let post = PubkySocialPost::new(ok, PubkySocialPostKind::Collection, None, None, vec![]);
         let id = post.create_id();
+        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
+        let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.items[0].extra["rating"], 5);
+        assert_eq!(envelope.extra["future"], true);
+        // re-serialized, both unknown members survive
+        let back = serde_json::to_string(&envelope).unwrap();
+        assert!(
+            back.contains(r#""rating":5"#) && back.contains(r#""future":true"#),
+            "{back}"
+        );
+        let long = format!(
+            r#"{{"name":"X","items":[{{"uri":"{uri}","note":"{}"}}]}}"#,
+            "n".repeat(max + 1)
+        );
+        let post = PubkySocialPost::new(long, PubkySocialPostKind::Collection, None, None, vec![]);
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
-        assert!(err.contains("canonical post URI"), "got: {err}");
+        assert!(err.contains("items[0].note"), "got: {err}");
+        // an empty or blank note is an absent one and has exactly one spelling
+        for blank in ["", " ", "\u{00A0}"] {
+            let content = format!(r#"{{"name":"X","items":[{{"uri":"{uri}","note":"{blank}"}}]}}"#);
+            let post =
+                PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+            let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+            assert!(err.contains("items[0].note"), "{blank:?}: {err}");
+        }
+        // an unknown member may not shadow a declared one, in the item or the envelope
+        let mut shadow = envelope.clone();
+        shadow.items[0].extra.insert("uri".into(), "x".into());
+        assert!(validate_collection_envelope(&shadow)
+            .unwrap_err()
+            .contains("shadow"));
     }
 
     #[test]
     fn test_collection_post_accepts_canonical_max_length_uri() {
-        // Success-side boundary: the longest valid canonical post URI is
-        // pubky://<52-char-pubky-id>/pub/social/v1/posts/<13-char-crockford>
-        // which is exactly 94 chars. Validator must accept this.
         let uri = format!("pubky://{TEST_PUBKY_ID}/pub/social/v1/posts/0034A0X7NJ52A");
-        assert_eq!(uri.chars().count(), 94);
         let post = make_collection_post("X", None, Some(vec![uri]));
         let id = post.create_id();
         assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
@@ -771,9 +792,10 @@ mod tests {
             .create_collection_post(
                 "My favorites".to_string(),
                 Some("Best things".to_string()),
-                Some(vec![
+                Some(vec![PubkySocialCollectionItem::new(
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
-                ]),
+                    Some("the best one".to_string()),
+                )]),
                 Some("https://example.com/cover.png".to_string()),
                 Some("list".to_string()),
             )
@@ -787,6 +809,7 @@ mod tests {
         assert_eq!(envelope.name, "My favorites");
         assert_eq!(envelope.description.as_deref(), Some("Best things"));
         assert_eq!(envelope.items.len(), 1);
+        assert_eq!(envelope.items[0].note.as_deref(), Some("the best one"));
         assert_eq!(
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")

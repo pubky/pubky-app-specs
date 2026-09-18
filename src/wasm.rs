@@ -350,13 +350,13 @@ impl PubkySpecsBuilder {
         Ok(PostResult { post, meta })
     }
 
-    /// Creates a `kind = Collection` post, a curated list of URIs under
-    /// a name and optional description.
+    /// Creates a `kind = Collection` post, a curated list of items under a name and
+    /// optional description.
     ///
-    /// Convenience wrapper around `createPost` that builds the
-    /// `PubkySocialCollectionContent` envelope (`{ name, description, items,
-    /// cover_image, layout }`) and JSON-serializes it into `content` internally,
-    /// so JS callers don't have to stringify the envelope themselves.
+    /// Convenience wrapper around `createPost` that builds the `PubkySocialCollectionContent`
+    /// envelope (`{ name, description?, items: [{uri, note?}], cover_image?, layout? }`) and
+    /// JSON-serializes it into `content`, so JS callers do not stringify it themselves.
+    /// Items are `PubkySocialCollectionItem(uri, note)`, the same shape attachments use.
     ///
     /// `layout` is one of `"grid" | "list" | "visual"`.
     ///
@@ -367,7 +367,7 @@ impl PubkySpecsBuilder {
         &self,
         name: String,
         description: Option<String>,
-        items: Option<Vec<String>>,
+        items: Option<Vec<PubkySocialCollectionItem>>,
         cover_image: Option<String>,
         layout: Option<String>,
     ) -> Result<PostResult, String> {
@@ -380,6 +380,7 @@ impl PubkySpecsBuilder {
             items: items.unwrap_or_default(),
             cover_image,
             layout,
+            extra: Default::default(),
         };
         let content = serde_json::to_string(&envelope)
             .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;

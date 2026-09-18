@@ -5,10 +5,11 @@
 
 use pubky_social_specs::{
     ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBlob, PubkySocialBookmark,
-    PubkySocialCollectionContent, PubkySocialCollectionLayout, PubkySocialFeed,
-    PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort,
-    PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
-    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
+    PubkySocialCollectionContent, PubkySocialCollectionItem, PubkySocialCollectionLayout,
+    PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
+    PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost,
+    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource,
+    Visibility, VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
@@ -139,9 +140,14 @@ fn collection_with_layout() -> PubkySocialCollectionContent {
     PubkySocialCollectionContent {
         name: "Photos".into(),
         description: Some("mine".into()),
-        items: vec![format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG")],
+        // Items became objects with the collection rework; this entry changed deliberately
+        items: vec![PubkySocialCollectionItem::new(
+            format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"),
+            Some("first".into()),
+        )],
         cover_image: Some(format!("pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG")),
         layout: Some(PubkySocialCollectionLayout::Visual),
+        extra: Default::default(),
     }
 }
 
@@ -152,6 +158,7 @@ fn collection_legacy() -> PubkySocialCollectionContent {
         items: vec![],
         cover_image: None,
         layout: None,
+        extra: Default::default(),
     }
 }
 
@@ -223,7 +230,7 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "collection_with_layout",
             json(&collection_with_layout()),
-            r#"{"name":"Photos","description":"mine","items":["pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"],"cover_image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
+            r#"{"name":"Photos","description":"mine","items":[{"uri":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","note":"first"}],"cover_image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
         ),
         (
             "collection_legacy",
@@ -305,6 +312,6 @@ fn every_enum_variant_serializes_as_before() {
 fn validation_limits_wire_keys_are_pinned() {
     assert_eq!(
         json(&VALIDATION_LIMITS),
-        r#"{"maxFileSizeBytes":104857600,"tagLabelMinLength":1,"tagLabelMaxLength":20,"tagInvalidChars":[",",":"," ","\t","\n","\r"],"userNameMinLength":3,"userNameMaxLength":50,"userBioMaxLength":160,"imageUrlMaxLength":300,"userLinksMaxCount":5,"userLinkTitleMaxLength":100,"userLinkUrlMaxLength":300,"userStatusMaxLength":50,"postNoteContentMaxLength":2000,"articleTitleMaxLength":100,"articleBodyMaxLength":50000,"articleContentMaxLength":104000,"postAttachmentsMaxCount":10,"attachmentAltMaxLength":1000,"attachmentNameMaxLength":255,"referenceUriMaxLength":1024,"postAllowedAttachmentProtocols":["pubky","http","https"],"collectionContentMaxLength":40000,"collectionNameMinLength":1,"collectionNameMaxLength":100,"collectionDescriptionMaxLength":500,"collectionItemsMaxCount":100,"feedTagsMaxCount":5,"feedNameMaxLength":100,"feedIconMaxLength":50,"bookmarkTargetUriMaxBytes":187,"postSlugMaxLength":64,"postMaxBytes":524288,"objectMaxBytes":65536}"#
+        r#"{"maxFileSizeBytes":104857600,"tagLabelMinLength":1,"tagLabelMaxLength":20,"tagInvalidChars":[",",":"," ","\t","\n","\r"],"userNameMinLength":3,"userNameMaxLength":50,"userBioMaxLength":160,"imageUrlMaxLength":300,"userLinksMaxCount":5,"userLinkTitleMaxLength":100,"userLinkUrlMaxLength":300,"userStatusMaxLength":50,"postNoteContentMaxLength":2000,"articleTitleMaxLength":100,"articleBodyMaxLength":50000,"articleContentMaxLength":104000,"postAttachmentsMaxCount":10,"attachmentAltMaxLength":1000,"attachmentNameMaxLength":255,"referenceUriMaxLength":1024,"postAllowedAttachmentProtocols":["pubky","http","https"],"collectionContentMaxLength":40000,"collectionNameMinLength":1,"collectionNameMaxLength":100,"collectionDescriptionMaxLength":500,"collectionItemsMaxCount":100,"collectionItemNoteMaxLength":1000,"feedTagsMaxCount":5,"feedNameMaxLength":100,"feedIconMaxLength":50,"bookmarkTargetUriMaxBytes":187,"postSlugMaxLength":64,"postMaxBytes":524288,"objectMaxBytes":65536}"#
     );
 }

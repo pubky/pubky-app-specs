@@ -78,8 +78,12 @@ pub struct ValidationLimits {
     pub collection_name_max_length: usize,
     /// Maximum character count for a Collection description.
     pub collection_description_max_length: usize,
-    /// Maximum number of items (attachment URIs) per Collection.
+    /// Maximum number of items per Collection.
     pub collection_items_max_count: usize,
+    /// Maximum code points of a collection item's `note`, the same bound as an attachment's
+    /// `alt`. A single-field bound: the envelope cap (`collection_content_max_length`) binds
+    /// first for a long list, as `post_max_bytes` does for attachments.
+    pub collection_item_note_max_length: usize,
     /// Maximum number of tags allowed in a feed.
     pub feed_tags_max_count: usize,
     /// Maximum feed name length in characters.
@@ -129,6 +133,7 @@ pub const VALIDATION_LIMITS: ValidationLimits = ValidationLimits {
     collection_name_max_length: 100,
     collection_description_max_length: 500,
     collection_items_max_count: 100,
+    collection_item_note_max_length: 1000,
     feed_tags_max_count: 5,
     feed_name_max_length: 100,
     feed_icon_max_length: 50,

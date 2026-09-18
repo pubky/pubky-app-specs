@@ -28,7 +28,7 @@ yarn add pubky-social-specs
 ## Quick Start
 
 ```js
-import { PubkySocialAttachment, PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
+import { PubkySocialAttachment, PubkySocialCollectionItem, PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
 
 const pubkyId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const specs = new PubkySpecsBuilder(pubkyId);
@@ -82,7 +82,7 @@ const { feed, meta } = specs.createFeed({
 });
 ```
 
-`createTag(uri, label)` stores the uri as written, so it must already be canonical (`pubky://...`, never the short form, no surrounding whitespace); the label is trimmed and ASCII-lowercased by the builder and a stored label must already be in that form. `parent` and `embed` are any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
+`createCollectionPost(name, description, items, coverImage, layout)` takes an array of `PubkySocialCollectionItem(uri, note)`; an item URI can be anything (a post, a user, a web page, a `nostr:` event) and the note is optional but never blank. The stored envelope is `{name, description?, items: [{uri, note?}], cover_image?, layout?}`. `createTag(uri, label)` stores the uri as written, so it must already be canonical (`pubky://...`, never the short form, no surrounding whitespace); the label is trimmed and ASCII-lowercased by the builder and a stored label must already be in that form. `parent` and `embed` are any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
