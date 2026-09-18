@@ -1,0 +1,14 @@
+name: Sync to Context7
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refresh-context7:
+    uses: pubky/ci-workflows/.github/workflows/context7-sync.yml@main
+    secrets:
+      CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
