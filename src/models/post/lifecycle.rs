@@ -523,6 +523,26 @@ mod tests {
     }
 
     #[test]
+    fn publish_refuses_a_private_file_curated_as_an_item() {
+        // An item is a link, not a media position: the cover is copied and respelled, an item
+        // is not, so a private draft pointing at the owner's own private file cannot publish
+        // until that file (or the post carrying it) is public.
+        let file = priv_file("0034A0X7NJ52G");
+        let content = format!(r#"{{"name":"n","items":[{{"uri":"{file}"}}]}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let id = post_id();
+        let e = plan_publish(&id, &id, &collection, &owner()).unwrap_err();
+        assert!(e.contains("private object"), "{e}");
+        // the same file as the cover publishes, and copies
+        let content = format!(r#"{{"name":"n","items":[],"cover_image":"{file}"}}"#);
+        let collection =
+            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        let plan = plan_publish(&id, &id, &collection, &owner()).unwrap();
+        assert_eq!(plan.media_copies.len(), 1);
+    }
+
+    #[test]
     fn publish_dedupes_media_shared_by_attachment_and_cover() {
         let file = priv_file("0034A0X7NJ52G");
         let article = PubkySocialPost::new_article(
