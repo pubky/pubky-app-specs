@@ -355,8 +355,8 @@ impl PubkySpecsBuilder {
     ///
     /// Convenience wrapper around `createPost` that builds the `PubkySocialCollectionContent`
     /// envelope (`{ name, description?, items: [{uri, note?}], cover_image?, layout? }`) and
-    /// JSON-serializes it into `content`. Items are given as URI strings and stored as
-    /// `{uri}`; notes are authored through the function-shaped surface.
+    /// JSON-serializes it into `content`, so JS callers do not stringify it themselves.
+    /// Items are `PubkySocialCollectionItem(uri, note)`, the same shape attachments use.
     ///
     /// `layout` is one of `"grid" | "list" | "visual"`.
     ///
@@ -367,7 +367,7 @@ impl PubkySpecsBuilder {
         &self,
         name: String,
         description: Option<String>,
-        items: Option<Vec<String>>,
+        items: Option<Vec<PubkySocialCollectionItem>>,
         cover_image: Option<String>,
         layout: Option<String>,
     ) -> Result<PostResult, String> {
@@ -377,12 +377,7 @@ impl PubkySpecsBuilder {
         let envelope = PubkySocialCollectionContent {
             name,
             description,
-            // Notes are authored through the function-shaped surface that replaces this one
-            items: items
-                .unwrap_or_default()
-                .into_iter()
-                .map(|uri| PubkySocialCollectionItem::new(uri, None))
-                .collect(),
+            items: items.unwrap_or_default(),
             cover_image,
             layout,
             extra: Default::default(),

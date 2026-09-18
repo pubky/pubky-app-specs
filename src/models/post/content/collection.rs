@@ -5,6 +5,8 @@ use std::str::FromStr;
 
 #[cfg(target_arch = "wasm32")]
 use tsify_next::Tsify;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -49,30 +51,51 @@ impl FromStr for PubkySocialCollectionLayout {
 }
 
 /// One curated item: any URI on the universal tier, with an optional note. An object rather
-/// than a string so per-item metadata stays additive.
+/// than a string so per-item metadata stays additive, and a JS class for the same reason
+/// attachments are one: the shape crosses the wasm boundary with its fields intact.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkySocialCollectionItem {
     /// Reference tier, universal: a social object, another app's object, or an external URI.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     /// Curator's note on this item, `1..=collection_item_note_max_length` code points and not
     /// whitespace-only: an empty note is an absent one, spelled once.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialCollectionItem {
     /// An item over a canonical `uri` with an optional curator `note`; no unknown members.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(uri: String, note: Option<String>) -> Self {
         Self {
             uri,
             note,
             extra: Default::default(),
         }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl PubkySocialCollectionItem {
+    #[wasm_bindgen(getter)]
+    pub fn uri(&self) -> String {
+        self.uri.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn note(&self) -> Option<String> {
+        self.note.clone()
     }
 }
 
@@ -769,9 +792,10 @@ mod tests {
             .create_collection_post(
                 "My favorites".to_string(),
                 Some("Best things".to_string()),
-                Some(vec![
+                Some(vec![PubkySocialCollectionItem::new(
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
-                ]),
+                    Some("the best one".to_string()),
+                )]),
                 Some("https://example.com/cover.png".to_string()),
                 Some("list".to_string()),
             )
@@ -785,6 +809,7 @@ mod tests {
         assert_eq!(envelope.name, "My favorites");
         assert_eq!(envelope.description.as_deref(), Some("Best things"));
         assert_eq!(envelope.items.len(), 1);
+        assert_eq!(envelope.items[0].note.as_deref(), Some("the best one"));
         assert_eq!(
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")

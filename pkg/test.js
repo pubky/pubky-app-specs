@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialAttachment, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -337,7 +337,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         const { post, meta } = specsBuilder.createCollectionPost(
           "Favorite posts",
           "Posts worth revisiting",
-          [collectionItemUri],
+          [new PubkySocialCollectionItem(collectionItemUri, "worth it")],
           coverImageUrl
         );
 
@@ -360,7 +360,11 @@ describe("PubkySpecs Example Objects Tests", () => {
           "Posts worth revisiting",
           "Collection description should match"
         );
-        assert.deepStrictEqual(envelope.items, [{ uri: collectionItemUri }], "Collection items are objects");
+        assert.deepStrictEqual(
+          envelope.items,
+          [{ uri: collectionItemUri, note: "worth it" }],
+          "Collection items are objects with an optional note"
+        );
         assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
       });
 
@@ -373,7 +377,11 @@ describe("PubkySpecs Example Objects Tests", () => {
 
         const tooManyItems = Array.from(
           { length: validationLimits.collectionItemsMaxCount + 1 },
-          (_, index) => `pubky://${RIO}/pub/social/v1/posts/${String(index).padStart(13, "0")}`
+          (_, index) =>
+            new PubkySocialCollectionItem(
+              `pubky://${RIO}/pub/social/v1/posts/${String(index).padStart(13, "0")}`,
+              null
+            )
         );
 
         assert.throws(
