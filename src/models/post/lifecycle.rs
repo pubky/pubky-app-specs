@@ -100,13 +100,13 @@ fn other_refs(post: &PubkySocialPost) -> Vec<String> {
     refs
 }
 
-/// The owner's private media a version references, first-encountered order, deduplicated.
-/// Every media reference passes the media gate with the author in scope first, so a
-/// non-canonical spelling or another user's private file is a publish error rather than a
-/// dangling reference. Any other private reference is the root rule stated as a publish error.
-/// Kept in the shape the media-closure enumerator will export once media collapses to one
-/// object.
-fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec<String>, String> {
+/// The publish media closure: the same-owner priv-root `files/` URIs this post references from
+/// its attachments and its envelope cover, in first-encountered order, deduplicated. Every media
+/// reference passes the media gate with the author in scope first, so a non-canonical spelling or
+/// another user's private file is a publish error rather than a dangling reference. A priv-root
+/// reference anywhere else (parent, embed, lock, collection item) is the root rule stated as a
+/// publish error; covers are media and part of the closure.
+pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec<String>, String> {
     let own_private = media_prefix(owner, Root::Priv);
     let priv_ctx = ValidationCtx { root: Root::Priv };
     let max = VALIDATION_LIMITS.reference_uri_max_length;
@@ -424,6 +424,61 @@ mod tests {
             plan.dest_path,
             format!("/pub/social/v1/posts/{id}/{id}.json")
         );
+    }
+
+    /// The publish round trip over the media leaf the collapse produces.
+    #[test]
+    fn publish_round_trips_a_hashed_media_leaf() {
+        let owner = owner();
+        let bytes = vec![1, 2];
+        let created = PubkySocialFile::create_file(bytes, "image/png", Root::Priv).unwrap();
+        let leaf = format!("{}.png", created.id);
+        let uri = priv_file(&leaf);
+        assert_eq!(created.path, format!("/priv/social/v1/files/{leaf}"));
+
+        let mut draft = PubkySocialPost::new(
+            "pic".into(),
+            PubkySocialPostKind::Image,
+            None,
+            None,
+            vec![PubkySocialAttachment::new(
+                uri.clone(),
+                None,
+                Some("pic.png".into()),
+            )],
+        );
+        assert_eq!(
+            crate::private_media_refs(&draft, &owner).unwrap(),
+            vec![uri.clone()]
+        );
+
+        let plan = plan_publish(TS, TS, &draft, &owner).unwrap();
+        assert_eq!(
+            plan.media_copies,
+            vec![(
+                format!("/priv/social/v1/files/{leaf}"),
+                format!("/pub/social/v1/files/{leaf}")
+            )]
+        );
+        assert_eq!(
+            plan.dest_path,
+            format!("/pub/social/v1/posts/{TS}/{TS}.json")
+        );
+        let published: PubkySocialPost = serde_json::from_str(&plan.rewritten_post_json).unwrap();
+        assert_eq!(published.attachments[0].uri, pub_file(&leaf));
+        assert_eq!(published.attachments[0].name.as_deref(), Some("pic.png"));
+        published
+            .validate(Some(TS), &ValidationCtx { root: Root::Pub })
+            .unwrap();
+
+        // The Err twins, through the exported enumerator
+        draft.attachments[0].uri = format!("pubky://{OTHER}/priv/social/v1/files/{leaf}");
+        let e = crate::private_media_refs(&draft, &owner).unwrap_err();
+        assert!(e.contains("another user"), "{e}");
+        draft.attachments[0].uri = uri;
+        draft.parent = Some(format!("pubky://{PK}/priv/social/v1/posts/{TS}"));
+        let e = crate::private_media_refs(&draft, &owner).unwrap_err();
+        assert!(e.contains("private object"), "{e}");
     }
 
     #[test]
