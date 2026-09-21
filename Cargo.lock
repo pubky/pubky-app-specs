@@ -1786,6 +1786,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "base32",
+ "base64",
  "blake3",
  "js-sys",
  "pubky",
