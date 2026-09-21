@@ -477,7 +477,8 @@ impl PubkySpecsBuilder {
     // -----------------------------------------------------------------------------
 
     /// The target lives in `meta.id`, the filename: a LIST of the bookmarks prefix recovers
-    /// every target with no GETs. Reading one back is `bookmarkTarget`.
+    /// every primary-form target with no GETs; an overflow entry (`~` first) carries its target
+    /// in the content and costs one GET. Reading one back is `bookmarkTarget`.
     #[wasm_bindgen(js_name = createBookmark)]
     pub fn create_bookmark(&self, target: String) -> Result<BookmarkResult, String> {
         let created = crate::create_bookmark(&target)?;

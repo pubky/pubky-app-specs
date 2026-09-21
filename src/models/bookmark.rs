@@ -26,7 +26,8 @@ const PRIV_CTX: ValidationCtx = ValidationCtx {
 /// A bookmark of any URI.
 /// URI: /priv/social/v1/bookmarks/:filename.json
 ///
-/// The target lives in the FILENAME, so listing every bookmark costs one LIST and no GETs.
+/// The target lives in the FILENAME, so listing every bookmark costs one LIST and, for the
+/// primary form, no GETs; an overflow entry costs one GET for its `target`.
 /// Two forms, told apart by the first character:
 ///
 /// - primary, a canonical target of at most 187 UTF-8 bytes: the filename is the target in
