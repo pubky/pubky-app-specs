@@ -383,8 +383,8 @@ mod tests {
     fn test_import_feed() {
         let uri = feed_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            // blake3("following:columns:recent:-:-:-")[..16] in Crockford
-            "1QQCADPE84E9KYKGJVPNC2J11C".into(),
+            // blake3("following:columns:recent:::")[..16] in Crockford
+            "FXKCW1SPW80RX2AGB3MCP5CF48".into(),
         );
         let feed_json = r#"{
             "feed": {

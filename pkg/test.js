@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable, feedPaths } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -732,6 +732,12 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(feedMeta.url.split("/")[3], "priv", "feeds live under the private root");
       assert.ok(feedMeta.url.includes("feeds"), "URL should contain feeds path");
       assert.ok(feedMeta.url.includes(feedMeta.id), "URL should contain feed ID");
+
+      // publishing is a PUT of the same bytes at the public path, unpublishing a DELETE of it
+      const paths = feedPaths(feedMeta.id);
+      assert.strictEqual(paths.private, `/priv/social/v1/feeds/${feedMeta.id}.json`, "private path");
+      assert.strictEqual(paths.public, `/pub/social/v1/feeds/${feedMeta.id}.json`, "public path");
+      assert.strictEqual(paths.private, feedMeta.path, "the builder writes the private path");
 
       // Test feed content
       const feedJson = feed.toJson();

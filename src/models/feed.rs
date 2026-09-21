@@ -152,7 +152,8 @@ pub struct PubkySocialFeedConfig {
 
 impl PubkySocialFeedConfig {
     /// The one builder. It canonicalizes both tag lists, so one filter has one spelling and
-    /// one id; an empty result is stored as `None`, "no filter".
+    /// one id; an empty result is stored as `None`, "no filter". It then validates them, so a
+    /// caller can never hold a config whose id string would be ambiguous.
     pub fn new(
         tags: Option<Vec<String>>,
         domain_tags: Option<Vec<String>>,
@@ -160,16 +161,20 @@ impl PubkySocialFeedConfig {
         layout: PubkySocialFeedLayout,
         sort: PubkySocialFeedSort,
         content: Option<PubkySocialPostKind>,
-    ) -> Self {
-        Self {
-            tags: canonical_filter(tags),
-            domain_tags: canonical_filter(domain_tags),
+    ) -> Result<Self, String> {
+        let tags = canonical_filter(tags);
+        let domain_tags = canonical_filter(domain_tags);
+        validate_tag_list(&tags, "tags")?;
+        validate_tag_list(&domain_tags, "domain_tags")?;
+        Ok(Self {
+            tags,
+            domain_tags,
             reach,
             layout,
             sort,
             content,
             extra: Default::default(),
-        }
+        })
     }
 }
 
@@ -240,14 +245,9 @@ fn canonical_filter(tags: Option<Vec<String>>) -> Option<Vec<String>> {
     tags.map(canonical_tag_list).filter(|list| !list.is_empty())
 }
 
-/// Builders fold an icon name the way they fold a tag label. The engine `trim`/`to_lowercase`
-/// pair this replaces follows a Unicode table version and cannot be pinned across engines.
-fn sanitize_feed_icon(icon: Option<String>) -> Option<String> {
-    icon.map(|icon| ascii_fold(frozen_trim(&icon)))
-}
-
 /// Only the shape of the name is validated, not whether the icon exists: the icon set is
-/// curated by the client.
+/// curated by the client. The charset check is also the fixed-point check, since a folded
+/// icon is exactly one that is 1 to 50 characters of `[a-z0-9-]`.
 ///
 /// `None` is accepted for feeds created before the field existed; new feeds always carry
 /// one, since [`PubkySocialFeed::new`] requires it.
@@ -375,18 +375,29 @@ pub struct PubkySocialFeed {
 }
 
 impl PubkySocialFeed {
-    /// Creates a new `PubkySocialFeed` instance and sanitizes it. Pass a config built by
-    /// [`PubkySocialFeedConfig::new`], which is what canonicalizes the tag lists.
+    /// Trims the name and folds the icon, the two canonicalizations a writer owes. Ingest
+    /// never repeats them, so an SDK round trip cannot change the stored bytes. Pass a config
+    /// built by [`PubkySocialFeedConfig::new`], which canonicalizes the tag lists.
     pub fn new(feed: PubkySocialFeedConfig, name: String, icon: String) -> Self {
         let created_at = timestamp();
         Self {
             feed,
-            name,
-            icon: Some(icon),
+            name: frozen_trim(&name).to_string(),
+            icon: Some(ascii_fold(frozen_trim(&icon))),
             created_at,
             extra: Default::default(),
         }
-        .sanitize()
+    }
+
+    /// The id of the config, for a writer. A config carrying an unknown content kind has
+    /// none: two future kinds render as one segment and would collide, and a reader skips the
+    /// id check for exactly those feeds, so nothing would notice. Such a feed keeps the id it
+    /// was read under, which is what a name-only edit needs.
+    pub fn derive_id(&self) -> Result<String, String> {
+        if !self.feed.content.as_ref().is_none_or(|c| c.is_known()) {
+            return Err("Validation Error: a feed carrying an unknown content kind has no derivable id; keep the id it was read under".into());
+        }
+        Ok(self.create_id())
     }
 
     /// "/{root}/social/v1/feeds/{id}.json". Feeds are private by default; the public
@@ -402,7 +413,7 @@ impl PubkySocialFeed {
 /// DELETE `public`. Nothing else is involved: a feed config carries no root-bearing URIs, so
 /// publishing is a plain byte copy, and because the id is derived from the config alone the
 /// two copies can never disagree about what the feed filters.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FeedPaths {
     /// Where the builder writes.
     pub private: String,
@@ -455,23 +466,25 @@ impl PubkySocialFeed {
 impl Json for PubkySocialFeed {}
 
 impl HashId for PubkySocialFeed {
-    /// "{reach}:{layout}:{sort}:{content or '-'}:{tags or '-'}:{domain_tags or '-'}", frozen
-    /// wire names, each list joined with ',' exactly as stored (canonical: folded,
-    /// deduplicated, sorted by code point). Injective because ':' and ',' are both in
-    /// `tag_invalid_chars` and the segment count is fixed. A stored list is never empty, so
-    /// '-' means only "no filter". `name`, `icon`, `created_at` and `extra` stay outside: a
-    /// feed is what it filters, not how it looks.
+    /// "{reach}:{layout}:{sort}:{content or ''}:{tags or ''}:{domain_tags or ''}", frozen wire
+    /// names, each list joined with ',' exactly as stored (canonical: folded, deduplicated,
+    /// sorted by code point). Injective because ':' and ',' are both in `tag_invalid_chars`,
+    /// the segment count is fixed, and the empty string is the one spelling no wire name and
+    /// no stored list can produce, a stored list being non-empty. The sentinel cannot be a
+    /// printable token: '-' would collide with the legal label `["-"]`. `name`, `icon`,
+    /// `created_at` and `extra` stay outside: a feed is what it filters, not how it looks.
+    ///
+    /// Meaningful only for a config this crate can spell; writers go through
+    /// [`PubkySocialFeed::derive_id`], which refuses an unknown content kind.
     fn get_id_data(&self) -> String {
-        let list = |l: &Option<Vec<String>>| {
-            l.as_ref()
-                .map_or_else(|| "-".to_string(), |list| list.join(","))
-        };
+        let list =
+            |l: &Option<Vec<String>>| l.as_ref().map_or_else(String::new, |list| list.join(","));
         format!(
             "{}:{}:{}:{}:{}:{}",
             self.feed.reach.wire_name(),
             self.feed.layout.wire_name(),
             self.feed.sort.wire_name(),
-            self.feed.content.as_ref().map_or("-", |c| c.wire_name()),
+            self.feed.content.as_ref().map_or("", |c| c.wire_name()),
             list(&self.feed.tags),
             list(&self.feed.domain_tags),
         )
@@ -488,6 +501,9 @@ impl HasIdPath for PubkySocialFeed {
 }
 
 impl Validatable for PubkySocialFeed {
+    // No sanitize: the builder trims the name and folds the icon, and ingest carries both
+    // back as written, so reading and rewriting a feed never changes its bytes.
+
     fn validate_fields(
         &self,
         id: Option<&str>,
@@ -520,14 +536,6 @@ impl Validatable for PubkySocialFeed {
         }
 
         Ok(())
-    }
-
-    fn sanitize(self) -> Self {
-        PubkySocialFeed {
-            name: frozen_trim(&self.name).to_string(),
-            icon: sanitize_feed_icon(self.icon),
-            ..self
-        }
     }
 }
 
@@ -619,9 +627,9 @@ mod tests {
     fn test_id_input_is_the_pinned_string() {
         // Six fixed segments, wire names, the stored lists joined verbatim
         let legacy = feed(stored(None, None, R::All, L::List, S::Popularity, None));
-        assert_eq!(legacy.get_id_data(), "all:list:popularity:-:-:-");
-        // blake3("all:list:popularity:-:-:-")[..16] in Crockford
-        assert_eq!(legacy.create_id(), "X73G7QREDQ81D7K49GCZ89SEHC");
+        assert_eq!(legacy.get_id_data(), "all:list:popularity:::");
+        // blake3("all:list:popularity:::")[..16] in Crockford
+        assert_eq!(legacy.create_id(), "H91HYJTYNCGYA2EP13ZQTRVD5G");
 
         let fixture = feed(stored(
             Some(vec!["rust"]),
@@ -636,17 +644,34 @@ mod tests {
         assert_eq!(fixture.create_id(), "2CPRX2C4D6FNNS9ZRM50X99288");
 
         // The builder sorts, so the two spellings of one filter are one feed
-        let two = feed(PubkySocialFeedConfig::new(
-            Some(vec!["b".into(), "a".into()]),
+        let two = feed(
+            PubkySocialFeedConfig::new(
+                Some(vec!["b".into(), "a".into()]),
+                None,
+                R::All,
+                L::Columns,
+                S::Recent,
+                None,
+            )
+            .unwrap(),
+        );
+        assert_eq!(two.get_id_data(), "all:columns:recent::a,b:");
+        // blake3("all:columns:recent::a,b:")[..16] in Crockford
+        assert_eq!(two.create_id(), "7ERKY70ARABKV1SMSASC9Z4YWC");
+
+        // The sentinel has to be unspellable: '-' is a legal label, so a printable one would
+        // make the filter ["-"] and "no filter" the same feed.
+        let dash = feed(stored(
+            Some(vec!["-"]),
             None,
             R::All,
-            L::Columns,
-            S::Recent,
+            L::List,
+            S::Popularity,
             None,
         ));
-        assert_eq!(two.get_id_data(), "all:columns:recent:-:a,b:-");
-        // blake3("all:columns:recent:-:a,b:-")[..16] in Crockford
-        assert_eq!(two.create_id(), "H0GZXBEPAQAA65145FNQP7H50R");
+        assert_eq!(dash.get_id_data(), "all:list:popularity::-:");
+        assert_ne!(dash.create_id(), legacy.create_id());
+        assert!(validate(&dash).is_ok());
     }
 
     #[test]
@@ -660,6 +685,7 @@ mod tests {
                 S::Recent,
                 None,
             )
+            .unwrap()
         };
         let plain = feed(config());
         let mut dressed = PubkySocialFeed::new(config(), "Another Name".into(), "bitcoin".into());
@@ -677,7 +703,8 @@ mod tests {
                 L::Columns,
                 S::Recent,
                 None,
-            ),
+            )
+            .unwrap(),
             PubkySocialFeedConfig::new(
                 Some(vec!["rust".into()]),
                 None,
@@ -685,7 +712,8 @@ mod tests {
                 L::List,
                 S::Recent,
                 None,
-            ),
+            )
+            .unwrap(),
             PubkySocialFeedConfig::new(
                 Some(vec!["rust".into()]),
                 None,
@@ -693,7 +721,8 @@ mod tests {
                 L::Columns,
                 S::Popularity,
                 None,
-            ),
+            )
+            .unwrap(),
             PubkySocialFeedConfig::new(
                 Some(vec!["rust".into()]),
                 None,
@@ -701,7 +730,8 @@ mod tests {
                 L::Columns,
                 S::Recent,
                 Some(PubkySocialPostKind::Note),
-            ),
+            )
+            .unwrap(),
             PubkySocialFeedConfig::new(
                 Some(vec!["rust".into(), "bitcoin".into()]),
                 None,
@@ -709,7 +739,8 @@ mod tests {
                 L::Columns,
                 S::Recent,
                 None,
-            ),
+            )
+            .unwrap(),
             PubkySocialFeedConfig::new(
                 Some(vec!["rust".into()]),
                 Some(vec!["dev".into()]),
@@ -717,7 +748,8 @@ mod tests {
                 L::Columns,
                 S::Recent,
                 None,
-            ),
+            )
+            .unwrap(),
         ] {
             assert_ne!(feed(edited).create_id(), base);
         }
@@ -734,7 +766,8 @@ mod tests {
             L::Columns,
             S::Recent,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             config.tags,
             Some(vec!["\u{FB00}".to_string(), "\u{1D51E}".to_string()])
@@ -756,7 +789,8 @@ mod tests {
             L::Columns,
             S::Recent,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             config.tags,
             Some(vec!["bitcoin".to_string(), "rust".to_string()])
@@ -768,6 +802,9 @@ mod tests {
 
     #[test]
     fn test_a_stored_list_is_canonical_or_it_is_rejected() {
+        // one code point over tag_label_max_length
+        const LONG_LABEL: &str = "aaaaaaaaaaaaaaaaaaaaa";
+        assert_eq!(LONG_LABEL.len(), VALIDATION_LIMITS.tag_label_max_length + 1);
         for (list, expected) in [
             (Some(vec![]), "cannot be an empty list"),
             (Some(vec!["Rust"]), "stored folded"),
@@ -777,6 +814,8 @@ mod tests {
             (Some(vec!["a:b"]), "invalid character"),
             (Some(vec!["a,b"]), "invalid character"),
             (Some(vec!["a b"]), "whitespace"),
+            (Some(vec![""]), "shorter than minimum length"),
+            (Some(vec![LONG_LABEL]), "exceeds maximum length"),
             (
                 Some(vec!["t1", "t2", "t3", "t4", "t5", "t6"]),
                 "more than 5",
@@ -861,51 +900,130 @@ mod tests {
     }
 
     #[test]
-    fn test_name_rules() {
+    fn test_name_is_trimmed_by_the_builder_and_stored_as_written() {
         let max = VALIDATION_LIMITS.feed_name_max_length;
         assert_eq!(max, 100);
-        for (name, ok) in [("x", true), ("  Rust Bitcoiners", true), ("   ", false)] {
-            let config =
-                PubkySocialFeedConfig::new(None, None, R::All, L::Columns, S::Recent, None);
-            let f = PubkySocialFeed::new(config, name.into(), "rss".into());
-            assert_eq!(validate(&f).is_ok(), ok, "{name:?}");
-        }
-        // the builder trims, so the cap counts code points of the trimmed name
-        let config = PubkySocialFeedConfig::new(None, None, R::All, L::Columns, S::Recent, None);
-        let f = PubkySocialFeed::new(config.clone(), "🦀".repeat(max), "rss".into());
-        assert_eq!(f.name.chars().count(), max);
+        let config =
+            || PubkySocialFeedConfig::new(None, None, R::All, L::Columns, S::Recent, None).unwrap();
+        let f = PubkySocialFeed::new(config(), "\u{3000}Rust Bitcoiners ".into(), "rss".into());
+        assert_eq!(f.name, "Rust Bitcoiners");
         assert!(validate(&f).is_ok());
-        let f = PubkySocialFeed::new(config, "🦀".repeat(max + 1), "rss".into());
+        // blank is blank however it is spelled
+        let f = PubkySocialFeed::new(config(), "   ".into(), "rss".into());
+        assert!(validate(&f).unwrap_err().contains("cannot be empty"));
+        // the cap counts the stored value
+        let f = PubkySocialFeed::new(config(), "\u{1F980}".repeat(max), "rss".into());
+        assert!(validate(&f).is_ok());
+        let f = PubkySocialFeed::new(config(), "\u{1F980}".repeat(max + 1), "rss".into());
         let e = validate(&f).unwrap_err();
         assert!(e.contains("exceeds maximum length"), "{e}");
     }
 
     #[test]
+    fn test_ingest_never_repeats_the_builder_canonicalization() {
+        // Trim and fold are the writer's. Repeating them on read would make an SDK round trip
+        // change the stored bytes, which is what publishing a feed as a byte copy relies on.
+        let id = feed(stored(None, None, R::All, L::List, S::Recent, None)).create_id();
+        let blob = |name: &str, icon: &str| {
+            format!(
+                r#"{{"feed":{{"tags":null,"reach":"all","layout":"list","sort":"recent","content":null}},"name":"{name}","icon":"{icon}","created_at":1700000000}}"#
+            )
+        };
+        let read = |name: &str, icon: &str| {
+            <PubkySocialFeed as Validatable>::try_from(blob(name, icon).as_bytes(), &id, &PRIV_CTX)
+        };
+        // a padded name is carried back with its padding, not silently repaired
+        let f = read("  Rust  ", "code").unwrap();
+        assert_eq!(f.name, "  Rust  ");
+        assert!(serde_json::to_string(&f)
+            .unwrap()
+            .contains(r#""name":"  Rust  ""#));
+        // an unfolded icon is a rejection, never a repair
+        for bad in ["Code", " code"] {
+            let e = read("Rust", bad).unwrap_err();
+            assert!(e.contains("icon"), "{bad:?}: {e}");
+        }
+    }
+
+    #[test]
     fn test_icon_rules() {
-        let config = || PubkySocialFeedConfig::new(None, None, R::All, L::Columns, S::Recent, None);
+        let config =
+            || PubkySocialFeedConfig::new(None, None, R::All, L::Columns, S::Recent, None).unwrap();
         // the builder folds with the frozen ops
         let f = PubkySocialFeed::new(config(), "Mixed".into(), "\u{3000}Code-2 ".into());
         assert_eq!(f.icon, Some("code-2".into()));
         assert!(validate(&f).is_ok());
-        // a stored icon that is not its own fold has a character outside [a-z0-9-]
-        let mut stored_icon = f.clone();
-        stored_icon.icon = Some("Code".into());
-        let e = validate(&stored_icon).unwrap_err();
-        assert!(e.contains("invalid character: C"), "{e}");
 
-        for bad in ["bad icon", "bad_icon", "", &"a".repeat(51)] {
+        let max = VALIDATION_LIMITS.feed_icon_max_length;
+        assert_eq!(max, 50);
+        let with_icon = |icon: Option<String>| {
             let mut f = f.clone();
-            f.icon = Some(bad.into());
-            assert!(validate(&f).is_err(), "{bad:?}");
+            f.icon = icon;
+            f
+        };
+        assert!(validate(&with_icon(Some("a".repeat(max)))).is_ok());
+        for (bad, expected) in [
+            ("a".repeat(max + 1), "must be 1 to 50 characters"),
+            (String::new(), "must be 1 to 50 characters"),
+            ("Code".into(), "invalid character: C"),
+            ("bad icon".into(), "invalid character:  "),
+            ("bad,icon".into(), "invalid character: ,"),
+            ("bad_icon".into(), "invalid character: _"),
+        ] {
+            let e = validate(&with_icon(Some(bad.clone()))).unwrap_err();
+            assert!(e.contains("icon") && e.contains(expected), "{bad:?}: {e}");
         }
         // shape only: an icon no client knows is still a valid name
-        let mut f = f.clone();
-        f.icon = Some("no-such-icon-42".into());
-        assert!(validate(&f).is_ok());
+        assert!(validate(&with_icon(Some("no-such-icon-42".into()))).is_ok());
         // and a feed written before the field existed has none
-        f.icon = None;
-        assert!(validate(&f).is_ok());
-        assert_eq!(VALIDATION_LIMITS.feed_icon_max_length, 50);
+        assert!(validate(&with_icon(None)).is_ok());
+    }
+
+    #[test]
+    fn test_an_explicit_null_icon_reads_as_none() {
+        let id = feed(stored(
+            Some(vec!["rust"]),
+            None,
+            R::All,
+            L::Columns,
+            S::Recent,
+            None,
+        ))
+        .create_id();
+        let blob = br#"{"feed":{"tags":["rust"],"reach":"all","layout":"columns","sort":"recent","content":null},"name":"Rust","icon":null,"created_at":1700000000}"#;
+        let f = <PubkySocialFeed as Validatable>::try_from(blob, &id, &PRIV_CTX).unwrap();
+        assert_eq!(f.icon, None);
+        let back = serde_json::to_value(&f).unwrap();
+        assert!(back.get("icon").is_none());
+    }
+
+    #[test]
+    fn test_derive_id_refuses_an_unspellable_config() {
+        let known = feed(stored(
+            None,
+            None,
+            R::All,
+            L::List,
+            S::Recent,
+            Some(PubkySocialPostKind::Note),
+        ));
+        assert_eq!(known.derive_id().unwrap(), known.create_id());
+
+        // Two future kinds would both render "unknown" and land on one id, and a reader skips
+        // the id check for them, so the collision would go unseen.
+        let unknown = feed(stored(
+            None,
+            None,
+            R::All,
+            L::List,
+            S::Recent,
+            Some(PubkySocialPostKind::Unknown),
+        ));
+        let e = unknown.derive_id().unwrap_err();
+        assert!(
+            e.starts_with("Validation Error: ") && e.contains("no derivable id"),
+            "{e}"
+        );
     }
 
     #[test]
@@ -944,10 +1062,10 @@ mod tests {
 
     #[test]
     fn test_try_from_validates_and_preserves() {
-        let blob = br#"{"feed":{"tags":["rust"],"reach":"all","layout":"columns","sort":"recent","content":null,"ext":{"pinned":true}},"name":"Rust","icon":"code","created_at":1700000000,"ext":{"badge":1}}"#;
+        let blob = br#"{"feed":{"tags":["rust"],"domain_tags":["dev"],"reach":"all","layout":"columns","sort":"recent","content":null,"ext":{"pinned":true}},"name":"Rust","icon":"code","created_at":1700000000,"ext":{"badge":1}}"#;
         let id = feed(stored(
             Some(vec!["rust"]),
-            None,
+            Some(vec!["dev"]),
             R::All,
             L::Columns,
             S::Recent,
@@ -955,6 +1073,8 @@ mod tests {
         ))
         .create_id();
         let f = <PubkySocialFeed as Validatable>::try_from(blob, &id, &PRIV_CTX).unwrap();
+        assert_eq!(f.feed.tags, Some(vec!["rust".to_string()]));
+        assert_eq!(f.feed.domain_tags, Some(vec!["dev".to_string()]));
         assert_eq!(f.extra["ext"]["badge"], 1);
         assert_eq!(f.feed.extra["ext"]["pinned"], true);
         let back = serde_json::to_string(&f).unwrap();
@@ -1123,7 +1243,8 @@ mod tests {
             L::Columns,
             S::Recent,
             Some(PubkySocialPostKind::Image),
-        );
+        )
+        .unwrap();
         let f = PubkySocialFeed::new(config.clone(), "Rust Bitcoiners".into(), "bitcoin".into());
         assert_eq!(f.feed, config);
         assert_eq!(f.name, "Rust Bitcoiners");

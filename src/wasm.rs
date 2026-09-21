@@ -43,6 +43,17 @@ pub fn mime_to_ext_table() -> Result<JsValue, String> {
     table.serialize(&serializer).map_err(|e| e.to_string())
 }
 
+/// Both addresses of a feed, `{private, public}`. A feed lives at `private`; PUT the same
+/// bytes at `public` to publish it, DELETE `public` to unpublish.
+#[wasm_bindgen(js_name = feedPaths)]
+pub fn feed_paths_js(id: String) -> Result<JsValue, String> {
+    // Plain object, not a JS Map, so callers can read `.private` and `.public`
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    crate::feed_paths(&id)
+        .serialize(&serializer)
+        .map_err(|e| e.to_string())
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Meta {
@@ -248,13 +259,24 @@ impl PubkySpecsBuilder {
             None => None,
         };
 
-        // Create the feed. The config builder canonicalizes both tag lists.
-        let config =
-            PubkySocialFeedConfig::new(input.tags, input.domain_tags, reach, layout, sort, content);
+        // Create the feed. The config builder canonicalizes and validates both tag lists.
+        let config = PubkySocialFeedConfig::new(
+            input.tags,
+            input.domain_tags,
+            reach,
+            layout,
+            sort,
+            content,
+        )?;
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
-        let feed_id = feed.create_id();
-        feed.validate(Some(&feed_id), &ValidationCtx { root: Root::Priv })?;
+        let feed_id = feed.derive_id()?;
+        feed.validate(
+            Some(&feed_id),
+            &ValidationCtx {
+                root: PubkySocialFeed::ROOT,
+            },
+        )?;
 
         let path = PubkySocialFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
