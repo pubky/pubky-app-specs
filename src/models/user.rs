@@ -1,12 +1,12 @@
+use crate::canonicalize::{checked, AllowedSchemes};
 use crate::constants::social_path;
-use crate::traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
+use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::{check_extra, code_point_len, frozen_trim, sanitize_url},
+    common::{check_extra, code_point_len, frozen_trim},
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
 };
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[cfg(target_arch = "wasm32")]
 use crate::traits::Json;
@@ -48,7 +48,6 @@ impl Default for PubkySocialUser {
             status: None,
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -120,9 +119,19 @@ impl PubkySocialUserLink {
     }
 }
 
+/// Builder trim for optional display text. Whitespace-only means absent, so "no bio" has one
+/// spelling on the wire instead of three.
+fn trimmed_or_none(text: String) -> Option<String> {
+    let trimmed = frozen_trim(&text);
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUser {
-    /// Creates a new `PubkySocialUser` instance and sanitizes it.
+    /// Trims the display text it is given, link titles included. Trimming happens here and
+    /// nowhere else, so a stored profile reads back byte for byte and an SDK round trip cannot
+    /// change what is on the homeserver. `image` and each link `url` are references and are
+    /// kept exactly as written.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
@@ -132,14 +141,18 @@ impl PubkySocialUser {
         status: Option<String>,
     ) -> Self {
         Self {
-            name,
-            bio,
+            name: frozen_trim(&name).to_string(),
+            bio: bio.and_then(trimmed_or_none),
             image,
-            links,
-            status,
+            links: links.map(|links| {
+                links
+                    .into_iter()
+                    .map(PubkySocialUserLink::trimmed)
+                    .collect()
+            }),
+            status: status.and_then(trimmed_or_none),
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -153,39 +166,21 @@ impl HasPath for PubkySocialUser {
 }
 
 impl Validatable for PubkySocialUser {
-    fn sanitize(self) -> Self {
-        let name = frozen_trim(&self.name).to_string();
-        let bio = self.bio.map(|b| frozen_trim(&b).to_string());
-
-        // Sanitize image URL
-        let image = self.image.map(|i| sanitize_url(&i));
-
-        // Sanitize status: trim whitespace only
-        let status = self.status.map(|s| frozen_trim(&s).to_string());
-
-        // Sanitize links: sanitize each link, validation handles format
-        let links = self
-            .links
-            .map(|links_vec| links_vec.into_iter().map(|link| link.sanitize()).collect());
-
-        PubkySocialUser {
-            name,
-            bio,
-            image,
-            links,
-            status,
-            extra: self.extra,
-        }
-    }
-
     fn validate_fields(
         &self,
         _id: Option<&str>,
         _ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
+        // The profile has one root, so the destination is the model's, whatever ctx a caller
+        // hands in: a private image never passes the root rule here
+        let ctx = &ValidationCtx { root: Self::ROOT };
         check_extra(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
-        // Validate name length
+        // Padding is display text, not identity, so it is counted rather than removed; a name
+        // that is only whitespace is still no name
+        if frozen_trim(&self.name).is_empty() {
+            return Err("Validation Error: name must not be blank".into());
+        }
         let name_length = code_point_len(&self.name);
         if !(VALIDATION_LIMITS.user_name_min_length..=VALIDATION_LIMITS.user_name_max_length)
             .contains(&name_length)
@@ -195,22 +190,24 @@ impl Validatable for PubkySocialUser {
 
         // Validate bio length
         if let Some(bio) = &self.bio {
+            if frozen_trim(bio).is_empty() {
+                return Err("Validation Error: bio must not be blank".into());
+            }
             if code_point_len(bio) > VALIDATION_LIMITS.user_bio_max_length {
                 return Err("Validation Error: Bio exceeds maximum length".into());
             }
         }
 
-        // Validate image URL format and length
+        // The profile is public, so a private image is refused by the root rule with no owner
         if let Some(image) = &self.image {
-            if image.is_empty() {
-                return Err("Validation Error: Image URI cannot be empty".into());
-            }
-            if code_point_len(image) > VALIDATION_LIMITS.image_url_max_length {
-                return Err("Validation Error: Image URI exceeds maximum length".into());
-            }
-            // Validate URL format
-            Url::parse(image)
-                .map_err(|_| "Validation Error: Invalid image URI format".to_string())?;
+            checked(
+                "image",
+                image,
+                AllowedSchemes::PubkyHttpHttps,
+                VALIDATION_LIMITS.image_url_max_length,
+                ctx,
+                None,
+            )?;
         }
 
         // Validate links
@@ -219,13 +216,16 @@ impl Validatable for PubkySocialUser {
                 return Err("Validation Error: Too many links".into());
             }
 
-            for link in links {
-                link.validate(None, &PUB_CTX)?;
+            for (index, link) in links.iter().enumerate() {
+                link.validate_at(Some(index), ctx)?;
             }
         }
 
         // Validate status length
         if let Some(status) = &self.status {
+            if frozen_trim(status).is_empty() {
+                return Err("Validation Error: status must not be blank".into());
+            }
             if code_point_len(status) > VALIDATION_LIMITS.user_status_max_length {
                 return Err("Validation Error: Status exceeds maximum length".into());
             }
@@ -237,7 +237,8 @@ impl Validatable for PubkySocialUser {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUserLink {
-    /// Creates a new `PubkySocialUserLink` instance and sanitizes it.
+    /// Trims the title, for the reason `PubkySocialUser::new` gives; the url is a reference and
+    /// is kept exactly as written.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
         Self {
@@ -245,51 +246,68 @@ impl PubkySocialUserLink {
             url,
             extra: Default::default(),
         }
-        .sanitize()
+        .trimmed()
     }
 }
 
-impl Validatable for PubkySocialUserLink {
-    fn sanitize(self) -> Self {
-        PubkySocialUserLink {
+impl PubkySocialUserLink {
+    /// The builder trim applied to a link that already exists. Keeps `extra`, because a link
+    /// handed to `PubkySocialUser::new` may have come from serde with members this version
+    /// does not know.
+    fn trimmed(self) -> Self {
+        Self {
             title: frozen_trim(&self.title).to_string(),
-            url: sanitize_url(&self.url),
+            url: self.url,
             extra: self.extra,
         }
     }
 
+    /// The rules, with each field named as the caller sees it: `links[2].url` inside a
+    /// profile, the bare field name when a link is validated on its own.
+    fn validate_at(&self, index: Option<usize>, ctx: &ValidationCtx) -> Result<(), String> {
+        let field = |name: &str| match index {
+            Some(i) => format!("links[{i}].{name}"),
+            None => name.to_string(),
+        };
+        check_extra(&self.extra, &["title", "url"])?;
+        if frozen_trim(&self.title).is_empty() {
+            return Err(format!(
+                "Validation Error: {} must not be blank",
+                field("title")
+            ));
+        }
+        if code_point_len(&self.title) > VALIDATION_LIMITS.user_link_title_max_length {
+            return Err(format!(
+                "Validation Error: {} must be at most {} code points",
+                field("title"),
+                VALIDATION_LIMITS.user_link_title_max_length
+            ));
+        }
+        checked(
+            &field("url"),
+            &self.url,
+            AllowedSchemes::HttpHttps,
+            VALIDATION_LIMITS.user_link_url_max_length,
+            ctx,
+            None,
+        )
+    }
+}
+
+impl Validatable for PubkySocialUserLink {
     fn validate_fields(
         &self,
         _id: Option<&str>,
-        _ctx: &ValidationCtx,
+        ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
-        check_extra(&self.extra, &["title", "url"])?;
-        if frozen_trim(&self.title).is_empty() {
-            return Err("Validation Error: Link title cannot be empty".into());
-        }
-        if code_point_len(&self.title) > VALIDATION_LIMITS.user_link_title_max_length {
-            return Err("Validation Error: Link title exceeds maximum length".into());
-        }
-
-        // Validate URL
-        if frozen_trim(&self.url).is_empty() {
-            return Err("Validation Error: Link URL cannot be empty".into());
-        }
-        if code_point_len(&self.url) > VALIDATION_LIMITS.user_link_url_max_length {
-            return Err("Validation Error: Link URL exceeds maximum length".into());
-        }
-
-        // Validate URL format
-        Url::parse(&self.url).map_err(|_| "Validation Error: Invalid URL format".to_string())?;
-
-        Ok(())
+        self.validate_at(None, ctx)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Validatable;
+    use crate::traits::{Validatable, PUB_CTX};
 
     #[test]
     fn test_new() {
@@ -380,41 +398,115 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize() {
+    fn test_builders_trim_text_and_keep_references_as_written() {
         let user = PubkySocialUser::new(
             "   Alice   ".to_string(),
             Some("  Maximalist and developer.  ".to_string()),
             Some("  https://example.com/image.png  ".to_string()),
             Some(vec![
-                PubkySocialUserLink {
-                    title: " GitHub ".to_string(),
-                    url: " https://github.com/alice ".to_string(),
-                    extra: Default::default(),
-                },
-                PubkySocialUserLink {
-                    title: "Website".to_string(),
-                    url: "  https://example.com  ".to_string(),
-                    extra: Default::default(),
-                },
+                PubkySocialUserLink::new(
+                    " GitHub ".to_string(),
+                    " https://github.com/alice ".to_string(),
+                ),
+                PubkySocialUserLink::new(
+                    "Website".to_string(),
+                    "  https://example.com  ".to_string(),
+                ),
             ]),
             Some("  Exploring the decentralized web.  ".to_string()),
         );
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist and developer."));
-        // Image URL should be trimmed
-        assert_eq!(user.image.as_deref(), Some("https://example.com/image.png"));
         assert_eq!(
             user.status.as_deref(),
             Some("Exploring the decentralized web.")
         );
-        assert!(user.links.is_some());
+        // The padded image survives the builder and is rejected, never repaired
+        assert_eq!(
+            user.image.as_deref(),
+            Some("  https://example.com/image.png  ")
+        );
+        let e = user.validate(None, &PUB_CTX).unwrap_err();
+        assert!(e.contains("image") && e.contains("canonical"), "{e}");
+
         let links = user.links.unwrap();
-        assert_eq!(links.len(), 2); // All links preserved, just trimmed
+        assert_eq!(links.len(), 2);
         assert_eq!(links[0].title, "GitHub");
-        assert_eq!(links[0].url, "https://github.com/alice"); // Trimmed and normalized
+        assert_eq!(links[0].url, " https://github.com/alice ");
         assert_eq!(links[1].title, "Website");
-        assert_eq!(links[1].url, "https://example.com/"); // Trimmed and normalized
+        assert_eq!(links[1].url, "  https://example.com  ");
+        let e = links[0].validate(None, &PUB_CTX).unwrap_err();
+        assert!(e.contains("url") && e.contains("canonical"), "{e}");
+    }
+
+    #[test]
+    fn test_ingest_reads_text_back_as_stored() {
+        let json = r#"{"name":"  Alice  ","bio":"  b  ","links":[{"title":"  x  ","url":"https://x.com/a"}],"status":"  s  "}"#;
+        let user =
+            <PubkySocialUser as Validatable>::try_from(json.as_bytes(), "", &PUB_CTX).unwrap();
+        assert_eq!(user.name, "  Alice  ");
+        assert_eq!(user.bio.as_deref(), Some("  b  "));
+        assert_eq!(user.status.as_deref(), Some("  s  "));
+        assert_eq!(user.links.as_ref().unwrap()[0].title, "  x  ");
+        // The same title through the builder is trimmed
+        assert_eq!(
+            PubkySocialUserLink::new("  x  ".to_string(), "https://x.com/a".to_string()).title,
+            "x"
+        );
+    }
+
+    #[test]
+    fn test_blank_name_is_no_name() {
+        let mut user = PubkySocialUser {
+            name: "   ".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            user.validate(None, &PUB_CTX).unwrap_err(),
+            "Validation Error: name must not be blank"
+        );
+        // Padded but not blank: counted as stored, so the cap sees the padding
+        user.name = format!(" {} ", "a".repeat(VALIDATION_LIMITS.user_name_max_length));
+        assert!(user
+            .validate(None, &PUB_CTX)
+            .unwrap_err()
+            .contains("Invalid name length"));
+        user.name = "  Alice  ".to_string();
+        assert!(user.validate(None, &PUB_CTX).is_ok());
+    }
+
+    #[test]
+    fn test_blank_bio_and_status_are_absent() {
+        let user = PubkySocialUser::new(
+            "Alice".to_string(),
+            Some("   ".to_string()),
+            None,
+            None,
+            Some(" ".to_string()),
+        );
+        assert_eq!(user.bio, None);
+        assert_eq!(user.status, None);
+        assert!(user.validate(None, &PUB_CTX).is_ok());
+
+        // The spelling the builder refuses to produce is refused on the wire too
+        for (json, field) in [
+            (r#"{"name":"Alice","bio":""}"#, "bio"),
+            (r#"{"name":"Alice","status":"  "}"#, "status"),
+        ] {
+            let e = <PubkySocialUser as Validatable>::try_from(json.as_bytes(), "", &PUB_CTX)
+                .unwrap_err();
+            assert_eq!(e, format!("Validation Error: {field} must not be blank"));
+        }
+
+        // Padding around real text is display text, and it is read back untouched
+        let user = <PubkySocialUser as Validatable>::try_from(
+            br#"{"name":"Alice","bio":" hi "}"#,
+            "",
+            &PUB_CTX,
+        )
+        .unwrap();
+        assert_eq!(user.bio.as_deref(), Some(" hi "));
     }
 
     #[test]
@@ -449,11 +541,11 @@ mod tests {
             "Validation Error: Invalid name length"
         );
 
-        // Test name too long - sanitization should NOT truncate
+        // Test name too long - the builder must NOT truncate
         let long_name = "a".repeat(VALIDATION_LIMITS.user_name_max_length + 1);
         let user = PubkySocialUser::new(long_name.clone(), None, None, None, None);
 
-        // Sanitization should preserve full length
+        // The builder preserves the full length
         assert_eq!(user.name.len(), VALIDATION_LIMITS.user_name_max_length + 1);
 
         // Validation should catch the violation
@@ -516,7 +608,10 @@ mod tests {
 
         // Invalid link URL should cause validation to fail
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid URL format"));
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: links[0].url must be a canonical web URI of at most 300 code points: invalid_url"
+        );
     }
 
     #[test]
@@ -533,43 +628,38 @@ mod tests {
 
         // Invalid image URL should cause validation to fail
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid image URI format"));
+        assert_eq!(
+            result.unwrap_err(),
+            "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: invalid_image_url"
+        );
     }
 
     #[test]
-    fn test_sanitize_preserves_invalid_urls() {
-        // Sanitize should preserve invalid URLs (just trim), validation rejects them
-        let user = PubkySocialUser {
-            name: "Alice".to_string(),
-            bio: None,
-            image: Some("  invalid_image_url  ".to_string()),
-            links: Some(vec![PubkySocialUserLink {
-                title: "Test".to_string(),
-                url: "  invalid_link_url  ".to_string(),
-                extra: Default::default(),
-            }]),
-            status: None,
-            extra: Default::default(),
-        };
+    fn test_builder_preserves_invalid_urls() {
+        let user = PubkySocialUser::new(
+            "Alice".to_string(),
+            None,
+            Some("  invalid_image_url  ".to_string()),
+            Some(vec![PubkySocialUserLink::new(
+                "Test".to_string(),
+                "  invalid_link_url  ".to_string(),
+            )]),
+            None,
+        );
 
-        let sanitized = user.sanitize();
-
-        // Image should be trimmed but preserved
-        assert_eq!(sanitized.image.as_deref(), Some("invalid_image_url"));
-
-        // Link should be trimmed but preserved
-        let links = sanitized.links.as_ref().unwrap();
+        // An unusable reference is kept and rejected, never quietly repaired
+        assert_eq!(user.image.as_deref(), Some("  invalid_image_url  "));
+        let links = user.links.as_ref().unwrap();
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].url, "invalid_link_url");
+        assert_eq!(links[0].url, "  invalid_link_url  ");
 
-        // Validation should reject
-        let result = sanitized.validate(None, &PUB_CTX);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_sanitize_preserves_length() {
-        // Test that sanitization does NOT truncate, even if over limits
+    fn test_builder_preserves_length() {
+        // The builder trims, it never truncates, even over the limits
         let long_bio = "a".repeat(VALIDATION_LIMITS.user_bio_max_length + 10);
         let long_status = "b".repeat(VALIDATION_LIMITS.user_status_max_length + 10);
         let long_image = format!(
@@ -585,7 +675,7 @@ mod tests {
             Some(long_status.clone()),
         );
 
-        // Sanitization should preserve full length (only trim whitespace)
+        // The builder only trims, it never shortens a value that is over a limit
         assert_eq!(user.bio.as_deref(), Some(long_bio.as_str()));
         assert_eq!(user.status.as_deref(), Some(long_status.as_str()));
         assert_eq!(user.image.as_deref(), Some(long_image.as_str()));
@@ -615,19 +705,6 @@ mod tests {
                 ),
                 "status",
             ),
-            (
-                PubkySocialUser::new(
-                    "Alice".to_string(),
-                    None,
-                    Some(format!(
-                        "https://example.com/{}.png",
-                        "a".repeat(VALIDATION_LIMITS.image_url_max_length - 20)
-                    )),
-                    None,
-                    None,
-                ),
-                "image",
-            ),
         ];
 
         for (user, field_name) in test_cases {
@@ -654,7 +731,7 @@ mod tests {
 
         let user = PubkySocialUser::new("Alice".to_string(), None, None, Some(links), None);
 
-        // Sanitization should preserve all links (not truncate)
+        // The builder keeps every link, it never drops one
         assert_eq!(
             user.links.as_ref().unwrap().len(),
             VALIDATION_LIMITS.user_links_max_count + 1
@@ -670,59 +747,26 @@ mod tests {
     fn test_validate_link_length_errors() {
         // Test link title too long
         let long_title = "a".repeat(VALIDATION_LIMITS.user_link_title_max_length + 1);
-        let link = PubkySocialUserLink {
-            title: long_title.clone(),
-            url: "https://example.com".to_string(),
-            extra: Default::default(),
-        };
-        let sanitized = link.sanitize();
+        let link = PubkySocialUserLink::new(long_title, "https://example.com".to_string());
         assert_eq!(
-            sanitized.title.len(),
+            link.title.len(),
             VALIDATION_LIMITS.user_link_title_max_length + 1
         );
-        let result = sanitized.validate(None, &PUB_CTX);
+        let result = link.validate(None, &PUB_CTX);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("exceeds maximum length"));
+        assert!(result.unwrap_err().contains("title must be at most"));
 
-        // Test link URL too long - create URL that exceeds limit after normalization
-        let very_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length);
-        let very_long_url = format!("https://example.com/{}", very_long_path);
-        let link2 = PubkySocialUserLink {
-            title: "Test".to_string(),
-            url: very_long_url,
-            extra: Default::default(),
-        };
-        let sanitized2 = link2.sanitize();
-
-        // Verify URL exceeds limit (accounting for potential normalization)
-        if sanitized2.url.chars().count() > VALIDATION_LIMITS.user_link_url_max_length {
-            let result = sanitized2.validate(None, &PUB_CTX);
-            assert!(
-                result.is_err(),
-                "Expected validation error for URL length {}, max is {}",
-                sanitized2.url.chars().count(),
-                VALIDATION_LIMITS.user_link_url_max_length
-            );
-            assert!(result.unwrap_err().contains("exceeds maximum length"));
-        } else {
-            // If normalization shortened it, create an even longer one
-            let extremely_long_path = "a".repeat(VALIDATION_LIMITS.user_link_url_max_length + 50);
-            let extremely_long_url = format!("https://example.com/{}", extremely_long_path);
-            let link3 = PubkySocialUserLink {
-                title: "Test".to_string(),
-                url: extremely_long_url,
-                extra: Default::default(),
-            };
-            let sanitized3 = link3.sanitize();
-            let result = sanitized3.validate(None, &PUB_CTX);
-            assert!(
-                result.is_err(),
-                "Expected validation error for URL length {}, max is {}",
-                sanitized3.url.chars().count(),
-                VALIDATION_LIMITS.user_link_url_max_length
-            );
-            assert!(result.unwrap_err().contains("exceeds maximum length"));
-        }
+        // The url cap is measured on the stored form, at the gate
+        let max = VALIDATION_LIMITS.user_link_url_max_length;
+        let url = |len: usize| format!("https://x.com/{}", "a".repeat(len - 14));
+        let at_cap = PubkySocialUserLink::new("Test".to_string(), url(max));
+        assert!(at_cap.validate(None, &PUB_CTX).is_ok());
+        let over = PubkySocialUserLink::new("Test".to_string(), url(max + 1));
+        let e = over.validate(None, &PUB_CTX).unwrap_err();
+        assert!(
+            e.contains("url") && e.contains(&format!("at most {max} code points")),
+            "{e}"
+        );
     }
 
     #[test]
@@ -776,15 +820,15 @@ mod tests {
             None,
         );
 
-        // After sanitization, image is still Some("")
+        // The builder keeps the image as given, so it is still Some("")
         assert_eq!(user.image, Some("".to_string()));
 
-        // Validation should fail because empty string is not allowed
+        // Validation should fail: an empty string is not a canonical URI
         let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            "Validation Error: Image URI cannot be empty"
+            "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: "
         );
     }
 
@@ -805,5 +849,129 @@ mod tests {
         // Validation should pass - image is optional
         let result = user.validate(None, &PUB_CTX);
         assert!(result.is_ok());
+    }
+
+    const HOST: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
+    fn with_image(image: &str) -> PubkySocialUser {
+        PubkySocialUser::new(
+            "Alice".to_string(),
+            None,
+            Some(image.to_string()),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn test_image_goes_through_the_reference_gate() {
+        for ok in [
+            format!("pubky://{HOST}/pub/social/v1/files/0032SSN7Q4EVG"),
+            "https://x.com/a.png".to_string(),
+            "http://x.com/a.png".to_string(),
+        ] {
+            assert!(with_image(&ok).validate(None, &PUB_CTX).is_ok(), "{ok}");
+        }
+        for bad in [
+            // outside the field's scheme set
+            "ipfs://x".to_string(),
+            // the SDK short form is not the stored spelling
+            format!("pubky{HOST}/pub/social/v1/files/0032SSN7Q4EVG"),
+            // padding is not the canonical spelling either
+            " https://x.com/a.png".to_string(),
+        ] {
+            let e = with_image(&bad).validate(None, &PUB_CTX).unwrap_err();
+            assert!(e.contains("image"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn test_image_cap_is_300_code_points() {
+        let max = VALIDATION_LIMITS.image_url_max_length;
+        let url = |len: usize| format!("https://x.com/{}", "a".repeat(len - 14));
+        assert_eq!(code_point_len(&url(max)), max);
+        assert!(with_image(&url(max)).validate(None, &PUB_CTX).is_ok());
+        let e = with_image(&url(max + 1))
+            .validate(None, &PUB_CTX)
+            .unwrap_err();
+        assert!(
+            e.contains("image") && e.contains(&format!("at most {max} code points")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn test_private_image_fails_the_root_rule() {
+        let e = with_image(&format!(
+            "pubky://{HOST}/priv/social/v1/files/0032SSN7Q4EVG"
+        ))
+        .validate(None, &PUB_CTX)
+        .unwrap_err();
+        assert!(e.contains("image") && e.contains("public object"), "{e}");
+    }
+
+    #[test]
+    fn test_profile_root_is_the_models_not_the_callers() {
+        // A caller may hand in any ctx; the profile lives under pub, so a private image
+        // fails the root rule regardless
+        let user = with_image(&format!(
+            "pubky://{HOST}/priv/social/v1/files/0032SSN7Q4EVG"
+        ));
+        let blob = serde_json::to_vec(&user).unwrap();
+        let priv_ctx = ValidationCtx {
+            root: crate::traits::Root::Priv,
+        };
+        let e = <PubkySocialUser as Validatable>::try_from(&blob, "", &priv_ctx).unwrap_err();
+        assert!(e.contains("image") && e.contains("public object"), "{e}");
+    }
+
+    #[test]
+    fn test_link_errors_name_the_index() {
+        let mut user = PubkySocialUser {
+            name: "Alice".into(),
+            links: Some(vec![
+                PubkySocialUserLink::new("ok".into(), "https://x.com/a".into()),
+                PubkySocialUserLink::new("bad".into(), format!("pubky://{HOST}")),
+                PubkySocialUserLink::new(" ".into(), "https://x.com/b".into()),
+            ]),
+            ..Default::default()
+        };
+        let e = user.validate(None, &PUB_CTX).unwrap_err();
+        assert!(
+            e.starts_with("Validation Error: links[1].url must be"),
+            "{e}"
+        );
+        user.links.as_mut().unwrap().remove(1);
+        let e = user.validate(None, &PUB_CTX).unwrap_err();
+        assert_eq!(e, "Validation Error: links[1].title must not be blank");
+        // standalone, the bare field names
+        let e = PubkySocialUserLink::new(" ".into(), "https://x.com".into())
+            .validate(None, &PUB_CTX)
+            .unwrap_err();
+        assert_eq!(e, "Validation Error: title must not be blank");
+    }
+
+    #[test]
+    fn test_link_urls_are_web_only() {
+        let link = |url: &str| PubkySocialUserLink::new("site".to_string(), url.to_string());
+        for ok in ["https://x.com/a", "http://x.com/a"] {
+            assert!(link(ok).validate(None, &PUB_CTX).is_ok(), "{ok}");
+        }
+        for bad in [
+            format!("pubky://{HOST}/pub/social/v1/profile.json"),
+            "HTTP://x.com/a".to_string(),
+            String::new(),
+        ] {
+            let e = link(&bad).validate(None, &PUB_CTX).unwrap_err();
+            assert!(
+                e.contains("url") && e.contains("canonical web URI"),
+                "{bad}: {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_user_validates() {
+        assert!(PubkySocialUser::default().validate(None, &PUB_CTX).is_ok());
     }
 }

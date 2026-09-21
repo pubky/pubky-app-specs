@@ -128,7 +128,7 @@ fn test_create_user_rust_api() {
 
     let second_link = user_links.get(1).expect("Second link should exist");
     assert_eq!(second_link.title, "Website");
-    assert_eq!(second_link.url, "https://alice.dev/");
+    assert_eq!(second_link.url, "https://alice.dev");
 }
 
 #[wasm_bindgen_test]

@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -52,6 +52,149 @@ describe("PubkySpecs Example Objects Tests", () => {
           return true;
         },
         "Expected validation error for name too short"
+      );
+    });
+
+    it("should store image and link urls as written", () => {
+      const image = `pubky://${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
+      const { user } = specsBuilder.createUser(
+        "Alice Smith",
+        null,
+        image,
+        [{ title: "site", url: "https://example.com/a" }],
+        null
+      );
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.image, image, "Image should be stored verbatim");
+      assert.strictEqual(
+        userJson.links[0].url,
+        "https://example.com/a",
+        "Link url should be stored verbatim"
+      );
+    });
+
+    it("trims name, bio, status and link titles in the builder", () => {
+      const { user } = specsBuilder.createUser(
+        "  Alice Smith  ",
+        "  Software Developer  ",
+        null,
+        [{ title: "  site  ", url: "https://example.com/a" }],
+        "  active  "
+      );
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.name, "Alice Smith", "Name should be trimmed");
+      assert.strictEqual(userJson.bio, "Software Developer", "Bio should be trimmed");
+      assert.strictEqual(userJson.status, "active", "Status should be trimmed");
+      assert.strictEqual(userJson.links[0].title, "site", "Link title should be trimmed");
+    });
+
+    it("drops a blank bio or status instead of storing an empty one", () => {
+      const { user } = specsBuilder.createUser("Alice Smith", "   ", null, null, "  ");
+
+      const userJson = user.toJson();
+      assert.ok(
+        userJson.bio === null || userJson.bio === undefined,
+        `Blank bio should be absent, got: ${JSON.stringify(userJson.bio)}`
+      );
+      assert.ok(
+        userJson.status === null || userJson.status === undefined,
+        `Blank status should be absent, got: ${JSON.stringify(userJson.status)}`
+      );
+    });
+
+    it("reads a stored profile back as written", () => {
+      const stored = {
+        name: "  Alice Smith  ",
+        bio: "  Software Developer  ",
+        links: [{ title: "  site  ", url: "https://example.com/a" }],
+        status: "  active  ",
+      };
+      const user = PubkySocialUser.fromJson(stored);
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.name, stored.name, "Name should keep its padding");
+      assert.strictEqual(userJson.bio, stored.bio, "Bio should keep its padding");
+      assert.strictEqual(userJson.status, stored.status, "Status should keep its padding");
+      assert.strictEqual(
+        userJson.links[0].title,
+        stored.links[0].title,
+        "Link title should keep its padding"
+      );
+    });
+
+    it("cannot create user with a padded image", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, " https://x.com/a.png ", null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points:  https://x.com/a.png ",
+            `Expected padded image error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a padded image"
+      );
+    });
+
+    it("cannot create user with the short form image URI", () => {
+      const short = `pubky${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, short, null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg === `Validation Error: image must be spelled in canonical form: ${short}`,
+            `Expected canonical-form image error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for the short form image URI"
+      );
+    });
+
+    it("cannot create user with an ipfs image", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, "ipfs://x", null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: ipfs://x",
+            `Expected image scheme error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a non pubky or web image"
+      );
+    });
+
+    it("cannot create user with a pubky link url", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, null, [
+            { title: "profile", url: `pubky://${OTTO}/pub/social/v1/profile.json` },
+          ], null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              `Validation Error: links[0].url must be a canonical web URI of at most 300 code points: pubky://${OTTO}/pub/social/v1/profile.json`,
+            `Expected link url error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a pubky link url"
       );
     });
 
