@@ -147,14 +147,22 @@ pub(crate) fn strip_media_ext(filename: &str) -> &str {
     media_stem(filename).unwrap_or(filename)
 }
 
-/// The FORM of a bookmark filename: `~` plus a canonical HashId for the overflow form, a
-/// non-empty base64url string for the primary one. Only the form: the decode round trip that
+/// Unpadded base64url of the longest target the primary form carries: 187 bytes become 250
+/// characters, which with `.json` is the 255-character segment maximum.
+const BOOKMARK_FILENAME_MAX: usize =
+    (VALIDATION_LIMITS.bookmark_target_uri_max_bytes * 4).div_ceil(3);
+
+/// The FORM of a bookmark filename: `~` plus a canonical HashId for the overflow form, an
+/// unpadded base64url string of a length base64 can actually produce for the primary one
+/// (4n+1 characters never encode anything). Only the form: the decode round trip that
 /// recovers the target runs when the object is read.
 fn is_bookmark_filename(name: &str) -> bool {
     match name.strip_prefix('~') {
         Some(hash) => validate_hash_id_format(hash).is_ok(),
         None => {
             !name.is_empty()
+                && name.len() <= BOOKMARK_FILENAME_MAX
+                && name.len() % 4 != 1
                 && name
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
@@ -378,6 +386,9 @@ mod tests {
             (p(&format!("/priv/social/v1/bookmarks/{B64}=.json")), Some((Private, Resource::Unknown))),
             (p("/priv/social/v1/bookmarks/cHVia3k+.json"), Some((Private, Resource::Unknown))),
             (p("/priv/social/v1/bookmarks/.json"), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/a.json"), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(250))), Some((Private, Resource::Bookmark("a".repeat(250))))),
+            (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(251))), Some((Private, Resource::Unknown))),
             // Media: the hash carries a path-only extension, dual-root
             (p(&format!("/pub/social/v1/files/{H26}.svg")), Some((Public, Resource::File(format!("{H26}.svg"))))),
             (p(&format!("/priv/social/v1/files/{H26}.svg")), Some((Private, Resource::File(format!("{H26}.svg"))))),

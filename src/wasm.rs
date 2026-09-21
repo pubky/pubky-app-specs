@@ -566,11 +566,20 @@ impl ParsedUriResult {
 }
 
 /// The target a stored bookmark names: decoded from the filename in the primary form, read
-/// from the content in the overflow form. Throws when the entry breaks the filename rules,
-/// which is how a reader tells an invalid entry from a bookmark it should show.
+/// from the content in the overflow form. `content` is a `PubkySocialBookmark`, so a reader
+/// holding stored JSON builds one with `PubkySocialBookmark.fromJson` first. Throws when the
+/// entry breaks the filename rules, which is how a reader tells an invalid entry from a
+/// bookmark it should show.
 #[wasm_bindgen(js_name = bookmarkTarget)]
 pub fn bookmark_target_js(filename: &str, content: &PubkySocialBookmark) -> Result<String, String> {
     crate::bookmark_target(filename, content)
+}
+
+/// The filename a target is bookmarked under. Mints nothing, so un-bookmarking rebuilds the
+/// path without building a throwaway object.
+#[wasm_bindgen(js_name = bookmarkFilename)]
+pub fn bookmark_filename_js(target: &str) -> Result<String, String> {
+    crate::bookmark_filename(target)
 }
 
 /// Returns the list of valid MIME types for file attachments.

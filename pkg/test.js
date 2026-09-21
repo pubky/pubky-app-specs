@@ -1,10 +1,12 @@
 import {
   PubkySocialAttachment,
+  PubkySocialBookmark,
   PubkySocialCollectionItem,
   PubkySocialPost,
   PubkySocialPostKind,
   PubkySocialUser,
   PubkySpecsBuilder,
+  bookmarkFilename,
   bookmarkTarget,
   bookmarkUriBuilder,
   essence,
@@ -602,6 +604,19 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(meta.id.startsWith("~"), "A 188 byte target overflows");
       assert.strictEqual(bookmark.toJson().target, longUri, "The overflow content carries the target");
       assert.strictEqual(bookmarkTarget(meta.id, bookmark), longUri, "Target should round trip");
+    });
+
+    it("should read a stored bookmark back through fromJson", () => {
+      // What a reader actually holds: a filename from a LIST and the stored JSON
+      const postUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
+      const longUri = `https://example.com/${"a".repeat(168)}`;
+      for (const target of [postUriRaw, longUri]) {
+        const { bookmark, meta } = specsBuilder.createBookmark(target);
+        const stored = JSON.parse(JSON.stringify(bookmark.toJson()));
+        const reread = PubkySocialBookmark.fromJson(stored);
+        assert.strictEqual(bookmarkTarget(meta.id, reread), target, "Stored JSON should read back");
+        assert.strictEqual(bookmarkFilename(target), meta.id, "Filename needs no minting");
+      }
     });
 
     it("should reject an invalid bookmark entry instead of guessing", () => {

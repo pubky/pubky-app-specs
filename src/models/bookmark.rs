@@ -146,6 +146,14 @@ fn primary_target(
     if canonical_target(&target)? != target {
         return Err(non_canonical(&target));
     }
+    // The upper bound closes the same fork from the other side: without it one target has a
+    // primary spelling AND an overflow one, and the leaf runs past the 255-character segment.
+    if target.len() > VALIDATION_LIMITS.bookmark_target_uri_max_bytes {
+        return Err(format!(
+            "Validation Error: a target over {} bytes belongs in the overflow bookmark form",
+            VALIDATION_LIMITS.bookmark_target_uri_max_bytes
+        ));
+    }
     Ok(target)
 }
 
@@ -153,6 +161,19 @@ fn overflow_target(hash: &str, content: &PubkySocialBookmark) -> Result<String, 
     let target = content.target.as_deref().ok_or_else(|| {
         "Validation Error: an overflow bookmark requires target in the content".to_string()
     })?;
+    check_stored_target(target)?;
+    if hash != hash_id_of(target) {
+        return Err(format!(
+            "Validation Error: bookmark filename does not hash its target: {target}"
+        ));
+    }
+    Ok(target.to_string())
+}
+
+/// The rules a stored `target` obeys wherever it is seen. Only the overflow form stores one,
+/// so it is canonical and past what the primary filename can carry, whether or not the caller
+/// brought the filename that would say so.
+fn check_stored_target(target: &str) -> Result<(), ValidationError> {
     if canonical_target(target)? != target {
         return Err(non_canonical(target));
     }
@@ -162,12 +183,7 @@ fn overflow_target(hash: &str, content: &PubkySocialBookmark) -> Result<String, 
             target.len()
         ));
     }
-    if hash != hash_id_of(target) {
-        return Err(format!(
-            "Validation Error: bookmark filename does not hash its target: {target}"
-        ));
-    }
-    Ok(target.to_string())
+    Ok(())
 }
 
 fn not_base64(filename: &str) -> String {
@@ -217,9 +233,16 @@ impl Validatable for PubkySocialBookmark {
     ) -> Result<(), ValidationError> {
         check_extra(&self.extra, &["created_at", "target"])?;
         validate_safe_json_int(self.created_at)?;
-        // The identity is the filename, so the target surface runs only when one is supplied.
-        if let Some(filename) = id {
-            bookmark_target(filename, self)?;
+        match id {
+            // The identity is the filename, so it brings the whole target surface with it.
+            Some(filename) => bookmark_target(filename, self).map(|_| ())?,
+            // Without one the form is unknown, but a stored target is always an overflow
+            // target, so a JSON import cannot smuggle junk in past the filename rules.
+            None => {
+                if let Some(target) = &self.target {
+                    check_stored_target(target)?;
+                }
+            }
         }
         Ok(())
     }
@@ -362,6 +385,63 @@ mod tests {
         assert!(bookmark_target(&short, &content(1, Some(&target())))
             .unwrap_err()
             .contains("primary bookmark form"));
+        // The primary form is bounded from above too, or one target gets two valid filenames
+        // and the leaf outgrows the segment
+        let huge = web_target(500);
+        let spelled_primary = URL_SAFE_NO_PAD.encode(&huge);
+        assert!(bookmark_target(&spelled_primary, &content(1, None))
+            .unwrap_err()
+            .contains("overflow bookmark form"));
+        let blob = br#"{"created_at":1727740800000000}"#;
+        // Twice over: the parser will not classify a leaf that long, and the model refuses it
+        // even when a caller hand-builds the resource
+        let uri = bookmark_uri_builder(PK.into(), spelled_primary.clone());
+        assert!(PubkySocialObject::from_uri(&uri, blob).is_err());
+        let resource = Resource::Bookmark(spelled_primary);
+        assert!(PubkySocialObject::from_resource(&resource, blob, &PRIV_CTX)
+            .unwrap_err()
+            .contains("overflow bookmark form"));
+        // A stored target over the reference cap fails on READ, not only at the builder
+        let over_cap = format!(
+            "nostr:{}",
+            "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
+        );
+        assert!(bookmark_target(
+            &format!("~{}", hash_id_of(&over_cap)),
+            &content(1, Some(&over_cap))
+        )
+        .unwrap_err()
+        .contains("1024"));
+    }
+
+    #[test]
+    fn a_content_without_its_filename_still_answers_for_the_target_it_stores() {
+        // Only the overflow form stores a target, so a JSON import cannot smuggle one in
+        assert!(content(1, Some("junk"))
+            .validate(None, &PRIV_CTX)
+            .unwrap_err()
+            .contains("canonical"));
+        assert!(content(1, Some(&target()))
+            .validate(None, &PRIV_CTX)
+            .unwrap_err()
+            .contains("primary bookmark form"));
+        // A real overflow content passes with no filename in hand
+        let long = web_target(VALIDATION_LIMITS.bookmark_target_uri_max_bytes + 1);
+        assert!(content(1, Some(&long)).validate(None, &PRIV_CTX).is_ok());
+        assert!(content(1, None).validate(None, &PRIV_CTX).is_ok());
+    }
+
+    #[test]
+    fn a_bookmark_is_never_read_under_the_public_root() {
+        let created = create_bookmark(&target()).unwrap();
+        let blob = serde_json::to_vec(&created.bookmark).unwrap();
+        let resource = Resource::Bookmark(created.filename.clone());
+        assert!(PubkySocialObject::from_resource(&resource, &blob, &PRIV_CTX).is_ok());
+        assert!(
+            PubkySocialObject::from_resource(&resource, &blob, &crate::PUB_CTX)
+                .unwrap_err()
+                .contains("never a public object")
+        );
     }
 
     #[test]
@@ -417,7 +497,7 @@ mod tests {
             .validate(Some(&filename), &PRIV_CTX)
             .unwrap_err()
             .contains("JSON-safe"));
-        // Without a filename the content alone still validates: the target rules need one
-        assert!(content(1, Some("junk")).validate(None, &PRIV_CTX).is_ok());
+        // Without a filename the primary content alone still validates
+        assert!(content(1, None).validate(None, &PRIV_CTX).is_ok());
     }
 }

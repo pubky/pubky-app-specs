@@ -44,7 +44,7 @@
 //! it, so it takes the id as named and applies the rule above to the value.
 
 use crate::uri::media_stem;
-use crate::{traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
+use crate::{traits::HasIdPath, traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
 
 pub mod bookmark;
 pub mod feed;
@@ -124,6 +124,11 @@ impl PubkySocialObject {
                 Ok(PubkySocialObject::Mute(mute))
             }
             Resource::Bookmark(filename) => {
+                // A bookmark read under the public root would turn a private-only resource
+                // public; the parser never classifies one there, and neither does a caller.
+                if ctx.root != <PubkySocialBookmark as HasIdPath>::ROOT {
+                    return Err("a bookmark is never a public object".to_string());
+                }
                 let bookmark = <PubkySocialBookmark as Validatable>::try_from(blob, filename, ctx)?;
                 Ok(PubkySocialObject::Bookmark(bookmark))
             }
