@@ -55,6 +55,11 @@ fn media_prefix(owner: &PubkyId, root: Root) -> String {
     [owner_prefix(owner).as_str(), &social_path(root, leaf)].concat()
 }
 
+/// A URI the parser reads as a stored media object.
+fn is_media_object(uri: &str) -> bool {
+    crate::ParsedUri::try_from(uri).is_ok_and(|p| matches!(p.resource, crate::Resource::File(_)))
+}
+
 fn is_priv_rooted(uri: &str) -> bool {
     uri.strip_prefix(PROTOCOL)
         .and_then(|rest| rest.split_once('/'))
@@ -126,6 +131,13 @@ pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec
             ));
         }
         if uri.starts_with(&own_private) {
+            // The leaf must be a media object the parser reads, or the copy would land at a
+            // path no reader recognizes
+            if !is_media_object(&uri) {
+                return Err(format!(
+                    "cannot publish: a private reference in a media position is not a media object: {uri}"
+                ));
+            }
             if !media.contains(&uri) {
                 media.push(uri);
             }
@@ -339,7 +351,7 @@ pub fn plan_delete(
     let mut media_gc_candidates: Vec<String> = parsed_versions
         .iter()
         .flat_map(media_refs)
-        .filter(|u| u.starts_with(&public) || u.starts_with(&private))
+        .filter(|u| (u.starts_with(&public) || u.starts_with(&private)) && is_media_object(u))
         .map(|u| to_path(&u, owner))
         .collect();
     media_gc_candidates.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
@@ -387,8 +399,8 @@ mod tests {
 
     #[test]
     fn publish_copies_own_private_media_and_respells_only_those() {
-        let a = priv_file("0034A0X7NJ52G");
-        let b = priv_file("0034A0X7NJ52H");
+        let a = priv_file("PZBQ010FF079VVZPQG1RNFN6DR.png");
+        let b = priv_file("8Z8CWH8NVYQY39ZEBFGKQWWEKG.png");
         let web = "https://x.com/c.png";
         let mut draft = image(vec![att(&a), att(web), att(&b), att(&a)]);
         // prose that mentions a private URI must survive byte for byte
@@ -399,12 +411,12 @@ mod tests {
             plan.media_copies,
             vec![
                 (
-                    "/priv/social/v1/files/0034A0X7NJ52G".to_string(),
-                    "/pub/social/v1/files/0034A0X7NJ52G".to_string()
+                    "/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png".to_string(),
+                    "/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png".to_string()
                 ),
                 (
-                    "/priv/social/v1/files/0034A0X7NJ52H".to_string(),
-                    "/pub/social/v1/files/0034A0X7NJ52H".to_string()
+                    "/priv/social/v1/files/8Z8CWH8NVYQY39ZEBFGKQWWEKG.png".to_string(),
+                    "/pub/social/v1/files/8Z8CWH8NVYQY39ZEBFGKQWWEKG.png".to_string()
                 ),
             ]
         );
@@ -413,10 +425,10 @@ mod tests {
         assert_eq!(
             uris,
             [
-                pub_file("0034A0X7NJ52G").as_str(),
+                pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png").as_str(),
                 web,
-                pub_file("0034A0X7NJ52H").as_str(),
-                pub_file("0034A0X7NJ52G").as_str()
+                pub_file("8Z8CWH8NVYQY39ZEBFGKQWWEKG.png").as_str(),
+                pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png").as_str()
             ]
         );
         assert_eq!(out.content, format!("see {a}"));
@@ -483,7 +495,7 @@ mod tests {
 
     #[test]
     fn publish_rewrites_the_article_cover_inside_the_envelope() {
-        let cover = priv_file("0034A0X7NJ52G");
+        let cover = priv_file("PZBQ010FF079VVZPQG1RNFN6DR.png");
         let article = PubkySocialPost::new_article(
             "t".into(),
             "b".into(),
@@ -500,14 +512,14 @@ mod tests {
         let e: PubkySocialArticleContent = serde_json::from_str(&out.content).unwrap();
         assert_eq!(
             e.cover_image.as_deref(),
-            Some(pub_file("0034A0X7NJ52G").as_str())
+            Some(pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png").as_str())
         );
         assert_eq!(e.title, "t");
         // an already-public cover leaves the content bytes alone
         let public = PubkySocialPost::new_article(
             "t".into(),
             "b".into(),
-            Some(pub_file("0034A0X7NJ52G")),
+            Some(pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png")),
             None,
             None,
             vec![],
@@ -533,7 +545,7 @@ mod tests {
         assert!(e.contains("private object"), "{e}");
         reply.parent = None;
         let foreign = image(vec![att(&format!(
-            "pubky://{OTHER}/priv/social/v1/files/0034A0X7NJ52G"
+            "pubky://{OTHER}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"
         ))]);
         let e = plan_publish(&id, &id, &foreign, &owner()).unwrap_err();
         assert!(e.contains("another user"), "{e}");
@@ -543,6 +555,18 @@ mod tests {
         ))]);
         let e = plan_publish(&id, &id, &not_media, &owner()).unwrap_err();
         assert!(e.contains("not media"), "{e}");
+        // a same-owner private files/ leaf the parser does not read as media is refused, not copied
+        for leaf in [
+            "not-a-hash",
+            "PZBQ010FF079VVZPQG1RNFN6DR",
+            "PZBQ010FF079VVZPQG1RNFN6DR.JPG",
+        ] {
+            let junk = image(vec![att(&format!(
+                "pubky://{PK}/priv/social/v1/files/{leaf}"
+            ))]);
+            let e = plan_publish(&id, &id, &junk, &owner()).unwrap_err();
+            assert!(e.contains("not a media object"), "{leaf}: {e}");
+        }
         assert!(plan_publish("not-an-id", &id, &reply, &owner()).is_err());
         assert!(plan_publish(&id, "not-an-id", &reply, &owner()).is_err());
         // a canonical editId outside the validity window, or older than the post, is refused
@@ -552,7 +576,7 @@ mod tests {
 
     #[test]
     fn publish_rewrites_the_collection_cover_and_keeps_every_other_member() {
-        let cover = priv_file("0034A0X7NJ52G");
+        let cover = priv_file("PZBQ010FF079VVZPQG1RNFN6DR.png");
         let content = format!(
             r#"{{"name":"n","items":[{{"uri":"pubky://{PK}/pub/social/v1/posts/{TS}","note":"x","rating":5}}],"cover_image":"{cover}","layout":"carousel","future":1}}"#
         );
@@ -563,7 +587,7 @@ mod tests {
         assert_eq!(plan.media_copies.len(), 1);
         let out: PubkySocialPost = serde_json::from_str(&plan.rewritten_post_json).unwrap();
         let e: serde_json::Value = serde_json::from_str(&out.content).unwrap();
-        assert_eq!(e["cover_image"], pub_file("0034A0X7NJ52G"));
+        assert_eq!(e["cover_image"], pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png"));
         assert_eq!(e["layout"], "carousel");
         assert_eq!(e["future"], 1);
         assert_eq!(e["name"], "n");
@@ -582,7 +606,7 @@ mod tests {
         // An item is a link, not a media position: the cover is copied and respelled, an item
         // is not, so a private draft pointing at the owner's own private file cannot publish
         // until that file (or the post carrying it) is public.
-        let file = priv_file("0034A0X7NJ52G");
+        let file = priv_file("PZBQ010FF079VVZPQG1RNFN6DR.png");
         let content = format!(r#"{{"name":"n","items":[{{"uri":"{file}"}}]}}"#);
         let collection =
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
@@ -599,7 +623,7 @@ mod tests {
 
     #[test]
     fn publish_dedupes_media_shared_by_attachment_and_cover() {
-        let file = priv_file("0034A0X7NJ52G");
+        let file = priv_file("PZBQ010FF079VVZPQG1RNFN6DR.png");
         let article = PubkySocialPost::new_article(
             "t".into(),
             "b".into(),
@@ -618,7 +642,7 @@ mod tests {
     fn publish_refuses_a_non_canonical_media_spelling() {
         let id = post_id();
         let shouting = image(vec![att(&format!(
-            "PUBKY://{PK}/priv/social/v1/files/0034A0X7NJ52G"
+            "PUBKY://{PK}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"
         ))]);
         let e = plan_publish(&id, &id, &shouting, &owner()).unwrap_err();
         assert!(e.contains("media reference"), "{e}");
@@ -737,23 +761,25 @@ mod tests {
     #[test]
     fn delete_collects_same_owner_media_under_both_roots() {
         let v1 = image(vec![
-            att(&priv_file("0034A0X7NJ52H")),
+            att(&priv_file("8Z8CWH8NVYQY39ZEBFGKQWWEKG.png")),
             att("https://x.com/a.png"),
         ]);
         let v2 = image(vec![
-            att(&pub_file("0034A0X7NJ52G")),
-            att(&pub_file("0034A0X7NJ52H")),
+            att(&pub_file("PZBQ010FF079VVZPQG1RNFN6DR.png")),
+            att(&pub_file("8Z8CWH8NVYQY39ZEBFGKQWWEKG.png")),
             att(&format!(
-                "pubky://{OTHER}/pub/social/v1/files/0034A0X7NJ52G"
+                "pubky://{OTHER}/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"
             )),
         ]);
-        let plan = plan_delete(TS, &[], &[], &[v1, v2], &owner()).unwrap();
+        // a same-owner files/ leaf that is not a media object is nothing to collect
+        let v3 = image(vec![att(&format!("pubky://{PK}/pub/social/v1/files/junk"))]);
+        let plan = plan_delete(TS, &[], &[], &[v1, v2, v3], &owner()).unwrap();
         assert_eq!(
             plan.media_gc_candidates,
             vec![
-                "/priv/social/v1/files/0034A0X7NJ52H".to_string(),
-                "/pub/social/v1/files/0034A0X7NJ52G".to_string(),
-                "/pub/social/v1/files/0034A0X7NJ52H".to_string(),
+                "/priv/social/v1/files/8Z8CWH8NVYQY39ZEBFGKQWWEKG.png".to_string(),
+                "/pub/social/v1/files/8Z8CWH8NVYQY39ZEBFGKQWWEKG.png".to_string(),
+                "/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png".to_string(),
             ]
         );
     }
