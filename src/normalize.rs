@@ -24,14 +24,27 @@ const ID_SEGMENTS: &[&str] = &["tags", "follows", "mutes", "bookmarks", "feeds"]
 /// epoch that grows one keys without a change here.
 const LEAF_SEGMENTS: &[&str] = &["last_read", "settings"];
 
-/// `true` for `v` followed by at least one digit and nothing else.
+/// `true` for `v` followed by a decimal with no leading zero. Epoch 0 is the legacy
+/// namespace, which spells itself, so `v0` and `v01` are not epoch segments.
 fn is_epoch_segment(s: &str) -> bool {
-    let b = s.as_bytes();
-    b.len() >= 2 && b[0] == b'v' && b[1..].iter().all(u8::is_ascii_digit)
+    let mut digits = match s.strip_prefix('v') {
+        Some(d) => d.chars(),
+        None => return false,
+    };
+    matches!(digits.next(), Some('1'..='9')) && digits.all(|c| c.is_ascii_digit())
 }
 
 fn strip_json(leaf: &str) -> &str {
     leaf.strip_suffix(".json").unwrap_or(leaf)
+}
+
+/// `{segment}/{id}`, or `None` when the strip left no id behind, so `tags/.json` and
+/// `files/.png` are not stored objects rather than a key with an empty id.
+fn keyed(segment: &str, id: &str) -> Option<String> {
+    if id.is_empty() {
+        return None;
+    }
+    Some(format!("{segment}/{id}"))
 }
 
 /// From an owner-relative path (`pub/social/v1/posts/X/Y.json`, `pub/pubky.app/posts/X`,
@@ -42,6 +55,14 @@ fn strip_json(leaf: &str) -> &str {
 /// drops the whole post version leaf, label included, so every edit of a post is one row.
 /// No id is validated here: the key comes from a path the ingest already accepted. Pure
 /// string work, no parse, so a later epoch keys its leaves without touching this.
+///
+/// What collapses across epochs is the path grammar, not the id inside it. `posts`, `files`
+/// and `blobs`, `follows`, `mutes`, `profile`, `settings` and `last_read` carry the same id
+/// in both spellings of one object, so the two paths key onto one row. `tags`, `bookmarks`
+/// and `feeds` do not: a v0 tag id hashes a target uri that the migration itself respells
+/// for social targets, a v0 bookmark id is a hash where the v1 leaf is a filename, and a
+/// feed id is re-derived. One migrated tag, bookmark or feed therefore holds two keys, and
+/// collapsing those is the indexer's own job, by normalized target or by its own rule.
 pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
     let path = owner_relative_path
         .strip_prefix('/')
@@ -75,8 +96,11 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
     let key = match (segment, leaf) {
         ("posts", Some(leaf)) => {
             let id = leaf.split('/').next().unwrap_or(leaf);
-            format!("posts/{id}")
+            keyed("posts", id)?
         }
+        // Every other resource holds its whole id in one leaf, so a leaf that is itself a
+        // path, a trailing slash included, is not a stored object under any epoch.
+        (_, Some(leaf)) if leaf.contains('/') => return None,
         ("files", Some(leaf)) => {
             if legacy {
                 // The v0 metadata object names the bytes; only its `src` completes the key.
@@ -84,14 +108,14 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
                     tsid: leaf.to_string(),
                 });
             }
-            format!("files/{}", strip_media_ext(leaf))
+            keyed("files", strip_media_ext(leaf))?
         }
         // v0 kept the bytes under `blobs/` and their metadata under `files/`; the bytes are
         // the v1 media object, so a blob id keys straight onto it. Ingest never writes a
         // `blobs/` path under a social epoch, the segment rule simply does not ask.
-        ("blobs", Some(leaf)) => format!("files/{leaf}"),
+        ("blobs", Some(leaf)) => keyed("files", leaf)?,
         (seg, Some(leaf)) if ID_SEGMENTS.contains(&seg) || LEAF_SEGMENTS.contains(&seg) => {
-            format!("{seg}/{}", strip_json(leaf))
+            keyed(seg, strip_json(leaf))?
         }
         ("profile.json", None) => "profile".to_string(),
         (seg, None) if LEAF_SEGMENTS.contains(&strip_json(seg)) => strip_json(seg).to_string(),
@@ -169,6 +193,7 @@ mod tests {
             "priv/social/v1/posts/0RDX5H0000000",
             "pub/social/v7/posts/0RDX5H0000000",
             "priv/social/v7/posts/0RDX5H0000000",
+            "pub/social/v10/posts/0RDX5H0000000",
             "/pub/social/v1/posts/0RDX5H0000000",
             "pub/pubky.app/posts/0RDX5H0000000",
         ] {
@@ -293,6 +318,8 @@ mod tests {
             "pub/social/posts/0RDX5H0000000",       // no version segment
             "pub/social/vX/posts/0RDX5H0000000",    // not digits
             "pub/social/v/posts/0RDX5H0000000",     // no digits
+            "pub/social/v0/posts/0RDX5H0000000",    // epoch 0 spells itself as pubky.app
+            "pub/social/v01/posts/0RDX5H0000000",   // a leading zero is not an epoch
             "pub/social/v1/widgets/ABC",            // unknown segment
             "pub/social/v1/posts/",                 // missing leaf
             "pub/social/v1/tags/",                  // missing leaf
@@ -300,6 +327,42 @@ mod tests {
             "pub/pubky.app/files/",                 // missing leaf
             "pub/social/v1/profile",                // the leaf is profile.json
             "pubky://x/pub/social/v1/profile.json", // not owner-relative
+        ] {
+            assert_eq!(stable_id(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn an_empty_id_is_not_an_object() {
+        // A key with an empty id would collapse every such path onto one row.
+        for path in [
+            "pub/social/v1/posts//0RDX5J0000002.json",
+            "pub/social/v1/posts//",
+            "pub/social/v1/tags/.json",
+            "pub/pubky.app/settings/.json",
+            "pub/social/v1/files/.png",
+            "pub/social/v1/files/.jpg",
+        ] {
+            assert_eq!(stable_id(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn only_a_post_leaf_may_be_a_path() {
+        // A post drops everything from its version leaf on, so a deeper path still keys.
+        // Every other resource holds its whole id in the leaf, so a slash means the path
+        // is not one of its objects.
+        assert_eq!(
+            key("pub/social/v1/posts/0RDX5H0000000/a/b/c").as_deref(),
+            Some("posts/0RDX5H0000000")
+        );
+        for path in [
+            &format!("pub/social/v1/tags/{HASH}/"),
+            &format!("pub/social/v1/files/{HASH}.png/x"),
+            &format!("pub/social/v1/blobs/{HASH}/x"),
+            &format!("pub/pubky.app/files/{HASH}/x"),
+            &format!("pub/social/v1/follows/{HASH}/x"),
+            "pub/social/v1/profile.json/x",
         ] {
             assert_eq!(stable_id(path), None, "{path}");
         }

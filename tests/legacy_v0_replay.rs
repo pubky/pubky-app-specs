@@ -80,12 +80,11 @@ fn the_corpus_replays_to_the_v0_verdicts() {
     assert_eq!((accepted, rejected), (22, 26), "the corpus balance moved");
 }
 
-/// Every v0 spelling and its v1 counterpart reduce to one key, which is what lets an
-/// indexer row a migrated object in place instead of twice.
+/// One object, its v0 path and its v1 path, keying onto one row. These are the resources
+/// whose id survives the migration, so the two spellings really are the same object.
 #[test]
 fn a_v0_path_and_its_v1_counterpart_key_the_same() {
     let owner = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
-    let tag = "86805FC1CSFZD4W6HZ09S24QWG";
     let hash = "PZBQ010FF079VVZPQG1RNFN6DR";
     let pairs: &[(&str, &str, &str)] = &[
         (
@@ -99,16 +98,6 @@ fn a_v0_path_and_its_v1_counterpart_key_the_same() {
             "posts/0032SSN7Q4EVG",
         ),
         (
-            &format!("pub/pubky.app/tags/{tag}"),
-            &format!("pub/social/v1/tags/{tag}.json"),
-            &format!("tags/{tag}"),
-        ),
-        (
-            &format!("pub/pubky.app/bookmarks/{tag}"),
-            &format!("priv/social/v1/bookmarks/{tag}.json"),
-            &format!("bookmarks/{tag}"),
-        ),
-        (
             &format!("pub/pubky.app/follows/{owner}"),
             &format!("pub/social/v1/follows/{owner}.json"),
             &format!("follows/{owner}"),
@@ -119,11 +108,8 @@ fn a_v0_path_and_its_v1_counterpart_key_the_same() {
             &format!("mutes/{owner}"),
         ),
         (
-            &format!("pub/pubky.app/feeds/{tag}"),
-            &format!("priv/social/v1/feeds/{tag}.json"),
-            &format!("feeds/{tag}"),
-        ),
-        (
+            // v0 stored the bytes under blobs/ and their metadata under files/; the bytes
+            // are what v1 calls a file, and the hash is carried over unchanged.
             &format!("pub/pubky.app/blobs/{hash}"),
             &format!("priv/social/v1/files/{hash}.png"),
             &format!("files/{hash}"),
@@ -138,6 +124,23 @@ fn a_v0_path_and_its_v1_counterpart_key_the_same() {
         let want = Some(StableId::Key((*expected).to_string()));
         assert_eq!(stable_id(legacy), want, "{legacy}");
         assert_eq!(stable_id(v1), want, "{v1}");
+    }
+}
+
+/// `tags`, `bookmarks` and `feeds` re-derive their id in the migration, so a v0 path and
+/// the v1 path of the same object carry different ids and cannot key alike. What holds for
+/// them is only that the grammar collapses: feed one id to both spellings and one key comes
+/// back. Collapsing the two real ids is the indexer's job, not this function's.
+#[test]
+fn a_re_derived_id_keys_the_same_under_either_epoch_spelling() {
+    let id = "86805FC1CSFZD4W6HZ09S24QWG";
+    for segment in ["tags", "bookmarks", "feeds"] {
+        let want = Some(StableId::Key(format!("{segment}/{id}")));
+        assert_eq!(stable_id(&format!("pub/pubky.app/{segment}/{id}")), want);
+        assert_eq!(
+            stable_id(&format!("priv/social/v1/{segment}/{id}.json")),
+            want
+        );
     }
 }
 
