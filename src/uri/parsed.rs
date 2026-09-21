@@ -317,7 +317,7 @@ mod tests {
     use crate::models::{post::PubkySocialPost, user::PubkySocialUser};
     use crate::traits::{HasIdPath, HasPath, PUB_CTX};
     use crate::uri::builders::{
-        list_prefix_builder, post_uri_builder, private_list_prefix_builder,
+        list_prefix_builder, post_uri_builder, private_list_prefix_builder, user_uri_builder,
     };
     use crate::PubkySocialObject;
 
@@ -711,7 +711,7 @@ mod tests {
             None
         );
         assert_eq!(
-            pk().to_uri().try_to_uri_str().unwrap(),
+            user_uri_builder(pk().to_string()),
             p("/pub/social/v1/profile.json")
         );
     }

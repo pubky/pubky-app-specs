@@ -152,8 +152,9 @@ mod tests {
         let parsed = ParsedUri::try_from(uri).expect("Failed to parse valid user URI");
         assert_eq!(parsed.user_id, user_id);
         assert_eq!(parsed.resource, Resource::User);
-        // The second half of this test covered PubkyId::to_uri. That method belongs to the
-        // shared id type now, and its own suite covers it.
+        // The second half of this test round-tripped through PubkyId::to_uri, which spelled
+        // one epoch's profile path from an id both epochs now share. The builder above is
+        // that spelling for this epoch.
     }
 
     #[test]
