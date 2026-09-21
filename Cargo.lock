@@ -1795,6 +1795,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tsify-next",
+ "url",
  "utoipa",
  "wasm-bindgen",
  "wasm-bindgen-test",

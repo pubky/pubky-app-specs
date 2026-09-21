@@ -4,6 +4,7 @@ mod constants;
 pub mod limits;
 mod mime;
 mod models;
+mod normalize;
 pub mod traits;
 mod types;
 mod uri;
@@ -26,6 +27,8 @@ pub use common::{
 pub use limits::*;
 // Re-export the frozen MIME map
 pub use mime::{essence, mime_to_ext, MIME_TO_EXT, STRIP_SET};
+// Re-export the one cross-epoch normalization
+pub use normalize::{stable_id, StableId};
 pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
 pub use models::bookmark::{
