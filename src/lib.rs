@@ -1,3 +1,11 @@
+//! Rust types, builders and validation for Pubky social data.
+//!
+//! [`legacy_v0`] is the 0.x reader, frozen at the 0.8.0 pin so a v0 ingest verdict never
+//! moves. It is the 0.8.0 source copied unchanged, and its `url::Url` parsing, its `mime`
+//! gate and its engine `.trim()` are the terms real v0 data was accepted or rejected under,
+//! so they sit outside the v1 rules on purpose and are never edited. Indexers read
+//! un-migrated data through it and the migration transforms read v0 objects through it.
+
 mod canonicalize;
 mod common;
 mod constants;

@@ -55,5 +55,5 @@
   "sideEffects": false,
   "type": "module",
   "types": "pubky_social_specs.d.ts",
-  "version": "1.0.0-alpha.1"
+  "version": "1.0.0-alpha.3"
 }

@@ -156,6 +156,10 @@ mimeToExtTable(); // the whole frozen map as a plain object
 
 `getValidMimeTypes` is an advisory hint for a file picker; it gates nothing. `createFile` accepts any declared type and maps it through `mimeToExt`.
 
+## Reading 0.x data
+
+The frozen 0.x reader (`legacy_v0`) is Rust only. This package exposes the 1.x surface; a JS consumer that has to read un-migrated data goes through a Rust service or through the migration.
+
 ## Specification
 
 The 1.x design is in [`docs/rfc-v1-social-specs.md`](https://github.com/pubky/pubky-social-specs/blob/main/docs/rfc-v1-social-specs.md). The legacy 0.x layout is in [`docs/SPEC_V0.md`](https://github.com/pubky/pubky-social-specs/blob/main/docs/SPEC_V0.md), for reading un-migrated data.
