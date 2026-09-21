@@ -55,6 +55,99 @@ describe("PubkySpecs Example Objects Tests", () => {
       );
     });
 
+    it("should store image and link urls as written", () => {
+      const image = `pubky://${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
+      const { user } = specsBuilder.createUser(
+        "Alice Smith",
+        null,
+        image,
+        [{ title: "site", url: "https://example.com/a" }],
+        null
+      );
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.image, image, "Image should be stored verbatim");
+      assert.strictEqual(
+        userJson.links[0].url,
+        "https://example.com/a",
+        "Link url should be stored verbatim"
+      );
+    });
+
+    it("cannot create user with a padded image", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, " https://x.com/a.png ", null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points:  https://x.com/a.png ",
+            `Expected padded image error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a padded image"
+      );
+    });
+
+    it("cannot create user with the short form image URI", () => {
+      const short = `pubky${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, short, null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg === `Validation Error: image must be spelled in canonical form: ${short}`,
+            `Expected canonical-form image error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for the short form image URI"
+      );
+    });
+
+    it("cannot create user with an ipfs image", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, "ipfs://x", null, null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: ipfs://x",
+            `Expected image scheme error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a non pubky or web image"
+      );
+    });
+
+    it("cannot create user with a pubky link url", () => {
+      assert.throws(
+        () => {
+          specsBuilder.createUser("Alice Smith", null, null, [
+            { title: "profile", url: `pubky://${OTTO}/pub/social/v1/profile.json` },
+          ], null);
+        },
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          assert.ok(
+            msg ===
+              `Validation Error: url must be a canonical web URI of at most 300 code points: pubky://${OTTO}/pub/social/v1/profile.json`,
+            `Expected link url error, got: "${msg}"`
+          );
+          return true;
+        },
+        "Expected validation error for a pubky link url"
+      );
+    });
+
     it("should accept emoji name at max length (50 chars)", () => {
       const emojiName = "🔥".repeat(50); // 50 emoji = 50 Unicode chars (but many more bytes)
       assert.strictEqual([...emojiName].length, 50, "Should be 50 Unicode characters");

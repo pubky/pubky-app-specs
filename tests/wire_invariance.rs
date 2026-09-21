@@ -20,6 +20,8 @@ fn json<T: Serialize>(v: &T) -> String {
     serde_json::to_string(v).unwrap()
 }
 
+/// The link url is spelled with its trailing slash: references are stored verbatim, so the
+/// fixture writes the exact bytes it pins.
 fn user() -> PubkySocialUser {
     PubkySocialUser::new(
         "Alice".into(),
@@ -27,7 +29,7 @@ fn user() -> PubkySocialUser {
         Some(format!("pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG")),
         Some(vec![PubkySocialUserLink::new(
             "site".into(),
-            "https://example.com".into(),
+            "https://example.com/".into(),
         )]),
         Some("here".into()),
     )
