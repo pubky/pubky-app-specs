@@ -28,7 +28,7 @@ pub use limits::*;
 // Re-export the frozen MIME map
 pub use mime::{essence, mime_to_ext, MIME_TO_EXT, STRIP_SET};
 // Re-export the one cross-epoch normalization
-pub use normalize::{stable_id, StableId};
+pub use normalize::{resolve_deref, stable_id, StableId};
 pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
 pub use models::bookmark::{
@@ -53,6 +53,8 @@ pub use models::post::{
 pub use models::tag::{sanitize_tag_label, validate_tag_label, PubkySocialTag};
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};
 pub use models::PubkySocialObject;
+// The frozen 0.x reader, under its own name; no v0 symbol is re-exported at the root
+pub use models::legacy_v0;
 pub use types::PubkyId;
 #[doc(inline)]
 pub use uri::{

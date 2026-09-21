@@ -1,0 +1,542 @@
+[
+  {
+    "blob": "{\"name\":\"Alice\",\"bio\":\"Hello, I am Alice\",\"image\":\"https://example.com/alice.png\",\"links\":[{\"title\":\"Home\",\"url\":\"https://example.com\"}],\"status\":\"active\"}",
+    "err": null,
+    "note": "user, every field populated",
+    "ok": {
+      "type": "User",
+      "value": {
+        "bio": "Hello, I am Alice",
+        "image": "https://example.com/alice.png",
+        "links": [
+          {
+            "title": "Home",
+            "url": "https://example.com/"
+          }
+        ],
+        "name": "Alice",
+        "status": "active"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"   Alice   \",\"bio\":\"  padded  \",\"image\":null,\"links\":null,\"status\":\"  busy  \"}",
+    "err": null,
+    "note": "user, padded strings the v0 sanitize trims",
+    "ok": {
+      "type": "User",
+      "value": {
+        "bio": "padded",
+        "image": null,
+        "links": null,
+        "name": "Alice",
+        "status": "busy"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"[DELETED]\",\"bio\":null,\"image\":null,\"links\":null,\"status\":null}",
+    "err": null,
+    "note": "user, the [DELETED] name v0 substitutes for anonymous",
+    "ok": {
+      "type": "User",
+      "value": {
+        "bio": null,
+        "image": null,
+        "links": null,
+        "name": "anonymous",
+        "status": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"Dana\",\"bio\":null,\"image\":\"data:image/png;base64,AAAA\",\"links\":null,\"status\":null}",
+    "err": null,
+    "note": "user, a data: image v0 accepts through Url::parse",
+    "ok": {
+      "type": "User",
+      "value": {
+        "bio": null,
+        "image": "data:image/png;base64,AAAA",
+        "links": null,
+        "name": "Dana",
+        "status": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"Al\",\"bio\":null,\"image\":null,\"links\":null,\"status\":null}",
+    "err": "Validation Error: Invalid name length",
+    "note": "user, name shorter than the v0 minimum",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"content\":\"Hello World!\",\"kind\":\"short\",\"parent\":null,\"embed\":{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\",\"kind\":\"short\"},\"attachments\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG\"]}",
+    "err": null,
+    "note": "post, short with an embed and an attachment",
+    "ok": {
+      "type": "Post",
+      "value": {
+        "attachments": [
+          "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+        ],
+        "content": "Hello World!",
+        "embed": {
+          "kind": "short",
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A"
+        },
+        "kind": "short",
+        "parent": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"A longer body.\",\"kind\":\"long\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": null,
+    "note": "post, long",
+    "ok": {
+      "type": "Post",
+      "value": {
+        "attachments": null,
+        "content": "A longer body.",
+        "embed": null,
+        "kind": "long",
+        "parent": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A"
+  },
+  {
+    "blob": "{\"content\":\"   Hello World!   \",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": null,
+    "note": "post, padded content the v0 sanitize trims",
+    "ok": {
+      "type": "Post",
+      "value": {
+        "attachments": null,
+        "content": "Hello World!",
+        "embed": null,
+        "kind": "short",
+        "parent": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"reply\",\"kind\":\"short\",\"parent\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"embed\":null,\"attachments\":null,\"lock\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/locks.app/locks/0034A0X7NJ52A\"}",
+    "err": null,
+    "note": "post, a reply carrying a lock",
+    "ok": {
+      "type": "Post",
+      "value": {
+        "attachments": null,
+        "content": "reply",
+        "embed": null,
+        "kind": "short",
+        "lock": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/locks.app/locks/0034A0X7NJ52A",
+        "parent": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"[DELETED]\",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": "Validation Error: Content cannot be the reserved keyword '[DELETED]'",
+    "note": "post, the reserved [DELETED] content",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"x\",\"kind\":\"hologram\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": "Validation Error: post kind is unknown",
+    "note": "post, a kind this version of v0 does not know",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"{\\\"name\\\":\\\"My favorites\\\",\\\"description\\\":\\\"Best things\\\",\\\"items\\\":[\\\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\\\"],\\\"cover_image\\\":\\\"https://example.com/cover.png\\\",\\\"layout\\\":\\\"list\\\"}\",\"kind\":\"collection\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": null,
+    "note": "post, collection with a cover image and a layout",
+    "ok": {
+      "type": "Post",
+      "value": {
+        "attachments": null,
+        "content": "{\"name\":\"My favorites\",\"description\":\"Best things\",\"items\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\"],\"cover_image\":\"https://example.com/cover.png\",\"layout\":\"list\"}",
+        "embed": null,
+        "kind": "collection",
+        "parent": null
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"{\\\"name\\\":\\\"My favorites\\\",\\\"items\\\":[]}\",\"kind\":\"collection\",\"parent\":null,\"embed\":null,\"attachments\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\"]}",
+    "err": "Validation Error: Collection posts must not use post.attachments — items belong in the content envelope",
+    "note": "post, collection putting its items in post.attachments",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"x\",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "err": "Validation Error: Invalid ID length: must be 13 characters",
+    "note": "post, the leaf carrying a .json suffix v0 never writes",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG.json"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"cool\",\"created_at\":1627849726}",
+    "err": null,
+    "note": "tag, canonical",
+    "ok": {
+      "type": "Tag",
+      "value": {
+        "created_at": 1627849726,
+        "label": "cool",
+        "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"COOL\",\"created_at\":1627849726}",
+    "err": null,
+    "note": "tag, an uppercase label the v0 sanitize folds",
+    "ok": {
+      "type": "Tag",
+      "value": {
+        "created_at": 1627849726,
+        "label": "cool",
+        "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"co ol\",\"created_at\":1627849726}",
+    "err": "Validation Error: Tag 'co ol' contains whitespace characters",
+    "note": "tag, a label with a space",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/SC3NY2QXZYM9PSWX4ED9RCH148"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/profile.json\",\"label\":\"friend\",\"created_at\":1627849726}",
+    "err": null,
+    "note": "tag, on a user rather than a post",
+    "ok": {
+      "type": "Tag",
+      "value": {
+        "created_at": 1627849726,
+        "label": "friend",
+        "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/profile.json"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/ECMWAR9XRWZG2YDJWKBG5TFMWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"created_at\":1627849725}",
+    "err": null,
+    "note": "bookmark, canonical",
+    "ok": {
+      "type": "Bookmark",
+      "value": {
+        "created_at": 1627849725,
+        "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG"
+  },
+  {
+    "blob": "{\"uri\":\"invalid_uri\",\"created_at\":1627849725}",
+    "err": "Validation Error: Invalid URI format: invalid_uri",
+    "note": "bookmark, a target that is not a URI",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/4QTBWDN4CWYB36T9YDS6VGFSYM"
+  },
+  {
+    "blob": "{\"created_at\":1627849723}",
+    "err": null,
+    "note": "follow",
+    "ok": {
+      "type": "Follow",
+      "value": {
+        "created_at": 1627849723
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
+  },
+  {
+    "blob": "{\"created_at\":1627849724}",
+    "err": null,
+    "note": "mute",
+    "ok": {
+      "type": "Mute",
+      "value": {
+        "created_at": 1627849724
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
+  },
+  {
+    "blob": "{\"created_at\":1627849723}",
+    "err": "Validation Error: invalid public key encoding",
+    "note": "follow, an uppercase public key in the path",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/PXNU33X7JTPX9AR1YTSI4YXBP6A5O36GWHFFS8ZOXMBUPTICI1JY"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR\",\"content_type\":\"image/png\",\"size\":1024}",
+    "err": null,
+    "note": "file, pointing at its blob",
+    "ok": {
+      "type": "File",
+      "value": {
+        "content_type": "image/png",
+        "created_at": 1627849727,
+        "name": "example.png",
+        "size": 1024,
+        "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"https://example.com/example.png\",\"content_type\":\"image/png\",\"size\":1024}",
+    "err": null,
+    "note": "file, an https src v0 accepts",
+    "ok": {
+      "type": "File",
+      "value": {
+        "content_type": "image/png",
+        "created_at": 1627849727,
+        "name": "example.png",
+        "size": 1024,
+        "src": "https://example.com/example.png"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"not a url\",\"content_type\":\"image/png\",\"size\":10}",
+    "err": "Validation Error: Invalid src",
+    "note": "file, an src that is not a URL",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.bin\",\"created_at\":1627849727,\"src\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR\",\"content_type\":\"application/x-weird\",\"size\":10}",
+    "err": "Validation Error: Invalid content type",
+    "note": "file, a content type outside the v0 allowlist",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "\u0001\u0002",
+    "err": null,
+    "note": "blob, two bytes",
+    "ok": {
+      "type": "Blob",
+      "value": [
+        1,
+        2
+      ]
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR"
+  },
+  {
+    "blob": "",
+    "err": "Validation Error: Blob size cannot be zero",
+    "note": "blob, empty",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/NW9MKEFNZ6GTD8209QN3DQ6994"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[\"bitcoin\"],\"domain_tags\":[\"news\"],\"reach\":\"wot\",\"layout\":\"columns\",\"sort\":\"recent\",\"content\":\"short\"},\"name\":\"My Feed\",\"icon\":\"bitcoin\",\"created_at\":1627849728}",
+    "err": null,
+    "note": "feed, with an icon and domain tags",
+    "ok": {
+      "type": "Feed",
+      "value": {
+        "created_at": 1627849728,
+        "feed": {
+          "content": "short",
+          "domain_tags": [
+            "news"
+          ],
+          "layout": "columns",
+          "reach": "wot",
+          "sort": "recent",
+          "tags": [
+            "bitcoin"
+          ]
+        },
+        "icon": "bitcoin",
+        "name": "My Feed"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5628Q6WHCK4EM1Z7862K7GH2QW"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[],\"reach\":\"following\",\"layout\":\"columns\",\"sort\":\"recent\",\"content\":null},\"name\":\"My Feed\",\"created_at\":1627849728}",
+    "err": null,
+    "note": "feed, the legacy shape with neither icon nor domain tags",
+    "ok": {
+      "type": "Feed",
+      "value": {
+        "created_at": 1627849728,
+        "feed": {
+          "content": null,
+          "layout": "columns",
+          "reach": "following",
+          "sort": "recent",
+          "tags": []
+        },
+        "name": "My Feed"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[],\"reach\":\"me\",\"layout\":\"list\",\"sort\":\"popularity\",\"content\":null},\"name\":\"Mine\",\"icon\":\"user\",\"created_at\":1627849728}",
+    "err": null,
+    "note": "feed, reach me",
+    "ok": {
+      "type": "Feed",
+      "value": {
+        "created_at": 1627849728,
+        "feed": {
+          "content": null,
+          "layout": "list",
+          "reach": "me",
+          "sort": "popularity",
+          "tags": []
+        },
+        "icon": "user",
+        "name": "Mine"
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/1VK3YAJSZBCHT8J1BJK1K34FVG"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\"],\"reach\":\"all\",\"layout\":\"wide\",\"sort\":\"recent\",\"content\":null},\"name\":\"Too many\",\"created_at\":1627849728}",
+    "err": "Validation Error: Feed config cannot have more than 5 tags",
+    "note": "feed, more tags than v0 allows",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/FXJWEFF6VHZDNPSC1V2XMGBSJR"
+  },
+  {
+    "blob": "{\"timestamp\":1627849729}",
+    "err": null,
+    "note": "last_read",
+    "ok": {
+      "type": "LastRead",
+      "value": {
+        "timestamp": 1627849729
+      }
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read"
+  },
+  {
+    "blob": "{\"timestamp\":-1}",
+    "err": "Validation Error: Timestamp must be a positive integer",
+    "note": "last_read, a non-positive timestamp",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read"
+  },
+  {
+    "blob": "{}",
+    "err": "Unrecognized resource Unknown",
+    "note": "an unknown resource segment",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/xyz"
+  },
+  {
+    "blob": "{}",
+    "err": "Unrecognized resource Unknown",
+    "note": "no resource segment at all",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/"
+  },
+  {
+    "blob": "{}",
+    "err": "Unrecognized resource Unknown",
+    "note": "a posts segment with an empty id",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/"
+  },
+  {
+    "blob": "{}",
+    "err": "Expected app path 'pubky.app' but got 'other.app' in URI: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/other.app/tags/ABC123",
+    "note": "a foreign app namespace",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/other.app/tags/ABC123"
+  },
+  {
+    "blob": "{}",
+    "err": "Expected public path 'pub' but got 'private' in URI: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/private/pubky.app/profile.json",
+    "note": "a public path that is not pub",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/private/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Invalid URI, must start with 'pubky://': https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json",
+    "note": "an https scheme",
+    "ok": null,
+    "uri": "https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Invalid URL: relative URL without a base",
+    "note": "a string that is not a URL",
+    "ok": null,
+    "uri": "not a url"
+  },
+  {
+    "blob": "{}",
+    "err": "Missing user ID in URI: pubky:///pub/pubky.app/profile.json",
+    "note": "a uri with no host",
+    "ok": null,
+    "uri": "pubky:///pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Validation Error: the string is not 52 utf chars",
+    "note": "host of 51 characters",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Validation Error: the string is not 52 utf chars",
+    "note": "host of 53 characters",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdoy/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Validation Error: invalid public key encoding",
+    "note": "host in uppercase",
+    "ok": null,
+    "uri": "pubky://OPERRR8WSBPR3UE9D4QJ41GE1KCC6R7FDIY6O3UGJRRHI4Y77RDO/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Validation Error: Invalid Ed25519 publickey; Cannot decompress Edwards point",
+    "note": "host whose last character leaves dangling bits",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdb/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "err": "Validation Error: invalid public key encoding",
+    "note": "host outside the z-base32 alphabet",
+    "ok": null,
+    "uri": "pubky://0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  }
+]

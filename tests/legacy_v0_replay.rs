@@ -1,0 +1,228 @@
+//! The frozen 0.x reader answers exactly what the 0.8.0 crate answered.
+//!
+//! `corpus.json` is authored here; `verdicts.json` was produced by running that corpus
+//! through the 0.8.0 crate itself, so it is evidence rather than an expectation someone
+//! typed. Regenerating it means building 0.8.0 again, which is the point: nobody edits a
+//! verdict to make a change pass.
+//!
+//! Accept or reject is compared on every row, and an accepted object is compared on its
+//! re-serialized bytes. A rejection message is recorded but not compared, because three
+//! rows cannot match one: the public key in the path is checked by the crate's own id type
+//! (one id type, or every consumer signature forks), and that type answers a format
+//! question where 0.8.0 answered a curve question. The acceptance set is the same, the
+//! wording is not. Every other message is pinned by the copied 0.x tests themselves.
+
+use pubky_social_specs::legacy_v0::{PubkyAppObject, VALIDATION_LIMITS};
+use pubky_social_specs::{resolve_deref, stable_id, StableId};
+use serde_json::Value;
+
+fn fixture(name: &str) -> Vec<Value> {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/legacy_v0/");
+    let bytes = std::fs::read(format!("{path}{name}")).expect("fixture");
+    serde_json::from_slice(&bytes).expect("fixture json")
+}
+
+fn encode(object: &PubkyAppObject) -> Value {
+    let (kind, value) = match object {
+        PubkyAppObject::User(v) => ("User", serde_json::to_value(v)),
+        PubkyAppObject::Post(v) => ("Post", serde_json::to_value(v)),
+        PubkyAppObject::Follow(v) => ("Follow", serde_json::to_value(v)),
+        PubkyAppObject::Mute(v) => ("Mute", serde_json::to_value(v)),
+        PubkyAppObject::Bookmark(v) => ("Bookmark", serde_json::to_value(v)),
+        PubkyAppObject::Tag(v) => ("Tag", serde_json::to_value(v)),
+        PubkyAppObject::File(v) => ("File", serde_json::to_value(v)),
+        PubkyAppObject::Blob(v) => ("Blob", serde_json::to_value(v)),
+        PubkyAppObject::Feed(v) => ("Feed", serde_json::to_value(v)),
+        PubkyAppObject::LastRead(v) => ("LastRead", serde_json::to_value(v)),
+    };
+    serde_json::json!({ "type": kind, "value": value.unwrap() })
+}
+
+#[test]
+fn the_corpus_replays_to_the_v0_verdicts() {
+    let corpus = fixture("corpus.json");
+    let verdicts = fixture("verdicts.json");
+    assert_eq!(corpus.len(), verdicts.len(), "corpus and verdicts disagree");
+    assert!(corpus.len() >= 48, "the corpus lost rows");
+
+    let (mut accepted, mut rejected) = (0, 0);
+    for (input, verdict) in corpus.iter().zip(&verdicts) {
+        let note = input["note"].as_str().unwrap();
+        assert_eq!(input["uri"], verdict["uri"], "{note}");
+        assert_eq!(input["blob"], verdict["blob"], "{note}");
+        let uri = input["uri"].as_str().unwrap();
+        let blob = input["blob"].as_str().unwrap().as_bytes();
+
+        match PubkyAppObject::from_uri(uri, blob) {
+            Ok(object) => {
+                accepted += 1;
+                assert!(
+                    verdict["err"].is_null(),
+                    "{note}: 0.8.0 rejected this with {}",
+                    verdict["err"]
+                );
+                assert_eq!(
+                    serde_json::to_string(&encode(&object)).unwrap(),
+                    serde_json::to_string(&verdict["ok"]).unwrap(),
+                    "{note}"
+                );
+            }
+            Err(e) => {
+                rejected += 1;
+                assert!(
+                    verdict["ok"].is_null(),
+                    "{note}: 0.8.0 accepted this, we answered {e}"
+                );
+                assert!(!e.is_empty(), "{note}: a rejection with no reason");
+            }
+        }
+    }
+    assert_eq!((accepted, rejected), (22, 26), "the corpus balance moved");
+}
+
+/// Every v0 spelling and its v1 counterpart reduce to one key, which is what lets an
+/// indexer row a migrated object in place instead of twice.
+#[test]
+fn a_v0_path_and_its_v1_counterpart_key_the_same() {
+    let owner = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+    let tag = "86805FC1CSFZD4W6HZ09S24QWG";
+    let hash = "PZBQ010FF079VVZPQG1RNFN6DR";
+    let pairs: &[(&str, &str, &str)] = &[
+        (
+            "pub/pubky.app/profile.json",
+            "pub/social/v1/profile.json",
+            "profile",
+        ),
+        (
+            "pub/pubky.app/posts/0032SSN7Q4EVG",
+            "pub/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52A-first.json",
+            "posts/0032SSN7Q4EVG",
+        ),
+        (
+            &format!("pub/pubky.app/tags/{tag}"),
+            &format!("pub/social/v1/tags/{tag}.json"),
+            &format!("tags/{tag}"),
+        ),
+        (
+            &format!("pub/pubky.app/bookmarks/{tag}"),
+            &format!("priv/social/v1/bookmarks/{tag}.json"),
+            &format!("bookmarks/{tag}"),
+        ),
+        (
+            &format!("pub/pubky.app/follows/{owner}"),
+            &format!("pub/social/v1/follows/{owner}.json"),
+            &format!("follows/{owner}"),
+        ),
+        (
+            &format!("pub/pubky.app/mutes/{owner}"),
+            &format!("priv/social/v1/mutes/{owner}.json"),
+            &format!("mutes/{owner}"),
+        ),
+        (
+            &format!("pub/pubky.app/feeds/{tag}"),
+            &format!("priv/social/v1/feeds/{tag}.json"),
+            &format!("feeds/{tag}"),
+        ),
+        (
+            &format!("pub/pubky.app/blobs/{hash}"),
+            &format!("priv/social/v1/files/{hash}.png"),
+            &format!("files/{hash}"),
+        ),
+        (
+            "pub/pubky.app/last_read",
+            "pub/social/v1/last_read.json",
+            "last_read",
+        ),
+    ];
+    for (legacy, v1, expected) in pairs {
+        let want = Some(StableId::Key((*expected).to_string()));
+        assert_eq!(stable_id(legacy), want, "{legacy}");
+        assert_eq!(stable_id(v1), want, "{v1}");
+    }
+}
+
+/// The v0 media object is the one reference a path alone cannot key: the bytes live
+/// somewhere else and only the object's own `src` says where.
+#[test]
+fn a_legacy_media_reference_completes_through_the_file_object() {
+    let corpus = fixture("corpus.json");
+    let file = corpus
+        .iter()
+        .find(|e| e["note"] == "file, pointing at its blob")
+        .expect("the corpus carries a v0 File");
+    let src: Value = serde_json::from_str(file["blob"].as_str().unwrap()).unwrap();
+    let src = src["src"].as_str().unwrap();
+
+    let owner_relative = file["uri"]
+        .as_str()
+        .unwrap()
+        .split_once("/pub/")
+        .map(|(_, tail)| format!("pub/{tail}"))
+        .unwrap();
+    let StableId::NeedsDeref { tsid } = stable_id(&owner_relative).unwrap() else {
+        panic!("a v0 files/ path must ask for its object");
+    };
+
+    let key = resolve_deref(&tsid, src).expect("a canonical blob src completes");
+    assert_eq!(key, "files/PZBQ010FF079VVZPQG1RNFN6DR");
+    assert_eq!(
+        stable_id("priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"),
+        Some(StableId::Key(key)),
+        "the completed key is the migrated object's key"
+    );
+}
+
+/// Nexus reads these names. A rename here is a downstream break, not a refactor.
+#[test]
+fn the_v0_limits_keep_their_v0_names_and_values() {
+    assert_eq!(VALIDATION_LIMITS.post_short_content_max_length, 2000);
+    assert_eq!(VALIDATION_LIMITS.post_long_content_max_length, 50_000);
+    assert_eq!(VALIDATION_LIMITS.user_image_url_max_length, 300);
+    assert_eq!(VALIDATION_LIMITS.file_src_max_length, 1024);
+    assert_eq!(VALIDATION_LIMITS.max_blob_size_bytes, 100 * (1 << 20));
+    assert_eq!(VALIDATION_LIMITS.feed_tags_max_count, 5);
+    assert_eq!(VALIDATION_LIMITS.feed_icon_max_length, 50);
+    assert_eq!(VALIDATION_LIMITS.collection_items_max_count, 100);
+
+    let wire = serde_json::to_value(VALIDATION_LIMITS).unwrap();
+    let mut keys: Vec<&str> = wire
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "collectionContentMaxLength",
+            "collectionDescriptionMaxLength",
+            "collectionItemsMaxCount",
+            "collectionNameMaxLength",
+            "collectionNameMinLength",
+            "feedIconMaxLength",
+            "feedTagsMaxCount",
+            "fileNameMaxLength",
+            "fileNameMinLength",
+            "fileSrcMaxLength",
+            "maxBlobSizeBytes",
+            "maxFileSizeBytes",
+            "postAllowedAttachmentProtocols",
+            "postAttachmentUrlMaxLength",
+            "postAttachmentsMaxCount",
+            "postLongContentMaxLength",
+            "postShortContentMaxLength",
+            "tagInvalidChars",
+            "tagLabelMaxLength",
+            "tagLabelMinLength",
+            "userBioMaxLength",
+            "userImageUrlMaxLength",
+            "userLinkTitleMaxLength",
+            "userLinkUrlMaxLength",
+            "userLinksMaxCount",
+            "userNameMaxLength",
+            "userNameMinLength",
+            "userStatusMaxLength",
+        ]
+    );
+}

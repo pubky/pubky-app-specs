@@ -50,6 +50,7 @@ pub mod bookmark;
 pub mod feed;
 pub mod file;
 pub mod follow;
+pub mod legacy_v0;
 pub mod mute;
 pub mod post;
 pub mod tag;

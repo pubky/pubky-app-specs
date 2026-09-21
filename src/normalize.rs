@@ -2,6 +2,7 @@
 //! cannot disagree about which stored paths are the same object.
 
 use crate::constants::{PRIVATE_ROOT, PUBLIC_ROOT, SOCIAL_NAMESPACE};
+use crate::models::legacy_v0::{ParsedUri, Resource};
 use crate::uri::strip_media_ext;
 
 /// The dedup key of a stored object across epochs and roots, or a legacy media reference
@@ -97,6 +98,22 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
         _ => return None,
     };
     Some(StableId::Key(key))
+}
+
+/// Completes a legacy `files/{tsid}` reference through the v0 File object's `src`
+/// (`pubky://<pk>/pub/pubky.app/blobs/<hash>`) to `files/<hash>`. `None` when the src is not
+/// a legacy blob reference; the caller then keys the reference verbatim, so a dangling or
+/// foreign src still resolves for a reader.
+///
+/// The src is read with the frozen v0 parser, so a reference is completed on exactly the
+/// terms v0 accepted it. The tsid does not reach the result: it is in the signature because
+/// the two halves of one operation should read as a pair, and because a later policy may
+/// need to know which reference it is completing.
+pub fn resolve_deref(_tsid: &str, v0_file_src: &str) -> Option<String> {
+    match ParsedUri::try_from(v0_file_src).ok()?.resource {
+        Resource::Blob(hash) => Some(format!("files/{hash}")),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -235,6 +252,31 @@ mod tests {
                 versionless,
                 "{leaf}"
             );
+        }
+    }
+
+    const OWNER: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
+    #[test]
+    fn a_deref_completes_only_through_a_legacy_blob_src() {
+        let tsid = "0032SSN7Q4EVG";
+        assert_eq!(
+            resolve_deref(tsid, &format!("pubky://{OWNER}/pub/pubky.app/blobs/{HASH}")),
+            Some(format!("files/{HASH}"))
+        );
+        for src in [
+            // The owner-relative spelling is not a URI, and v0 never stored one.
+            &format!("/pub/pubky.app/blobs/{HASH}"),
+            &format!("pub/pubky.app/blobs/{HASH}"),
+            // An off-network src: the reference keys verbatim instead.
+            "https://example.com/photo.jpg",
+            // A v0 File never points into a social epoch.
+            &format!("pubky://{OWNER}/pub/social/v1/files/{HASH}.jpg"),
+            // A v0 File pointing at another File rather than at bytes.
+            &format!("pubky://{OWNER}/pub/pubky.app/files/{tsid}"),
+            "not a url",
+        ] {
+            assert_eq!(resolve_deref(tsid, src), None, "{src}");
         }
     }
 
