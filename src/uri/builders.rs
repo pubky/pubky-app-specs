@@ -78,7 +78,9 @@ pub fn file_uri_builder(author_id: String, filename: String) -> String {
     [PROTOCOL, &author_id, &file_path].concat()
 }
 
-/// Builds a Feed URI of the form "pubky://<author_id>/pub/social/v1/feeds/<feed_id>.json\"
+/// Builds a Feed URI of the form "pubky://<author_id>/priv/social/v1/feeds/<feed_id>.json\".
+/// Feeds are private by default; the published copy is the same file under `/pub/`, see
+/// `feed_paths`.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = feedUriBuilder))]
 pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
     let feed_path = PubkySocialFeed::create_path(&feed_id);

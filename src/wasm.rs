@@ -254,7 +254,7 @@ impl PubkySpecsBuilder {
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
         let feed_id = feed.create_id();
-        feed.validate(Some(&feed_id), &PUB_CTX)?;
+        feed.validate(Some(&feed_id), &ValidationCtx { root: Root::Priv })?;
 
         let path = PubkySocialFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);

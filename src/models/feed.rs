@@ -388,6 +388,34 @@ impl PubkySocialFeed {
         }
         .sanitize()
     }
+
+    /// "/{root}/social/v1/feeds/{id}.json". Feeds are private by default; the public
+    /// spelling is the published copy.
+    pub fn create_path_in(root: Root, id: &str) -> String {
+        social_path(root, &format!("{}{id}.json", Self::PATH_SEGMENT))
+    }
+}
+
+/// Both addresses of one feed.
+///
+/// A feed lives at `private`. To PUBLISH it, PUT the same bytes at `public`; to unpublish,
+/// DELETE `public`. Nothing else is involved: a feed config carries no root-bearing URIs, so
+/// publishing is a plain byte copy, and because the id is derived from the config alone the
+/// two copies can never disagree about what the feed filters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedPaths {
+    /// Where the builder writes.
+    pub private: String,
+    /// The published copy, absent until the user publishes.
+    pub public: String,
+}
+
+/// The private and published addresses of the feed with this id, see [`FeedPaths`].
+pub fn feed_paths(id: &str) -> FeedPaths {
+    FeedPaths {
+        private: PubkySocialFeed::create_path_in(Root::Priv, id),
+        public: PubkySocialFeed::create_path_in(Root::Pub, id),
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -451,11 +479,11 @@ impl HashId for PubkySocialFeed {
 }
 
 impl HasIdPath for PubkySocialFeed {
-    const ROOT: Root = Root::Pub;
+    const ROOT: Root = Root::Priv;
     const PATH_SEGMENT: &'static str = "feeds/";
 
     fn create_path(id: &str) -> String {
-        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
+        Self::create_path_in(Self::ROOT, id)
     }
 }
 
@@ -551,6 +579,9 @@ mod tests {
     use crate::traits::PUB_CTX;
     use crate::{limits::VALIDATION_LIMITS, traits::Validatable};
 
+    const PRIV_CTX: ValidationCtx = ValidationCtx { root: Root::Priv };
+    const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
     use PubkySocialFeedLayout as L;
     use PubkySocialFeedReach as R;
     use PubkySocialFeedSort as S;
@@ -581,7 +612,7 @@ mod tests {
     }
 
     fn validate(f: &PubkySocialFeed) -> Result<(), String> {
-        f.validate(Some(&f.create_id()), &PUB_CTX)
+        f.validate(Some(&f.create_id()), &PRIV_CTX)
     }
 
     #[test]
@@ -764,7 +795,7 @@ mod tests {
                     S::Recent,
                     None,
                 ));
-                let e = f.validate(Some(&f.create_id()), &PUB_CTX).unwrap_err();
+                let e = f.validate(Some(&f.create_id()), &PRIV_CTX).unwrap_err();
                 assert!(e.contains(expected), "{field} {list:?}: {e}");
             }
         }
@@ -798,7 +829,7 @@ mod tests {
             ),
         ] {
             let e = feed(config)
-                .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PUB_CTX)
+                .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PRIV_CTX)
                 .unwrap_err();
             assert!(e.contains(field) && e.contains("unknown"), "{e}");
         }
@@ -812,7 +843,7 @@ mod tests {
             Some(PubkySocialPostKind::Unknown),
         ));
         assert!(f
-            .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PUB_CTX)
+            .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PRIV_CTX)
             .is_ok());
         // a known content filter is still checked
         let f = feed(stored(
@@ -824,7 +855,7 @@ mod tests {
             Some(PubkySocialPostKind::Note),
         ));
         let e = f
-            .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PUB_CTX)
+            .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PRIV_CTX)
             .unwrap_err();
         assert!(e.contains("Invalid ID"), "{e}");
     }
@@ -885,6 +916,33 @@ mod tests {
     }
 
     #[test]
+    fn test_feeds_are_private_and_publishing_is_a_byte_copy() {
+        let f = feed(stored(None, None, R::All, L::List, S::Recent, None));
+        let id = f.create_id();
+        assert_eq!(
+            PubkySocialFeed::create_path(&id),
+            format!("/priv/social/v1/feeds/{id}.json")
+        );
+        let paths = feed_paths(&id);
+        assert_eq!(paths.private, PubkySocialFeed::create_path(&id));
+        assert_eq!(paths.public, format!("/pub/social/v1/feeds/{id}.json"));
+
+        // the builder's URI is the private one, and both roots parse back to the same feed
+        let uri = crate::feed_uri_builder(PK.into(), id.clone());
+        assert_eq!(uri, format!("pubky://{PK}{}", paths.private));
+        for (path, visibility) in [
+            (&paths.private, crate::Visibility::Private),
+            (&paths.public, crate::Visibility::Public),
+        ] {
+            let uri = format!("pubky://{PK}{path}");
+            let parsed = crate::ParsedUri::try_from(uri.as_str()).unwrap();
+            assert_eq!(parsed.visibility, visibility);
+            assert_eq!(parsed.resource, crate::Resource::Feed(id.clone()));
+            assert_eq!(parsed.try_to_uri_str().unwrap(), uri);
+        }
+    }
+
+    #[test]
     fn test_try_from_validates_and_preserves() {
         let blob = br#"{"feed":{"tags":["rust"],"reach":"all","layout":"columns","sort":"recent","content":null,"ext":{"pinned":true}},"name":"Rust","icon":"code","created_at":1700000000,"ext":{"badge":1}}"#;
         let id = feed(stored(
@@ -896,7 +954,7 @@ mod tests {
             None,
         ))
         .create_id();
-        let f = <PubkySocialFeed as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
+        let f = <PubkySocialFeed as Validatable>::try_from(blob, &id, &PRIV_CTX).unwrap();
         assert_eq!(f.extra["ext"]["badge"], 1);
         assert_eq!(f.feed.extra["ext"]["pinned"], true);
         let back = serde_json::to_string(&f).unwrap();
@@ -913,12 +971,25 @@ mod tests {
     }
 
     #[test]
+    fn test_ingest_by_uri_under_both_roots() {
+        let blob = br#"{"feed":{"tags":null,"reach":"all","layout":"list","sort":"popularity","content":null},"name":"All","created_at":1700000000}"#;
+        let id = feed(stored(None, None, R::All, L::List, S::Popularity, None)).create_id();
+        for path in [feed_paths(&id).private, feed_paths(&id).public] {
+            let uri = format!("pubky://{PK}{path}");
+            assert!(
+                crate::PubkySocialObject::from_uri(&uri, blob).is_ok(),
+                "{uri}"
+            );
+        }
+    }
+
+    #[test]
     fn test_in_memory_size_cap() {
         let mut f = feed(stored(None, None, R::All, L::List, S::Recent, None));
         f.extra
             .insert("ext".into(), "a".repeat(PubkySocialFeed::MAX_BYTES).into());
-        assert!(f.validate_fields(None, &PUB_CTX).is_ok());
-        assert!(f.validate(None, &PUB_CTX).unwrap_err().contains("exceeds"));
+        assert!(f.validate_fields(None, &PRIV_CTX).is_ok());
+        assert!(f.validate(None, &PRIV_CTX).unwrap_err().contains("exceeds"));
     }
 
     #[test]
@@ -959,6 +1030,16 @@ mod tests {
         ] {
             assert_eq!(k.wire_name(), serde_name(&k));
         }
+    }
+
+    #[test]
+    fn test_validate_with_the_public_ctx_too() {
+        // A feed carries no reference-tier field, so the destination root changes nothing
+        let f = feed(stored(None, None, R::All, L::List, S::Recent, None));
+        assert_eq!(
+            f.validate(Some(&f.create_id()), &PUB_CTX),
+            f.validate(Some(&f.create_id()), &PRIV_CTX)
+        );
     }
 
     #[test]

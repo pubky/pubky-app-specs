@@ -212,7 +212,7 @@ field("Extension", `application/pdf maps to .${mimeToExt("application/pdf")}`);
 // =============================================================================
 header("FEEDS");
 
-// Feed
+// Feed. Feeds are private by default; publishing one copies the same bytes to /pub/.
 console.log(`  ${c.yellow}▸ Custom Feed${c.reset}`);
 const { feed, meta: feedMeta } = specsBuilder.createFeed({
   tags: ["mountain", "hiking", "nature"],
@@ -226,7 +226,8 @@ const { feed, meta: feedMeta } = specsBuilder.createFeed({
 field("ID", feedMeta.id);
 field("Name", feed.toJson().name);
 field("Icon", feed.toJson().icon);
-field("Tags", feed.toJson().feed.tags.join(", "));
+field("Tags", feed.toJson().feed.tags.join(", ")); // folded, deduplicated and sorted
+field("Path", feedMeta.path);
 field("Layout", feed.toJson().feed.layout);
 field("Sort", feed.toJson().feed.sort);
 console.log();

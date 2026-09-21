@@ -729,6 +729,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(feedMeta.id, "Feed should have an ID");
       assert.ok(feedMeta.url, "Feed should have a URL");
       assert.ok(feedMeta.url.includes(OTTO), "URL should contain user ID");
+      assert.strictEqual(feedMeta.url.split("/")[3], "priv", "feeds live under the private root");
       assert.ok(feedMeta.url.includes("feeds"), "URL should contain feeds path");
       assert.ok(feedMeta.url.includes(feedMeta.id), "URL should contain feed ID");
 

@@ -30,8 +30,8 @@ pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
 pub use models::bookmark::PubkySocialBookmark;
 pub use models::feed::{
-    PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
-    PubkySocialFeedSort,
+    feed_paths, FeedPaths, PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout,
+    PubkySocialFeedReach, PubkySocialFeedSort,
 };
 pub use models::file::{CreatedFile, PubkySocialFile, VALID_MIME_TYPES};
 pub use models::follow::PubkySocialFollow;
