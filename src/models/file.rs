@@ -1,13 +1,12 @@
 use crate::constants::social_path;
+use crate::mime::essence;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::timestamp,
     limits::VALIDATION_LIMITS,
     traits::{HasIdPath, TimestampId, Validatable},
 };
-use mime::Mime;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
@@ -183,17 +182,10 @@ impl Validatable for PubkySocialFile {
             .map_err(|_| "Validation Error: Invalid src URI format".to_string())?;
 
         // validate content type
-        match Mime::from_str(&self.content_type) {
-            Ok(mime) => {
-                if !VALID_MIME_TYPES.contains(&mime.essence_str()) {
-                    return Err("Validation Error: Invalid content type".into());
-                }
-            }
-            Err(_) => {
-                return Err("Validation Error: Invalid content type".into());
-            }
+        match essence(&self.content_type) {
+            Some(e) if VALID_MIME_TYPES.contains(&e.as_str()) => Ok(()),
+            _ => Err("Validation Error: Invalid content type".into()),
         }
-        Ok(())
     }
 }
 

@@ -3,6 +3,7 @@ use crate::traits::{HasIdPath, HasPath, HashId, Root, TimestampId, Validatable, 
 use crate::*;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use tsify_next::Tsify;
 use wasm_bindgen::prelude::*;
@@ -18,6 +19,28 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(js_name = getValidationLimits)]
 pub fn get_validation_limits() -> Result<JsValue, String> {
     to_value(&VALIDATION_LIMITS).map_err(|e| e.to_string())
+}
+
+/// The path extension a declared type maps to. Unmapped or malformed types give "bin".
+#[wasm_bindgen(js_name = mimeToExt)]
+pub fn mime_to_ext_js(declared: &str) -> String {
+    crate::mime_to_ext(declared)
+}
+
+/// The essence of a declared type (before the first ";", ASCII-folded), or null when the
+/// value is malformed.
+#[wasm_bindgen(js_name = essence)]
+pub fn essence_js(declared: &str) -> Option<String> {
+    crate::essence(declared)
+}
+
+/// The frozen map as a plain object, so a caller that needs the whole table reads this one
+/// copy instead of keeping its own.
+#[wasm_bindgen(js_name = mimeToExtTable)]
+pub fn mime_to_ext_table() -> Result<JsValue, String> {
+    let table: BTreeMap<&str, &str> = MIME_TO_EXT.iter().copied().collect();
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    table.serialize(&serializer).map_err(|e| e.to_string())
 }
 
 #[wasm_bindgen]
