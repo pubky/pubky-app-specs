@@ -8,8 +8,18 @@
 //! migration transforms read v0 objects through it.
 //!
 //! One thing is shared rather than copied: [`PubkyId`] is the crate's id type. Two id types
-//! would fork every signature a consumer writes, and the acceptance set is the same, a
-//! 52-character z-base32 host.
+//! would fork every signature a consumer writes, so there is one, and it checks the format,
+//! a 52-character z-base32 string.
+//!
+//! That is a real widening on one axis. 0.8.0 compiled to native also required the decoded
+//! bytes to be an Ed25519 curve point; compiled to wasm32 it did not, and this module does
+//! not. So a 52-character z-base32 string that decodes cleanly but is not a curve point is
+//! accepted here and by v0 on wasm32, and was rejected by v0 on native. It reaches URI hosts
+//! through [`try_parse_pubky_path`], the ids of [`PubkyAppFollow`] and [`PubkyAppMute`], and
+//! the item hosts of a collection post. Tag and bookmark `uri` fields were never curve
+//! checked in v0 at all, they go through `url::Url`. A consumer that holds one of these as a
+//! real public key, to verify a signature or to fetch from a homeserver, does the curve check
+//! itself; the decode is not one.
 
 mod common;
 mod constants;

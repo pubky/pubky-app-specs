@@ -6,13 +6,16 @@
 //! verdict to make a change pass.
 //!
 //! Accept or reject is compared on every row, and an accepted object is compared on its
-//! re-serialized bytes. A rejection message is recorded but not compared, because three
-//! rows cannot match one: the public key in the path is checked by the crate's own id type
-//! (one id type, or every consumer signature forks), and that type answers a format
-//! question where 0.8.0 answered a curve question. The acceptance set is the same, the
-//! wording is not. Every other message is pinned by the copied 0.x tests themselves.
+//! re-serialized bytes. A rejection message is recorded but not compared, because a few
+//! rows cannot match: the public key in a path is checked by the crate's own id type (one
+//! id type, or every consumer signature forks) and that type asks a format question where
+//! 0.8.0 on native asked a curve question. Every other message is pinned by the copied 0.x
+//! tests themselves.
+//!
+//! The two are not the same acceptance set, and
+//! `a_z32_host_that_is_not_a_curve_point_is_accepted_here` pins where they part.
 
-use pubky_social_specs::legacy_v0::{PubkyAppObject, VALIDATION_LIMITS};
+use pubky_social_specs::legacy_v0::{try_parse_pubky_path, PubkyAppObject, VALIDATION_LIMITS};
 use pubky_social_specs::{resolve_deref, stable_id, StableId};
 use serde_json::Value;
 
@@ -173,6 +176,28 @@ fn a_legacy_media_reference_completes_through_the_file_object() {
         Some(StableId::Key(key)),
         "the completed key is the migrated object's key"
     );
+}
+
+/// The one place this module is wider than 0.8.0 on native. That build ran the host through
+/// pubky and required an Ed25519 curve point; the wasm32 build of the same release checked
+/// the encoding only, and so does the crate's single id type. Pinned here so the widening
+/// stays visible instead of being discovered by a consumer.
+#[test]
+fn a_z32_host_that_is_not_a_curve_point_is_accepted_here() {
+    // 52 z-base32 characters ending in `y`, so the trailing bits are zero and the string
+    // decodes to 32 bytes. Those bytes are not a point on the curve, and 0.8.0 on native
+    // answered "Cannot decompress Edwards point" to every one of these.
+    let host = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77yyy";
+    assert_eq!(host.len(), 52);
+
+    let uri = format!("pubky://{host}/pub/pubky.app/follows/{host}");
+    let path = try_parse_pubky_path(&uri).expect("accepted as a URI host");
+    assert_eq!(path.user_id.as_ref(), host);
+    assert_eq!(path.segments, ["follows", host]);
+
+    let object = PubkyAppObject::from_uri(&uri, br#"{"created_at":1627849723}"#)
+        .expect("accepted as a Follow id");
+    assert!(matches!(object, PubkyAppObject::Follow(_)));
 }
 
 /// Nexus reads these names. A rename here is a downstream break, not a refactor.
