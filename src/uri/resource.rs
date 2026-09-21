@@ -1,10 +1,11 @@
 use crate::models::{
-    blob::PubkySocialBlob, bookmark::PubkySocialBookmark, feed::PubkySocialFeed,
-    file::PubkySocialFile, follow::PubkySocialFollow, mute::PubkySocialMute, post::PubkySocialPost,
-    tag::PubkySocialTag, user::PubkySocialUser,
+    bookmark::PubkySocialBookmark, feed::PubkySocialFeed, file::PubkySocialFile,
+    follow::PubkySocialFollow, mute::PubkySocialMute, post::PubkySocialPost, tag::PubkySocialTag,
+    user::PubkySocialUser,
 };
 use crate::traits::{HasIdPath, HasPath};
 use crate::types::PubkyId;
+use crate::uri::parsed::strip_media_ext;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -27,10 +28,8 @@ pub enum Resource {
     Mute(PubkyId),
     Bookmark(String),
     Tag(String),
-    /// The stripped id. The media collapse re-decides the payload when extensions vary.
+    /// The RAW filename, extension included; the id is the stripped hash. Dual-root.
     File(String),
-    /// v0-shaped raw bytes under the v1 epoch; the media collapse removes it.
-    Blob(String),
     Feed(String),
     /// A path under another namespace: valid, classified, skipped by social readers.
     Foreign {
@@ -56,7 +55,6 @@ impl fmt::Display for Resource {
             Resource::Bookmark(_) => PubkySocialBookmark::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Tag(_) => PubkySocialTag::PATH_SEGMENT.trim_end_matches('/'),
             Resource::File(_) => PubkySocialFile::PATH_SEGMENT.trim_end_matches('/'),
-            Resource::Blob(_) => PubkySocialBlob::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Feed(_) => PubkySocialFeed::PATH_SEGMENT.trim_end_matches('/'),
             Resource::Foreign { .. } => "foreign",
             Resource::UnsupportedVersion { .. } => "unsupported_version",
@@ -75,8 +73,7 @@ impl Resource {
             Resource::Mute(id) => Some(id.to_string()),
             Resource::Bookmark(id) => Some(id.clone()),
             Resource::Tag(id) => Some(id.clone()),
-            Resource::File(id) => Some(id.clone()),
-            Resource::Blob(id) => Some(id.clone()),
+            Resource::File(filename) => Some(strip_media_ext(filename).to_string()),
             Resource::Feed(id) => Some(id.clone()),
             Resource::User
             | Resource::Foreign { .. }

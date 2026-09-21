@@ -8,10 +8,10 @@ import {
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
-  blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
   getValidMimeTypes,
+  mimeToExt,
 } from "./index.js";
 import { getValidationLimits, validationLimits } from "./validationLimits.js";
 
@@ -195,32 +195,17 @@ field("ID", muteMeta.id);
 field("URL", muteMeta.url);
 
 // =============================================================================
-// 4. Files & Blobs
+// 4. Media files
 // =============================================================================
-header("FILES & BLOBS");
+header("MEDIA FILES");
 
-// Blob
-console.log(`  ${c.yellow}▸ Blob (raw data)${c.reset}`);
-const blobData = Array.from({ length: 8 }, () => Math.floor(Math.random() * 256));
-const { blob, meta: blobMeta } = specsBuilder.createBlob(blobData);
-field("ID", blobMeta.id);
-field("URL", blobMeta.url);
-field("Size", `${blobData.length} bytes`);
-console.log();
-
-// File
-console.log(`  ${c.yellow}▸ File (metadata)${c.reset}`);
-const { file, meta: fileMeta } = specsBuilder.createFile(
-  "vacation-photos.pdf",
-  blobMeta.url,
-  "application/pdf",
-  1024
-);
+console.log(`  ${c.yellow}▸ File (raw bytes)${c.reset}`);
+const fileBytes = Array.from({ length: 8 }, () => Math.floor(Math.random() * 256));
+const { file, meta: fileMeta } = specsBuilder.createFile(fileBytes, "application/pdf");
 field("ID", fileMeta.id);
-field("Name", file.toJson().name);
-field("Type", file.toJson().content_type);
-field("Size", `${file.toJson().size} bytes`);
-field("Source", file.toJson().src);
+field("URL", fileMeta.url);
+field("Size", `${file.data.length} bytes`);
+field("Extension", `application/pdf maps to .${mimeToExt("application/pdf")}`);
 
 // =============================================================================
 // 5. Feeds
@@ -274,8 +259,7 @@ const uris = [
   ["Follow", followUriBuilder(OTTO, RIO)],
   ["Tag", tagUriBuilder(OTTO, tagMeta.id)],
   ["Mute", muteUriBuilder(OTTO, RIO)],
-  ["Blob", blobUriBuilder(OTTO, blobMeta.id)],
-  ["File", fileUriBuilder(OTTO, fileMeta.id)],
+  ["File", fileUriBuilder(OTTO, `${fileMeta.id}.pdf`)],
   ["Feed", feedUriBuilder(OTTO, feedMeta.id)],
 ];
 uris.forEach(([name, uri]) => {

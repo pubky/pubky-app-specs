@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -675,33 +675,11 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
   });
 
-  describe("Blob/File Pubky-social-specs", () => {
-    it("should create blob with correct properties", () => {
+  describe("File Pubky-social-specs", () => {
+    it("should create a media file with correct properties", () => {
       const length = 8
-      const randomData = Array.from({length}, () => Math.floor(Math.random() * 256));
-      const { blob, meta: blobMeta } = specsBuilder.createBlob(randomData);
-
-      // Test meta properties
-      assert.ok(blobMeta.id, "Blob should have an ID");
-      assert.ok(blobMeta.url, "Blob should have a URL");
-      const blobChunks = blobMeta.url.split("/")
-      assert.strictEqual(blobChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(blobChunks[6], "blobs", "URL should contain blobs path");
-      assert.strictEqual(blobChunks[7], blobMeta.id, "URL should contain blob ID");
-
-      // Test blob content
-      const blobJson = blob.toJson();
-      // Blob JSON is just the raw array data
-      assert.ok(Array.isArray(blobJson), "Blob should be an array");
-      assert.strictEqual(blobJson.length, length, "Blob data should have correct length");
-
-      // Create a file from the blob
-      const { file, meta: fileMeta } = specsBuilder.createFile(
-        "Pubky adventures", 
-        blobMeta.url, 
-        "application/pdf", 
-        88
-      );
+      const bytes = Array.from({length}, () => Math.floor(Math.random() * 256));
+      const { file, meta: fileMeta } = specsBuilder.createFile(bytes, "application/pdf");
 
       // Test meta properties
       assert.ok(fileMeta.id, "File should have an ID");
@@ -709,16 +687,18 @@ describe("PubkySpecs Example Objects Tests", () => {
       const fileChunks = fileMeta.url.split("/")
       assert.strictEqual(fileChunks[2], OTTO, "URL should contain user ID");
       assert.strictEqual(fileChunks[6], "files", "URL should contain files path");
-      assert.strictEqual(fileChunks[7], fileMeta.id + ".json", "URL should contain file ID");
+      assert.strictEqual(fileChunks[7], fileMeta.id + ".pdf", "the leaf is the hash and the mapped extension");
 
       // Test file content
-      const fileJson = file.toJson();
-      assert.strictEqual(fileJson.name, "Pubky adventures", "File name should match");
-      assert.strictEqual(fileJson.src, blobMeta.url, "File src should reference blob URL");
-      assert.strictEqual(fileJson.content_type, "application/pdf", "File content_type should match");
-      assert.strictEqual(fileJson.size, 88, "File size should match");
-      assert.ok(fileJson.created_at, "File should have created_at timestamp");
-      assert.ok(typeof fileJson.created_at === "number", "created_at should be a number");
+      const data = file.data;
+      assert.ok(data instanceof Uint8Array, "File data should be a Uint8Array");
+      assert.deepStrictEqual(Array.from(data), bytes, "File data should round-trip");
+    });
+
+    it("should map a declared type the table does not carry to .bin", () => {
+      const { meta } = specsBuilder.createFile([1, 2], "application/x-not-a-real-type");
+      assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
+      assert.ok(meta.url.endsWith(meta.id + ".bin"), "an unmapped type lands on .bin");
     });
   });
 
@@ -868,18 +848,14 @@ describe("PubkySpecs Example Objects Tests", () => {
     it("should create file with valid MIME type from the list", () => {
       const mimeTypes = getValidMimeTypes();
       const validMimeType = mimeTypes[0]; // Pick the first valid MIME type
-      
-      const { blob, meta: blobMeta } = specsBuilder.createBlob([1, 2]);
-      assert.strictEqual(blobMeta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
-      const { file } = specsBuilder.createFile(
-        "test-file",
-        blobMeta.url,
-        validMimeType,
-        100
+
+      const { meta } = specsBuilder.createFile([1, 2], validMimeType);
+      assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
+      assert.strictEqual(
+        meta.url.split("/").pop(),
+        meta.id + "." + mimeToExt(validMimeType),
+        "the extension comes from the declared type"
       );
-      
-      const fileJson = file.toJson();
-      assert.strictEqual(fileJson.content_type, validMimeType, "File should have valid MIME type");
     });
   });
 

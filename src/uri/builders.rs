@@ -2,8 +2,8 @@ use crate::{
     constants::{social_path, PROTOCOL},
     traits::Root,
     traits::{HasIdPath, HasPath},
-    PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow,
-    PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
+    PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
+    PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -70,18 +70,12 @@ pub fn tag_uri_builder(author_id: String, tag_id: String) -> String {
     [PROTOCOL, &author_id, &tag_path].concat()
 }
 
-/// Builds a File URI of the form "pubky://<author_id>/pub/social/v1/files/<file_id>.json\"
+/// Builds a media URI of the form "pubky://<author_id>/pub/social/v1/files/<hash>.<ext>".
+/// Takes the full filename: an extension cannot be derived from an id.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fileUriBuilder))]
-pub fn file_uri_builder(author_id: String, file_id: String) -> String {
-    let file_path = PubkySocialFile::create_path(&file_id);
+pub fn file_uri_builder(author_id: String, filename: String) -> String {
+    let file_path = PubkySocialFile::create_path(&filename);
     [PROTOCOL, &author_id, &file_path].concat()
-}
-
-/// Builds a Blob URI of the form "pubky://<author_id>/pub/social/v1/blobs/<blob_id>"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = blobUriBuilder))]
-pub fn blob_uri_builder(author_id: String, blob_id: String) -> String {
-    let blob_path = PubkySocialBlob::create_path(&blob_id);
-    [PROTOCOL, &author_id, &blob_path].concat()
 }
 
 /// Builds a Feed URI of the form "pubky://<author_id>/pub/social/v1/feeds/<feed_id>.json\"

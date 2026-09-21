@@ -179,7 +179,6 @@ result_struct!(FeedResult, feed, PubkySocialFeed);
 result_struct!(TagResult, tag, PubkySocialTag);
 result_struct!(BookmarkResult, bookmark, PubkySocialBookmark);
 result_struct!(MuteResult, mute, PubkySocialMute);
-result_struct!(BlobResult, blob, PubkySocialBlob);
 
 #[wasm_bindgen]
 impl PubkySpecsBuilder {
@@ -273,22 +272,18 @@ impl PubkySpecsBuilder {
     // 3. PubkySocialFile
     // -----------------------------------------------------------------------------
 
+    /// Media is content addressed: `meta.id` is the hash of the bytes, and `meta.path` carries
+    /// the extension the declared type maps to. The declared type is not stored.
     #[wasm_bindgen(js_name = createFile)]
-    pub fn create_file(
-        &self,
-        name: String,
-        src: String,
-        content_type: String,
-        size: usize,
-    ) -> Result<FileResult, String> {
-        let file = PubkySocialFile::new(name, src, content_type, size);
-        let file_id = file.create_id();
-        file.validate(Some(&file_id), &PUB_CTX)?;
+    pub fn create_file(&self, bytes: JsValue, declared_type: String) -> Result<FileResult, String> {
+        let bytes: Vec<u8> = from_value(bytes).map_err(|e| e.to_string())?;
+        let created = PubkySocialFile::create_file(bytes, &declared_type, PubkySocialFile::ROOT)?;
+        let meta = Meta::from_object(Some(&created.id), self.pubky_id.clone(), created.path);
 
-        let path = PubkySocialFile::create_path(&file_id);
-        let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
-
-        Ok(FileResult { file, meta })
+        Ok(FileResult {
+            file: created.file,
+            meta,
+        })
     }
 
     // -----------------------------------------------------------------------------
@@ -485,28 +480,6 @@ impl PubkySpecsBuilder {
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
-    }
-
-    // -----------------------------------------------------------------------------
-    // 10. PubkySocialBlob
-    // -----------------------------------------------------------------------------
-
-    #[wasm_bindgen(js_name = createBlob)]
-    pub fn create_blob(&self, blob_data: JsValue) -> Result<BlobResult, String> {
-        // Convert from JsValue (Uint8Array in JS) -> Vec<u8> in Rust
-        let data_vec: Vec<u8> = from_value(blob_data).map_err(|e| e.to_string())?;
-
-        // Create the PubkySocialBlob
-        let blob = PubkySocialBlob(data_vec);
-
-        // Generate ID and path
-        let id = blob.create_id();
-        blob.validate(Some(&id), &PUB_CTX)?;
-
-        let path = PubkySocialBlob::create_path(&id);
-        let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
-
-        Ok(BlobResult { blob, meta })
     }
 }
 
