@@ -389,11 +389,14 @@ impl PubkySocialFeed {
         }
     }
 
-    /// The id of the config, for a writer. A config carrying an unknown content kind has
-    /// none: two future kinds render as one segment and would collide, and a reader skips the
-    /// id check for exactly those feeds, so nothing would notice. Such a feed keeps the id it
-    /// was read under, which is what a name-only edit needs.
+    /// The id of the config, for a writer. Only a valid, fully spellable config has one.
+    /// Validation first, because a config the rules reject can render a string another config
+    /// also renders (`tags: Some([])` and `tags: None` are the same six segments). Then the
+    /// content kind: two future kinds render as one segment and would collide, and a reader
+    /// skips the id check for exactly those feeds, so nothing would notice. Such a feed keeps
+    /// the id it was read under, which is what a name-only edit needs.
     pub fn derive_id(&self) -> Result<String, String> {
+        self.validate(None, &ValidationCtx { root: Self::ROOT })?;
         if !self.feed.content.as_ref().is_none_or(|c| c.is_known()) {
             return Err("Validation Error: a feed carrying an unknown content kind has no derivable id; keep the id it was read under".into());
         }
@@ -670,6 +673,8 @@ mod tests {
             None,
         ));
         assert_eq!(dash.get_id_data(), "all:list:popularity::-:");
+        // blake3("all:list:popularity::-:")[..16] in Crockford
+        assert_eq!(dash.create_id(), "DM0YXJ4P6V85Y4BTGHF8Q3PW20");
         assert_ne!(dash.create_id(), legacy.create_id());
         assert!(validate(&dash).is_ok());
     }
@@ -908,11 +913,15 @@ mod tests {
         let f = PubkySocialFeed::new(config(), "\u{3000}Rust Bitcoiners ".into(), "rss".into());
         assert_eq!(f.name, "Rust Bitcoiners");
         assert!(validate(&f).is_ok());
+        // one character is a name
+        let f = PubkySocialFeed::new(config(), "x".into(), "rss".into());
+        assert!(validate(&f).is_ok());
         // blank is blank however it is spelled
         let f = PubkySocialFeed::new(config(), "   ".into(), "rss".into());
         assert!(validate(&f).unwrap_err().contains("cannot be empty"));
         // the cap counts the stored value
         let f = PubkySocialFeed::new(config(), "\u{1F980}".repeat(max), "rss".into());
+        assert_eq!(code_point_len(&f.name), max);
         assert!(validate(&f).is_ok());
         let f = PubkySocialFeed::new(config(), "\u{1F980}".repeat(max + 1), "rss".into());
         let e = validate(&f).unwrap_err();
@@ -1024,6 +1033,14 @@ mod tests {
             e.starts_with("Validation Error: ") && e.contains("no derivable id"),
             "{e}"
         );
+
+        // A config the rules reject has no id either: Some([]) renders the same six segments
+        // as None, so handing back its hash would name another feed's file.
+        let empty = feed(stored(Some(vec![]), None, R::All, L::List, S::Recent, None));
+        let no_filter = feed(stored(None, None, R::All, L::List, S::Recent, None));
+        assert_eq!(empty.get_id_data(), no_filter.get_id_data());
+        let e = empty.derive_id().unwrap_err();
+        assert!(e.contains("cannot be an empty list"), "{e}");
     }
 
     #[test]

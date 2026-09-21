@@ -47,11 +47,7 @@ pub fn mime_to_ext_table() -> Result<JsValue, String> {
 /// bytes at `public` to publish it, DELETE `public` to unpublish.
 #[wasm_bindgen(js_name = feedPaths)]
 pub fn feed_paths_js(id: String) -> Result<JsValue, String> {
-    // Plain object, not a JS Map, so callers can read `.private` and `.public`
-    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-    crate::feed_paths(&id)
-        .serialize(&serializer)
-        .map_err(|e| e.to_string())
+    to_value(&crate::feed_paths(&id)).map_err(|e| e.to_string())
 }
 
 #[wasm_bindgen]
@@ -270,13 +266,8 @@ impl PubkySpecsBuilder {
         )?;
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
+        // derive_id validates the feed, so there is nothing left to check the id against
         let feed_id = feed.derive_id()?;
-        feed.validate(
-            Some(&feed_id),
-            &ValidationCtx {
-                root: PubkySocialFeed::ROOT,
-            },
-        )?;
 
         let path = PubkySocialFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);
