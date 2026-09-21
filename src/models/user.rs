@@ -48,7 +48,6 @@ impl Default for PubkySocialUser {
             status: None,
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -122,7 +121,10 @@ impl PubkySocialUserLink {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUser {
-    /// Creates a new `PubkySocialUser` instance and sanitizes it.
+    /// Trims the display text it is given. Trimming happens here and nowhere else, so a stored
+    /// profile reads back byte for byte and an SDK round trip cannot change what is on the
+    /// homeserver. `image` is a reference and is kept exactly as written; each link trims its
+    /// own title in `PubkySocialUserLink::new`.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
@@ -132,14 +134,13 @@ impl PubkySocialUser {
         status: Option<String>,
     ) -> Self {
         Self {
-            name,
-            bio,
+            name: frozen_trim(&name).to_string(),
+            bio: bio.map(|b| frozen_trim(&b).to_string()),
             image,
             links,
-            status,
+            status: status.map(|s| frozen_trim(&s).to_string()),
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -153,32 +154,6 @@ impl HasPath for PubkySocialUser {
 }
 
 impl Validatable for PubkySocialUser {
-    fn sanitize(self) -> Self {
-        let name = frozen_trim(&self.name).to_string();
-        let bio = self.bio.map(|b| frozen_trim(&b).to_string());
-
-        // The image is a reference: stored as written, so validation can hold it to its
-        // canonical form instead of a rewrite hiding the difference.
-        let image = self.image;
-
-        // Sanitize status: trim whitespace only
-        let status = self.status.map(|s| frozen_trim(&s).to_string());
-
-        // Sanitize links: sanitize each link, validation handles format
-        let links = self
-            .links
-            .map(|links_vec| links_vec.into_iter().map(|link| link.sanitize()).collect());
-
-        PubkySocialUser {
-            name,
-            bio,
-            image,
-            links,
-            status,
-            extra: self.extra,
-        }
-    }
-
     fn validate_fields(
         &self,
         _id: Option<&str>,
@@ -189,7 +164,11 @@ impl Validatable for PubkySocialUser {
         let ctx = &ValidationCtx { root: Self::ROOT };
         check_extra(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
-        // Validate name length
+        // Padding is display text, not identity, so it is counted rather than removed; a name
+        // that is only whitespace is still no name
+        if frozen_trim(&self.name).is_empty() {
+            return Err("Validation Error: name must not be blank".into());
+        }
         let name_length = code_point_len(&self.name);
         if !(VALIDATION_LIMITS.user_name_min_length..=VALIDATION_LIMITS.user_name_max_length)
             .contains(&name_length)
@@ -240,15 +219,15 @@ impl Validatable for PubkySocialUser {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUserLink {
-    /// Creates a new `PubkySocialUserLink` instance and sanitizes it.
+    /// Trims the title, for the reason `PubkySocialUser::new` gives; the url is a reference and
+    /// is kept exactly as written.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
         Self {
-            title,
+            title: frozen_trim(&title).to_string(),
             url,
             extra: Default::default(),
         }
-        .sanitize()
     }
 }
 
@@ -286,15 +265,6 @@ impl PubkySocialUserLink {
 }
 
 impl Validatable for PubkySocialUserLink {
-    fn sanitize(self) -> Self {
-        PubkySocialUserLink {
-            title: frozen_trim(&self.title).to_string(),
-            // A reference, stored as written; see the image note above.
-            url: self.url,
-            extra: self.extra,
-        }
-    }
-
     fn validate_fields(
         &self,
         _id: Option<&str>,
@@ -398,36 +368,34 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize() {
+    fn test_builders_trim_text_and_keep_references_as_written() {
         let user = PubkySocialUser::new(
             "   Alice   ".to_string(),
             Some("  Maximalist and developer.  ".to_string()),
             Some("  https://example.com/image.png  ".to_string()),
             Some(vec![
-                PubkySocialUserLink {
-                    title: " GitHub ".to_string(),
-                    url: " https://github.com/alice ".to_string(),
-                    extra: Default::default(),
-                },
-                PubkySocialUserLink {
-                    title: "Website".to_string(),
-                    url: "  https://example.com  ".to_string(),
-                    extra: Default::default(),
-                },
+                PubkySocialUserLink::new(
+                    " GitHub ".to_string(),
+                    " https://github.com/alice ".to_string(),
+                ),
+                PubkySocialUserLink::new(
+                    "Website".to_string(),
+                    "  https://example.com  ".to_string(),
+                ),
             ]),
             Some("  Exploring the decentralized web.  ".to_string()),
         );
 
         assert_eq!(user.name, "Alice");
         assert_eq!(user.bio.as_deref(), Some("Maximalist and developer."));
+        assert_eq!(
+            user.status.as_deref(),
+            Some("Exploring the decentralized web.")
+        );
         // The padded image survives the builder and is rejected, never repaired
         assert_eq!(
             user.image.as_deref(),
             Some("  https://example.com/image.png  ")
-        );
-        assert_eq!(
-            user.status.as_deref(),
-            Some("Exploring the decentralized web.")
         );
         let e = user.validate(None, &PUB_CTX).unwrap_err();
         assert!(e.contains("image") && e.contains("canonical"), "{e}");
@@ -440,6 +408,42 @@ mod tests {
         assert_eq!(links[1].url, "  https://example.com  ");
         let e = links[0].validate(None, &PUB_CTX).unwrap_err();
         assert!(e.contains("url") && e.contains("canonical"), "{e}");
+    }
+
+    #[test]
+    fn test_ingest_reads_text_back_as_stored() {
+        let json = r#"{"name":"  Alice  ","bio":"  b  ","links":[{"title":"  x  ","url":"https://x.com/a"}],"status":"  s  "}"#;
+        let user =
+            <PubkySocialUser as Validatable>::try_from(json.as_bytes(), "", &PUB_CTX).unwrap();
+        assert_eq!(user.name, "  Alice  ");
+        assert_eq!(user.bio.as_deref(), Some("  b  "));
+        assert_eq!(user.status.as_deref(), Some("  s  "));
+        assert_eq!(user.links.as_ref().unwrap()[0].title, "  x  ");
+        // The same title through the builder is trimmed
+        assert_eq!(
+            PubkySocialUserLink::new("  x  ".to_string(), "https://x.com/a".to_string()).title,
+            "x"
+        );
+    }
+
+    #[test]
+    fn test_blank_name_is_no_name() {
+        let mut user = PubkySocialUser {
+            name: "   ".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            user.validate(None, &PUB_CTX).unwrap_err(),
+            "Validation Error: name must not be blank"
+        );
+        // Padded but not blank: counted as stored, so the cap sees the padding
+        user.name = format!(" {} ", "a".repeat(VALIDATION_LIMITS.user_name_max_length));
+        assert!(user
+            .validate(None, &PUB_CTX)
+            .unwrap_err()
+            .contains("Invalid name length"));
+        user.name = "  Alice  ".to_string();
+        assert!(user.validate(None, &PUB_CTX).is_ok());
     }
 
     #[test]
@@ -568,39 +572,31 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize_preserves_invalid_urls() {
-        // Sanitize should preserve invalid URLs (just trim), validation rejects them
-        let user = PubkySocialUser {
-            name: "Alice".to_string(),
-            bio: None,
-            image: Some("  invalid_image_url  ".to_string()),
-            links: Some(vec![PubkySocialUserLink {
-                title: "Test".to_string(),
-                url: "  invalid_link_url  ".to_string(),
-                extra: Default::default(),
-            }]),
-            status: None,
-            extra: Default::default(),
-        };
+    fn test_builder_preserves_invalid_urls() {
+        let user = PubkySocialUser::new(
+            "Alice".to_string(),
+            None,
+            Some("  invalid_image_url  ".to_string()),
+            Some(vec![PubkySocialUserLink::new(
+                "Test".to_string(),
+                "  invalid_link_url  ".to_string(),
+            )]),
+            None,
+        );
 
-        let sanitized = user.sanitize();
-
-        // Image is stored exactly as written
-        assert_eq!(sanitized.image.as_deref(), Some("  invalid_image_url  "));
-
-        // So is the link url
-        let links = sanitized.links.as_ref().unwrap();
+        // An unusable reference is kept and rejected, never quietly repaired
+        assert_eq!(user.image.as_deref(), Some("  invalid_image_url  "));
+        let links = user.links.as_ref().unwrap();
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].url, "  invalid_link_url  ");
 
-        // Validation should reject
-        let result = sanitized.validate(None, &PUB_CTX);
+        let result = user.validate(None, &PUB_CTX);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_sanitize_preserves_length() {
-        // Test that sanitization does NOT truncate, even if over limits
+    fn test_builder_preserves_length() {
+        // The builder trims, it never truncates, even over the limits
         let long_bio = "a".repeat(VALIDATION_LIMITS.user_bio_max_length + 10);
         let long_status = "b".repeat(VALIDATION_LIMITS.user_status_max_length + 10);
         let long_image = format!(
@@ -688,17 +684,12 @@ mod tests {
     fn test_validate_link_length_errors() {
         // Test link title too long
         let long_title = "a".repeat(VALIDATION_LIMITS.user_link_title_max_length + 1);
-        let link = PubkySocialUserLink {
-            title: long_title.clone(),
-            url: "https://example.com".to_string(),
-            extra: Default::default(),
-        };
-        let sanitized = link.sanitize();
+        let link = PubkySocialUserLink::new(long_title, "https://example.com".to_string());
         assert_eq!(
-            sanitized.title.len(),
+            link.title.len(),
             VALIDATION_LIMITS.user_link_title_max_length + 1
         );
-        let result = sanitized.validate(None, &PUB_CTX);
+        let result = link.validate(None, &PUB_CTX);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("title must be at most"));
 

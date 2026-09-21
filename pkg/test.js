@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -71,6 +71,42 @@ describe("PubkySpecs Example Objects Tests", () => {
         userJson.links[0].url,
         "https://example.com/a",
         "Link url should be stored verbatim"
+      );
+    });
+
+    it("trims name, bio, status and link titles in the builder", () => {
+      const { user } = specsBuilder.createUser(
+        "  Alice Smith  ",
+        "  Software Developer  ",
+        null,
+        [{ title: "  site  ", url: "https://example.com/a" }],
+        "  active  "
+      );
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.name, "Alice Smith", "Name should be trimmed");
+      assert.strictEqual(userJson.bio, "Software Developer", "Bio should be trimmed");
+      assert.strictEqual(userJson.status, "active", "Status should be trimmed");
+      assert.strictEqual(userJson.links[0].title, "site", "Link title should be trimmed");
+    });
+
+    it("reads a stored profile back as written", () => {
+      const stored = {
+        name: "  Alice Smith  ",
+        bio: "  Software Developer  ",
+        links: [{ title: "  site  ", url: "https://example.com/a" }],
+        status: "  active  ",
+      };
+      const user = PubkySocialUser.fromJson(stored);
+
+      const userJson = user.toJson();
+      assert.strictEqual(userJson.name, stored.name, "Name should keep its padding");
+      assert.strictEqual(userJson.bio, stored.bio, "Bio should keep its padding");
+      assert.strictEqual(userJson.status, stored.status, "Status should keep its padding");
+      assert.strictEqual(
+        userJson.links[0].title,
+        stored.links[0].title,
+        "Link title should keep its padding"
       );
     });
 
