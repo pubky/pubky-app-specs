@@ -177,6 +177,9 @@ impl PubkySpecsBuilder {
     // // 1. PubkySocialUser
     // // -----------------------------------------------------------------------------
 
+    /// Creates the profile. `image` and each link `url` are stored as written and must already
+    /// be canonical (`pubky://...` or `https://...`, no padding); name, bio, status and link
+    /// titles are trimmed.
     #[wasm_bindgen(js_name = createUser)]
     pub fn create_user(
         &self,

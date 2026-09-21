@@ -139,7 +139,7 @@ describe("PubkySpecs Example Objects Tests", () => {
           const msg = err instanceof Error ? err.message : String(err);
           assert.ok(
             msg ===
-              `Validation Error: url must be a canonical web URI of at most 300 code points: pubky://${OTTO}/pub/social/v1/profile.json`,
+              `Validation Error: links[0].url must be a canonical web URI of at most 300 code points: pubky://${OTTO}/pub/social/v1/profile.json`,
             `Expected link url error, got: "${msg}"`
           );
           return true;

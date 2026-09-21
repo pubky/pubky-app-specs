@@ -20,8 +20,9 @@ fn json<T: Serialize>(v: &T) -> String {
     serde_json::to_string(v).unwrap()
 }
 
-/// The link url is spelled with its trailing slash: references are stored verbatim, so the
-/// fixture writes the exact bytes it pins.
+/// The link url is spelled with its trailing slash: the pinned bytes date from when a URL
+/// normalizer added it on the way in. References are stored verbatim now, so the fixture
+/// writes the exact bytes it pins and the pin itself never moved.
 fn user() -> PubkySocialUser {
     PubkySocialUser::new(
         "Alice".into(),

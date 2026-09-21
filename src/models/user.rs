@@ -182,8 +182,11 @@ impl Validatable for PubkySocialUser {
     fn validate_fields(
         &self,
         _id: Option<&str>,
-        ctx: &ValidationCtx,
+        _ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
+        // The profile has one root, so the destination is the model's, whatever ctx a caller
+        // hands in: a private image never passes the root rule here
+        let ctx = &ValidationCtx { root: Self::ROOT };
         check_extra(&self.extra, &["name", "bio", "image", "links", "status"])?;
 
         // Validate name length
@@ -219,8 +222,8 @@ impl Validatable for PubkySocialUser {
                 return Err("Validation Error: Too many links".into());
             }
 
-            for link in links {
-                link.validate(None, ctx)?;
+            for (index, link) in links.iter().enumerate() {
+                link.validate_at(Some(index), ctx)?;
             }
         }
 
@@ -249,6 +252,39 @@ impl PubkySocialUserLink {
     }
 }
 
+impl PubkySocialUserLink {
+    /// The rules, with each field named as the caller sees it: `links[2].url` inside a
+    /// profile, the bare field name when a link is validated on its own.
+    fn validate_at(&self, index: Option<usize>, ctx: &ValidationCtx) -> Result<(), String> {
+        let field = |name: &str| match index {
+            Some(i) => format!("links[{i}].{name}"),
+            None => name.to_string(),
+        };
+        check_extra(&self.extra, &["title", "url"])?;
+        if frozen_trim(&self.title).is_empty() {
+            return Err(format!(
+                "Validation Error: {} must not be blank",
+                field("title")
+            ));
+        }
+        if code_point_len(&self.title) > VALIDATION_LIMITS.user_link_title_max_length {
+            return Err(format!(
+                "Validation Error: {} must be at most {} code points",
+                field("title"),
+                VALIDATION_LIMITS.user_link_title_max_length
+            ));
+        }
+        checked(
+            &field("url"),
+            &self.url,
+            AllowedSchemes::HttpHttps,
+            VALIDATION_LIMITS.user_link_url_max_length,
+            ctx,
+            None,
+        )
+    }
+}
+
 impl Validatable for PubkySocialUserLink {
     fn sanitize(self) -> Self {
         PubkySocialUserLink {
@@ -264,24 +300,7 @@ impl Validatable for PubkySocialUserLink {
         _id: Option<&str>,
         ctx: &ValidationCtx,
     ) -> Result<(), ValidationError> {
-        check_extra(&self.extra, &["title", "url"])?;
-        if frozen_trim(&self.title).is_empty() {
-            return Err("Validation Error: Link title cannot be empty".into());
-        }
-        if code_point_len(&self.title) > VALIDATION_LIMITS.user_link_title_max_length {
-            return Err("Validation Error: Link title exceeds maximum length".into());
-        }
-
-        checked(
-            "url",
-            &self.url,
-            AllowedSchemes::HttpHttps,
-            VALIDATION_LIMITS.user_link_url_max_length,
-            ctx,
-            None,
-        )?;
-
-        Ok(())
+        self.validate_at(None, ctx)
     }
 }
 
@@ -524,7 +543,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            "Validation Error: url must be a canonical web URI of at most 300 code points: invalid_url"
+            "Validation Error: links[0].url must be a canonical web URI of at most 300 code points: invalid_url"
         );
     }
 
@@ -681,7 +700,7 @@ mod tests {
         );
         let result = sanitized.validate(None, &PUB_CTX);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("exceeds maximum length"));
+        assert!(result.unwrap_err().contains("title must be at most"));
 
         // The url cap is measured on the stored form, at the gate
         let max = VALIDATION_LIMITS.user_link_url_max_length;
@@ -813,7 +832,7 @@ mod tests {
     }
 
     #[test]
-    fn test_image_cap_is_measured_on_the_canonical_form() {
+    fn test_image_cap_is_300_code_points() {
         let max = VALIDATION_LIMITS.image_url_max_length;
         let url = |len: usize| format!("https://x.com/{}", "a".repeat(len - 14));
         assert_eq!(code_point_len(&url(max)), max);
@@ -835,6 +854,47 @@ mod tests {
         .validate(None, &PUB_CTX)
         .unwrap_err();
         assert!(e.contains("image") && e.contains("public object"), "{e}");
+    }
+
+    #[test]
+    fn test_profile_root_is_the_models_not_the_callers() {
+        // A caller may hand in any ctx; the profile lives under pub, so a private image
+        // fails the root rule regardless
+        let user = with_image(&format!(
+            "pubky://{HOST}/priv/social/v1/files/0032SSN7Q4EVG"
+        ));
+        let blob = serde_json::to_vec(&user).unwrap();
+        let priv_ctx = ValidationCtx {
+            root: crate::traits::Root::Priv,
+        };
+        let e = <PubkySocialUser as Validatable>::try_from(&blob, "", &priv_ctx).unwrap_err();
+        assert!(e.contains("image") && e.contains("public object"), "{e}");
+    }
+
+    #[test]
+    fn test_link_errors_name_the_index() {
+        let mut user = PubkySocialUser {
+            name: "Alice".into(),
+            links: Some(vec![
+                PubkySocialUserLink::new("ok".into(), "https://x.com/a".into()),
+                PubkySocialUserLink::new("bad".into(), format!("pubky://{HOST}")),
+                PubkySocialUserLink::new(" ".into(), "https://x.com/b".into()),
+            ]),
+            ..Default::default()
+        };
+        let e = user.validate(None, &PUB_CTX).unwrap_err();
+        assert!(
+            e.starts_with("Validation Error: links[1].url must be"),
+            "{e}"
+        );
+        user.links.as_mut().unwrap().remove(1);
+        let e = user.validate(None, &PUB_CTX).unwrap_err();
+        assert_eq!(e, "Validation Error: links[1].title must not be blank");
+        // standalone, the bare field names
+        let e = PubkySocialUserLink::new(" ".into(), "https://x.com".into())
+            .validate(None, &PUB_CTX)
+            .unwrap_err();
+        assert_eq!(e, "Validation Error: title must not be blank");
     }
 
     #[test]
