@@ -238,5 +238,15 @@
     "blob": "{}",
     "note": "host outside the z-base32 alphabet",
     "uri": "pubky://0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"created_at\":1627849724}",
+    "note": "mute, a muted id that is not a public key",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/notapubkyid"
+  },
+  {
+    "blob": "",
+    "note": "mute, an empty body",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
   }
 ]

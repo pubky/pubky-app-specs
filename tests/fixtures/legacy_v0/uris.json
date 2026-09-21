@@ -1,0 +1,50 @@
+[
+  {
+    "note": "a universal tag under a foreign app",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123"
+  },
+  {
+    "note": "a universal tag under a foreign app with a .app suffix",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/eventky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "note": "a pubky.app tag through the same entry point",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "note": "a pubky.app post through the same entry point",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "note": "a foreign app path that is not a tag",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/posts/0032SSN7Q4EVG"
+  },
+  {
+    "note": "a foreign tag path with an extra segment",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123/extra"
+  },
+  {
+    "note": "a foreign tag path with an empty tag id",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/"
+  },
+  {
+    "note": "a foreign app path with no resource at all",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky"
+  },
+  {
+    "note": "a pubky.app resource this version does not know",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/widgets/ABC"
+  },
+  {
+    "note": "a string that is not a URL",
+    "uri": "not a url"
+  },
+  {
+    "note": "a host that is not a public key",
+    "uri": "pubky://nope/pub/mapky/tags/ABC123"
+  },
+  {
+    "note": "an https scheme",
+    "uri": "https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123"
+  }
+]

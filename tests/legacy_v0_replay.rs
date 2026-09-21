@@ -1,9 +1,12 @@
 //! The frozen 0.x reader answers exactly what the 0.8.0 crate answered.
 //!
-//! `corpus.json` is authored here; `verdicts.json` was produced by running that corpus
-//! through the 0.8.0 crate itself, so it is evidence rather than an expectation someone
-//! typed. Regenerating it means building 0.8.0 again, which is the point: nobody edits a
-//! verdict to make a change pass.
+//! `corpus.json` and `uris.json` are authored here; `verdicts.json` and `uri_verdicts.json`
+//! were produced by running them through the 0.8.0 crate itself, so they are evidence rather
+//! than an expectation someone typed. Regenerating them means building 0.8.0 again, which is
+//! the point: nobody edits a verdict to make a change pass.
+//!
+//! Two entry points, because an indexer uses two: `PubkyAppObject::from_uri` for a stored
+//! object and `ExtendedParsedUri` for a tag target, which may live under another app.
 //!
 //! Accept or reject is compared on every row, and an accepted object is compared on its
 //! re-serialized bytes. A rejection message is recorded but not compared, because a few
@@ -15,7 +18,9 @@
 //! The two are not the same acceptance set, and
 //! `a_z32_host_that_is_not_a_curve_point_is_accepted_here` pins where they part.
 
-use pubky_social_specs::legacy_v0::{try_parse_pubky_path, PubkyAppObject, VALIDATION_LIMITS};
+use pubky_social_specs::legacy_v0::{
+    try_parse_pubky_path, ExtendedParsedUri, PubkyAppObject, VALIDATION_LIMITS,
+};
 use pubky_social_specs::{resolve_deref, stable_id, StableId};
 use serde_json::Value;
 
@@ -46,7 +51,7 @@ fn the_corpus_replays_to_the_v0_verdicts() {
     let corpus = fixture("corpus.json");
     let verdicts = fixture("verdicts.json");
     assert_eq!(corpus.len(), verdicts.len(), "corpus and verdicts disagree");
-    assert!(corpus.len() >= 48, "the corpus lost rows");
+    assert!(corpus.len() >= 50, "the corpus lost rows");
 
     let (mut accepted, mut rejected) = (0, 0);
     for (input, verdict) in corpus.iter().zip(&verdicts) {
@@ -80,7 +85,61 @@ fn the_corpus_replays_to_the_v0_verdicts() {
             }
         }
     }
-    assert_eq!((accepted, rejected), (22, 26), "the corpus balance moved");
+    assert_eq!((accepted, rejected), (22, 28), "the corpus balance moved");
+}
+
+/// The second entry point. `ExtendedParsedUri` is what an indexer puts a tag target through,
+/// so it reads paths `PubkyAppObject::from_uri` never sees: another app's tag, and whatever
+/// else arrives at that boundary. Same evidence rule as the corpus, and here the accepted
+/// side carries the three answers a caller actually reads.
+#[test]
+fn the_uri_corpus_replays_to_the_v0_verdicts() {
+    let corpus = fixture("uris.json");
+    let verdicts = fixture("uri_verdicts.json");
+    assert_eq!(corpus.len(), verdicts.len(), "corpus and verdicts disagree");
+    assert!(corpus.len() >= 12, "the uri corpus lost rows");
+
+    let (mut accepted, mut rejected) = (0, 0);
+    for (input, verdict) in corpus.iter().zip(&verdicts) {
+        let note = input["note"].as_str().unwrap();
+        assert_eq!(input["uri"], verdict["uri"], "{note}");
+        let uri = input["uri"].as_str().unwrap();
+
+        match ExtendedParsedUri::try_from(uri) {
+            Ok(parsed) => {
+                accepted += 1;
+                assert!(
+                    verdict["err"].is_null(),
+                    "{note}: 0.8.0 rejected this with {}",
+                    verdict["err"]
+                );
+                let (uri_str, uri_str_err) = match parsed.try_to_uri_str() {
+                    Ok(s) => (Value::String(s), Value::Null),
+                    Err(e) => (Value::Null, Value::String(e)),
+                };
+                let ours = serde_json::json!({
+                    "app": parsed.app(),
+                    "tag_id": parsed.tag_id(),
+                    "uri_str": uri_str,
+                    "uri_str_err": uri_str_err,
+                });
+                assert_eq!(
+                    serde_json::to_string(&ours).unwrap(),
+                    serde_json::to_string(&verdict["ok"]).unwrap(),
+                    "{note}"
+                );
+            }
+            Err(e) => {
+                rejected += 1;
+                assert!(
+                    verdict["ok"].is_null(),
+                    "{note}: 0.8.0 accepted this, we answered {e}"
+                );
+                assert!(!e.is_empty(), "{note}: a rejection with no reason");
+            }
+        }
+    }
+    assert_eq!((accepted, rejected), (5, 7), "the uri corpus balance moved");
 }
 
 /// One object, its v0 path and its v1 path, keying onto one row. These are the resources

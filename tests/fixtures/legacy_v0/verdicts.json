@@ -177,7 +177,7 @@
   },
   {
     "blob": "{\"content\":\"{\\\"name\\\":\\\"My favorites\\\",\\\"items\\\":[]}\",\"kind\":\"collection\",\"parent\":null,\"embed\":null,\"attachments\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\"]}",
-    "err": "Validation Error: Collection posts must not use post.attachments — items belong in the content envelope",
+    "err": "Validation Error: Collection posts must not use post.attachments \u2014 items belong in the content envelope",
     "note": "post, collection putting its items in post.attachments",
     "ok": null,
     "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
@@ -538,5 +538,19 @@
     "note": "host outside the z-base32 alphabet",
     "ok": null,
     "uri": "pubky://0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"created_at\":1627849724}",
+    "err": "Validation Error: the string is not 52 utf chars",
+    "note": "mute, a muted id that is not a public key",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/notapubkyid"
+  },
+  {
+    "blob": "",
+    "err": "EOF while parsing a value at line 1 column 0",
+    "note": "mute, an empty body",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
   }
 ]

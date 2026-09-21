@@ -1,0 +1,99 @@
+[
+  {
+    "err": null,
+    "note": "a universal tag under a foreign app",
+    "ok": {
+      "app": "mapky",
+      "tag_id": "ABC123",
+      "uri_str": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123",
+      "uri_str_err": null
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123"
+  },
+  {
+    "err": null,
+    "note": "a universal tag under a foreign app with a .app suffix",
+    "ok": {
+      "app": "eventky.app",
+      "tag_id": "86805FC1CSFZD4W6HZ09S24QWG",
+      "uri_str": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/eventky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+      "uri_str_err": null
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/eventky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "err": null,
+    "note": "a pubky.app tag through the same entry point",
+    "ok": {
+      "app": "pubky.app",
+      "tag_id": null,
+      "uri_str": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+      "uri_str_err": null
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "err": null,
+    "note": "a pubky.app post through the same entry point",
+    "ok": {
+      "app": "pubky.app",
+      "tag_id": null,
+      "uri_str": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+      "uri_str_err": null
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "err": "URI is not a recognized universal tag path: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/posts/0032SSN7Q4EVG",
+    "note": "a foreign app path that is not a tag",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/posts/0032SSN7Q4EVG"
+  },
+  {
+    "err": "URI is not a recognized universal tag path: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123/extra",
+    "note": "a foreign tag path with an extra segment",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123/extra"
+  },
+  {
+    "err": "URI is not a recognized universal tag path: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/",
+    "note": "a foreign tag path with an empty tag id",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/"
+  },
+  {
+    "err": "URI is not a recognized universal tag path: pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky",
+    "note": "a foreign app path with no resource at all",
+    "ok": null,
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky"
+  },
+  {
+    "err": null,
+    "note": "a pubky.app resource this version does not know",
+    "ok": {
+      "app": "pubky.app",
+      "tag_id": null,
+      "uri_str": null,
+      "uri_str_err": "Cannot convert Unknown resource to URI"
+    },
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/widgets/ABC"
+  },
+  {
+    "err": "Invalid URL: relative URL without a base",
+    "note": "a string that is not a URL",
+    "ok": null,
+    "uri": "not a url"
+  },
+  {
+    "err": "Validation Error: the string is not 52 utf chars",
+    "note": "a host that is not a public key",
+    "ok": null,
+    "uri": "pubky://nope/pub/mapky/tags/ABC123"
+  },
+  {
+    "err": "Invalid URI, must start with 'pubky://': https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123",
+    "note": "an https scheme",
+    "ok": null,
+    "uri": "https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/mapky/tags/ABC123"
+  }
+]
