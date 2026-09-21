@@ -90,6 +90,20 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(userJson.links[0].title, "site", "Link title should be trimmed");
     });
 
+    it("drops a blank bio or status instead of storing an empty one", () => {
+      const { user } = specsBuilder.createUser("Alice Smith", "   ", null, null, "  ");
+
+      const userJson = user.toJson();
+      assert.ok(
+        userJson.bio === null || userJson.bio === undefined,
+        `Blank bio should be absent, got: ${JSON.stringify(userJson.bio)}`
+      );
+      assert.ok(
+        userJson.status === null || userJson.status === undefined,
+        `Blank status should be absent, got: ${JSON.stringify(userJson.status)}`
+      );
+    });
+
     it("reads a stored profile back as written", () => {
       const stored = {
         name: "  Alice Smith  ",

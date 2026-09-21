@@ -179,7 +179,9 @@ impl PubkySpecsBuilder {
 
     /// Creates the profile. `image` and each link `url` are stored as written and must already
     /// be canonical (`pubky://...` or `https://...`, no padding); name, bio, status and link
-    /// titles are trimmed here, by the builder, and a profile read back keeps what was stored.
+    /// titles are trimmed by the builder, and a profile read back keeps what was stored. This
+    /// builds a fresh profile: to rewrite one and keep members this version does not know, go
+    /// through `fromJson`, edit, `toJson`.
     #[wasm_bindgen(js_name = createUser)]
     pub fn create_user(
         &self,
@@ -196,17 +198,6 @@ impl PubkySpecsBuilder {
         } else {
             from_value(links).map_err(|e| e.to_string())?
         };
-        // Deserializing skips the link builder, so run each one through it. Members the caller
-        // read out of a stored profile ride along, this is also the rewrite path.
-        let links_vec = links_vec.map(|links| {
-            links
-                .into_iter()
-                .map(|link| PubkySocialUserLink {
-                    extra: link.extra,
-                    ..PubkySocialUserLink::new(link.title, link.url)
-                })
-                .collect()
-        });
 
         // 2) Build user domain object
         let user = PubkySocialUser::new(name, bio, image, links_vec, status);

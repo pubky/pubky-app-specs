@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/pubky-social-specs)](https://www.npmjs.com/package/pubky-social-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Rust types, sanitization, and validation for Pubky social data models. Use this crate to build JSON that matches what [Pubky indexers](https://github.com/pubky/pubky-nexus) expect.
+Rust types, builders, and validation for Pubky social data models. The builders trim text and fold tokens; reading an object back never rewrites it. Use this crate to build JSON that matches what [Pubky indexers](https://github.com/pubky/pubky-nexus) expect.
 
 ## Installation
 
@@ -39,7 +39,7 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 
 ## Why use this crate
 
-- **Validation consistency:** same sanitization and validation rules as Pubky indexers.
+- **Validation consistency:** same validation rules as Pubky indexers, and the same canonical forms on the wire.
 - **Auto IDs and paths:** generates IDs, paths, and URLs according to Pubky standards.
 - **Single source of truth:** the Rust models drive native consumers and the WASM bindings.
 

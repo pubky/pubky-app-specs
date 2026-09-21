@@ -119,12 +119,19 @@ impl PubkySocialUserLink {
     }
 }
 
+/// Builder trim for optional display text. Whitespace-only means absent, so "no bio" has one
+/// spelling on the wire instead of three.
+fn trimmed_or_none(text: String) -> Option<String> {
+    let trimmed = frozen_trim(&text);
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUser {
-    /// Trims the display text it is given. Trimming happens here and nowhere else, so a stored
-    /// profile reads back byte for byte and an SDK round trip cannot change what is on the
-    /// homeserver. `image` is a reference and is kept exactly as written; each link trims its
-    /// own title in `PubkySocialUserLink::new`.
+    /// Trims the display text it is given, link titles included. Trimming happens here and
+    /// nowhere else, so a stored profile reads back byte for byte and an SDK round trip cannot
+    /// change what is on the homeserver. `image` and each link `url` are references and are
+    /// kept exactly as written.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
@@ -135,10 +142,15 @@ impl PubkySocialUser {
     ) -> Self {
         Self {
             name: frozen_trim(&name).to_string(),
-            bio: bio.map(|b| frozen_trim(&b).to_string()),
+            bio: bio.and_then(trimmed_or_none),
             image,
-            links,
-            status: status.map(|s| frozen_trim(&s).to_string()),
+            links: links.map(|links| {
+                links
+                    .into_iter()
+                    .map(PubkySocialUserLink::trimmed)
+                    .collect()
+            }),
+            status: status.and_then(trimmed_or_none),
             extra: Default::default(),
         }
     }
@@ -178,6 +190,9 @@ impl Validatable for PubkySocialUser {
 
         // Validate bio length
         if let Some(bio) = &self.bio {
+            if frozen_trim(bio).is_empty() {
+                return Err("Validation Error: bio must not be blank".into());
+            }
             if code_point_len(bio) > VALIDATION_LIMITS.user_bio_max_length {
                 return Err("Validation Error: Bio exceeds maximum length".into());
             }
@@ -208,6 +223,9 @@ impl Validatable for PubkySocialUser {
 
         // Validate status length
         if let Some(status) = &self.status {
+            if frozen_trim(status).is_empty() {
+                return Err("Validation Error: status must not be blank".into());
+            }
             if code_point_len(status) > VALIDATION_LIMITS.user_status_max_length {
                 return Err("Validation Error: Status exceeds maximum length".into());
             }
@@ -224,14 +242,26 @@ impl PubkySocialUserLink {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
         Self {
-            title: frozen_trim(&title).to_string(),
+            title,
             url,
             extra: Default::default(),
         }
+        .trimmed()
     }
 }
 
 impl PubkySocialUserLink {
+    /// The builder trim applied to a link that already exists. Keeps `extra`, because a link
+    /// handed to `PubkySocialUser::new` may have come from serde with members this version
+    /// does not know.
+    fn trimmed(self) -> Self {
+        Self {
+            title: frozen_trim(&self.title).to_string(),
+            url: self.url,
+            extra: self.extra,
+        }
+    }
+
     /// The rules, with each field named as the caller sees it: `links[2].url` inside a
     /// profile, the bare field name when a link is validated on its own.
     fn validate_at(&self, index: Option<usize>, ctx: &ValidationCtx) -> Result<(), String> {
@@ -447,6 +477,39 @@ mod tests {
     }
 
     #[test]
+    fn test_blank_bio_and_status_are_absent() {
+        let user = PubkySocialUser::new(
+            "Alice".to_string(),
+            Some("   ".to_string()),
+            None,
+            None,
+            Some(" ".to_string()),
+        );
+        assert_eq!(user.bio, None);
+        assert_eq!(user.status, None);
+        assert!(user.validate(None, &PUB_CTX).is_ok());
+
+        // The spelling the builder refuses to produce is refused on the wire too
+        for (json, field) in [
+            (r#"{"name":"Alice","bio":""}"#, "bio"),
+            (r#"{"name":"Alice","status":"  "}"#, "status"),
+        ] {
+            let e = <PubkySocialUser as Validatable>::try_from(json.as_bytes(), "", &PUB_CTX)
+                .unwrap_err();
+            assert_eq!(e, format!("Validation Error: {field} must not be blank"));
+        }
+
+        // Padding around real text is display text, and it is read back untouched
+        let user = <PubkySocialUser as Validatable>::try_from(
+            br#"{"name":"Alice","bio":" hi "}"#,
+            "",
+            &PUB_CTX,
+        )
+        .unwrap();
+        assert_eq!(user.bio.as_deref(), Some(" hi "));
+    }
+
+    #[test]
     fn test_validate() {
         let user = PubkySocialUser::new(
             "Alice".to_string(),
@@ -478,11 +541,11 @@ mod tests {
             "Validation Error: Invalid name length"
         );
 
-        // Test name too long - sanitization should NOT truncate
+        // Test name too long - the builder must NOT truncate
         let long_name = "a".repeat(VALIDATION_LIMITS.user_name_max_length + 1);
         let user = PubkySocialUser::new(long_name.clone(), None, None, None, None);
 
-        // Sanitization should preserve full length
+        // The builder preserves the full length
         assert_eq!(user.name.len(), VALIDATION_LIMITS.user_name_max_length + 1);
 
         // Validation should catch the violation
@@ -612,7 +675,7 @@ mod tests {
             Some(long_status.clone()),
         );
 
-        // Sanitization should preserve full length (only trim whitespace)
+        // The builder only trims, it never shortens a value that is over a limit
         assert_eq!(user.bio.as_deref(), Some(long_bio.as_str()));
         assert_eq!(user.status.as_deref(), Some(long_status.as_str()));
         assert_eq!(user.image.as_deref(), Some(long_image.as_str()));
@@ -668,7 +731,7 @@ mod tests {
 
         let user = PubkySocialUser::new("Alice".to_string(), None, None, Some(links), None);
 
-        // Sanitization should preserve all links (not truncate)
+        // The builder keeps every link, it never drops one
         assert_eq!(
             user.links.as_ref().unwrap().len(),
             VALIDATION_LIMITS.user_links_max_count + 1
@@ -757,7 +820,7 @@ mod tests {
             None,
         );
 
-        // After sanitization, image is still Some("")
+        // The builder keeps the image as given, so it is still Some("")
         assert_eq!(user.image, Some("".to_string()));
 
         // Validation should fail: an empty string is not a canonical URI
