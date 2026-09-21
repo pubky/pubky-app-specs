@@ -26,6 +26,8 @@ pub enum Resource {
     },
     Follow(PubkyId),
     Mute(PubkyId),
+    /// The RAW bookmark filename, in either form; the target decodes out of the primary one.
+    /// The parser checks the form alone, the object read checks the whole rule.
     Bookmark(String),
     Tag(String),
     /// The RAW filename, extension included; the id is the stripped hash. Dual-root.

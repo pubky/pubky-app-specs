@@ -4,16 +4,18 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBookmark, PubkySocialCollectionContent,
-    PubkySocialCollectionItem, PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig,
-    PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFollow,
-    PubkySocialMute, PubkySocialPost, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
-    PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
+    create_bookmark, ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBookmark,
+    PubkySocialCollectionContent, PubkySocialCollectionItem, PubkySocialCollectionLayout,
+    PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
+    PubkySocialFeedSort, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
 const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
 const TS: i64 = 1_727_740_800_000_000;
+/// base64url of a canonical pubky post reference: a primary bookmark filename.
+const B64: &str = "cHVia3k6Ly9vcGVycnI4d3NicHIzdWU5ZDRxajQxZ2Uxa2NjNnI3ZmRpeTZvM3VnanJyaGk0eTc3cmRvL3B1Yi9zb2NpYWwvdjEvcG9zdHMvMDAzMlNTTjdRNEVWRw";
 
 fn json<T: Serialize>(v: &T) -> String {
     serde_json::to_string(v).unwrap()
@@ -72,8 +74,21 @@ fn tag() -> PubkySocialTag {
     t
 }
 
+/// The bookmark content lost `uri` with the filename move: the target is the filename, so the
+/// primary form carries the timestamp alone. Only the overflow form, whose filename is a
+/// one-way hash, still spells the target out.
 fn bookmark() -> PubkySocialBookmark {
-    let mut b = PubkySocialBookmark::new(format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"));
+    let mut b = create_bookmark(&format!("pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG"))
+        .unwrap()
+        .bookmark;
+    b.created_at = TS;
+    b
+}
+
+fn bookmark_overflow() -> PubkySocialBookmark {
+    // One byte past the primary form: 188 bytes no longer fit the 255-character segment
+    let long = format!("https://example.com/{}", "a".repeat(168));
+    let mut b = create_bookmark(&long).unwrap().bookmark;
     b.created_at = TS;
     b
 }
@@ -198,7 +213,12 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
         (
             "bookmark",
             json(&bookmark()),
-            r#"{"uri":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","created_at":1727740800000000}"#,
+            r#"{"created_at":1727740800000000}"#,
+        ),
+        (
+            "bookmark_overflow",
+            json(&bookmark_overflow()),
+            r#"{"created_at":1727740800000000,"target":"https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#,
         ),
         (
             "follow",
@@ -268,7 +288,7 @@ fn pinned_variants() -> Vec<(String, &'static str)> {
         (json(&Visibility::Private), r#""private""#),
         (json(&Resource::Follow(pk())), r#"{"Follow":"{PK}"}"#),
         (json(&Resource::Mute(pk())), r#"{"Mute":"{PK}"}"#),
-        (json(&Resource::Bookmark(h.clone())), r#"{"Bookmark":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::Bookmark(B64.into())), r#"{"Bookmark":"cHVia3k6Ly9vcGVycnI4d3NicHIzdWU5ZDRxajQxZ2Uxa2NjNnI3ZmRpeTZvM3VnanJyaGk0eTc3cmRvL3B1Yi9zb2NpYWwvdjEvcG9zdHMvMDAzMlNTTjdRNEVWRw"}"#),
         (json(&Resource::Tag(h.clone())), r#"{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::File(format!("{h}.svg"))), r#"{"File":"8Z8CWH8NVYQY39ZEBFGKQWWEKG.svg"}"#),
         (json(&Resource::Feed(h)), r#"{"Feed":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),

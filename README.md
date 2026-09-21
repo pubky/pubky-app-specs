@@ -64,7 +64,7 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | `PubkySocialFile`      | Media bytes                              |
 | `PubkySocialPost`      | Posts, replies, embeds, and collections  |
 | `PubkySocialTag`       | Tags applied to Pubky URIs               |
-| `PubkySocialBookmark`  | Bookmarks for Pubky URIs                 |
+| `PubkySocialBookmark`  | Private bookmarks, target in the filename |
 | `PubkySocialFollow`    | Follow relationships                     |
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |

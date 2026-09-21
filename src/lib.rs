@@ -28,7 +28,9 @@ pub use limits::*;
 pub use mime::{essence, mime_to_ext, MIME_TO_EXT, STRIP_SET};
 pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
-pub use models::bookmark::PubkySocialBookmark;
+pub use models::bookmark::{
+    bookmark_filename, bookmark_target, create_bookmark, CreatedBookmark, PubkySocialBookmark,
+};
 pub use models::feed::{
     feed_paths, plan_feed_delete, plan_feed_publish, plan_feed_unpublish, FeedDeletePlan,
     FeedPaths, FeedPublishPlan, FeedUnpublishPlan, PubkySocialFeed, PubkySocialFeedConfig,

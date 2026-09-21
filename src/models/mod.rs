@@ -18,9 +18,10 @@
 //!    never written by builders. Member order and escape spelling are not
 //!    part of the contract; values are. Deliberate extensions live under
 //!    the reserved `ext` member and are hostile input until the extension's
-//!    own rules have checked them. Post, attachment, the article envelope,
-//!    user, user link, follow and mute carry it today; the other models
-//!    adopt it with their own wire changes.
+//!    own rules have checked them. Post, attachment, the article and
+//!    collection envelopes, collection item, user, user link, tag, follow,
+//!    mute and bookmark carry it today; the other models adopt it with their
+//!    own wire changes.
 //! 4. One total size cap per object (`Validatable::MAX_BYTES`), checked on
 //!    the raw bytes before parsing and on the serialized bytes in every
 //!    `validate`, so builders and JSON import cannot skip it. It bounds the open-ended `extra`
@@ -122,9 +123,8 @@ impl PubkySocialObject {
                 let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id, ctx)?;
                 Ok(PubkySocialObject::Mute(mute))
             }
-            Resource::Bookmark(bookmark_id) => {
-                let bookmark =
-                    <PubkySocialBookmark as Validatable>::try_from(blob, bookmark_id, ctx)?;
+            Resource::Bookmark(filename) => {
+                let bookmark = <PubkySocialBookmark as Validatable>::try_from(blob, filename, ctx)?;
                 Ok(PubkySocialObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
@@ -279,21 +279,12 @@ mod tests {
             "0032SSN7Q4EVG".into(),
         );
 
-        let bookmark_id = bookmark::PubkySocialBookmark {
-            uri: post_uri.clone(),
-            created_at: 0,
-        }
-        .create_id();
+        let filename = bookmark::bookmark_filename(&post_uri).unwrap();
         let uri = bookmark_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            bookmark_id,
+            filename.clone(),
         );
-        let bookmark_json = format!(
-            r#"{{
-                "uri": "{post_uri}",
-                "created_at": 1627849725
-            }}"#
-        );
+        let bookmark_json = r#"{"created_at": 1627849725}"#;
         let result = PubkySocialObject::from_uri(uri, bookmark_json.as_bytes());
         assert!(
             result.is_ok(),
@@ -302,7 +293,11 @@ mod tests {
         );
         match result.unwrap() {
             PubkySocialObject::Bookmark(bookmark) => {
-                assert_eq!(bookmark.uri, post_uri, "Bookmark URI mismatch");
+                assert_eq!(
+                    bookmark::bookmark_target(&filename, &bookmark),
+                    Ok(post_uri),
+                    "Bookmark target mismatch"
+                );
             }
             other => panic!("Expected a Bookmark object, got {:?}", other),
         }

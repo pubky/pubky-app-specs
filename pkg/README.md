@@ -65,7 +65,7 @@ const { user, meta } = specs.createUser(name, bio, image, links, status);
 const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
 const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments, lock);
 const { file, meta } = specs.createFile(bytes, declaredType); // bytes: Uint8Array
-const { bookmark, meta } = specs.createBookmark(uri);
+const { bookmark, meta } = specs.createBookmark(target);
 const { tag, meta } = specs.createTag(uri, label);
 const { follow, meta } = specs.createFollow(pubkyId);
 const { mute, meta } = specs.createMute(pubkyId);
@@ -83,6 +83,8 @@ const { feed, meta } = specs.createFeed({
 
 `createCollectionPost(name, description, items, coverImage, layout)` takes an array of `PubkySocialCollectionItem(uri, note)`; an item URI can be anything (a post, a user, a web page, a `nostr:` event) and the note is optional but never blank. The stored envelope is `{name, description?, items: [{uri, note?}], cover_image?, layout?}`. `createTag(uri, label)` stores the uri as written, so it must already be canonical (`pubky://...`, never the short form, no surrounding whitespace); the label is trimmed and ASCII-lowercased by the builder and a stored label must already be in that form. `createUser` stores `image` and every `links[].url` as written, so they must already be canonical: an image is a `pubky://`, `http://` or `https://` URI, a link url is `http://` or `https://`, and surrounding whitespace or the short `pubky<pk>` form rejects. The builder trims `name`, `bio`, `status` and every link title; `PubkySocialUser.fromJson` never rewrites what it reads, so what you stored is what you get, padding included. `parent` and `embed` are any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
 
+`createBookmark(target)` puts the target IN the filename: `meta.id` is the canonical target in unpadded base64url and `meta.path` is `priv/social/v1/bookmarks/{filename}.json`, so listing every bookmark is one LIST and no GETs, and the same target always lands on the same filename. Bookmarks live under the private root, so a capability scoped to the public prefix alone cannot read them. A target over 187 UTF-8 bytes overflows: the filename becomes `~{hash}`, which is one way, and the content carries `target`. `bookmarkTarget(filename, bookmark)` reads a stored entry back and throws when the entry breaks those rules, which is how a reader tells an invalid entry from one it should show. The target can be any URI (`pubky://`, `https://`, `nostr:`, ...) and must already be canonical.
+
 `createFile(bytes, declaredType)` stores the bytes as they are, with no metadata object: `meta.id` is the hash of the bytes and `meta.path` is `files/{hash}.{ext}`, where the extension comes from the declared type and is path-only. The declared type is read once, here, and never stored. `fileUriBuilder(pubkyId, filename)` takes that whole filename, since an extension cannot be derived from an id.
 
 Feeds are private by default: `createFeed` returns a `/priv/` path. `feedPaths(id)` gives both addresses as `{private, public}`, and `feedLifecycle(id)` gives the operations each step needs as `{publish: {from, to}, unpublish: [...], delete: [...]}`: run them in the order given; a delete of a missing path is a skip, and the publish copy always runs because the name and icon live outside the id, so an existing public copy may be stale. The id is derived from the filter alone, so `tags` and `domainTags` are folded, deduplicated and sorted by the builder, and editing the filter gives a new id (write the new file, delete the old one). `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
@@ -96,6 +98,7 @@ import {
   userUriBuilder,
   postUriBuilder,
   bookmarkUriBuilder,
+  bookmarkTarget,
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,

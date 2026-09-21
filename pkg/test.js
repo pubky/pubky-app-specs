@@ -1,4 +1,22 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable, feedPaths, feedLifecycle } from "./index.js";
+import {
+  PubkySocialAttachment,
+  PubkySocialCollectionItem,
+  PubkySocialPost,
+  PubkySocialPostKind,
+  PubkySocialUser,
+  PubkySpecsBuilder,
+  bookmarkTarget,
+  bookmarkUriBuilder,
+  essence,
+  feedLifecycle,
+  feedPaths,
+  followUriBuilder,
+  getValidMimeTypes,
+  mimeToExt,
+  mimeToExtTable,
+  postUriBuilder,
+  userUriBuilder,
+} from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -558,14 +576,38 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(bookmarkMeta.url, "Bookmark should have a URL");
       const bookmarkChunks = bookmarkMeta.url.split("/")
       assert.strictEqual(bookmarkChunks[2], OTTO, "URL should contain user ID");
+      assert.strictEqual(bookmarkChunks[3], "priv", "bookmarks live under the private root");
       assert.strictEqual(bookmarkChunks[6], "bookmarks", "URL should contain bookmarks path");
-      assert.strictEqual(bookmarkChunks[7], bookmarkMeta.id + ".json", "URL should contain bookmark ID");
+      assert.strictEqual(bookmarkChunks[7], bookmarkMeta.id + ".json", "URL should carry the filename");
+
+      // The filename IS the target, so a LIST of the prefix needs no GETs
+      assert.strictEqual(bookmarkTarget(bookmarkMeta.id, bookmark), postUriRaw, "Target should round trip");
+      assert.strictEqual(bookmarkMeta.id, Buffer.from(postUriRaw).toString("base64url"), "Filename should be base64url of the target");
 
       // Test bookmark content
       const bookmarkJson = bookmark.toJson();
-      assert.strictEqual(bookmarkJson.uri, postUriRaw, "Bookmark URI should match");
+      assert.strictEqual(bookmarkJson.uri, undefined, "The content carries no uri");
+      assert.strictEqual(bookmarkJson.target, undefined, "A primary bookmark carries no target");
       assert.ok(bookmarkJson.created_at, "Bookmark should have created_at timestamp");
       assert.ok(typeof bookmarkJson.created_at === "number", "created_at should be a number");
+
+      // The same target twice is the same filename, so a rewrite overwrites
+      const again = specsBuilder.createBookmark(`pubky${RIO}/pub/social/v1/posts/0033SREKPC4N0`);
+      assert.strictEqual(again.meta.id, bookmarkMeta.id, "One target should give one filename");
+    });
+
+    it("should spell a long target in the overflow form", () => {
+      const longUri = `https://example.com/${"a".repeat(168)}`;
+      const { bookmark, meta } = specsBuilder.createBookmark(longUri);
+      assert.ok(meta.id.startsWith("~"), "A 188 byte target overflows");
+      assert.strictEqual(bookmark.toJson().target, longUri, "The overflow content carries the target");
+      assert.strictEqual(bookmarkTarget(meta.id, bookmark), longUri, "Target should round trip");
+    });
+
+    it("should reject an invalid bookmark entry instead of guessing", () => {
+      const { bookmark, meta } = specsBuilder.createBookmark(`pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`);
+      assert.throws(() => bookmarkTarget(meta.id + "=", bookmark), "Padding is not a canonical filename");
+      assert.throws(() => specsBuilder.createBookmark("not a uri"), "A target must be a canonical URI");
     });
   });
 

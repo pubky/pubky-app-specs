@@ -476,16 +476,17 @@ impl PubkySpecsBuilder {
     // 6. PubkySocialBookmark
     // -----------------------------------------------------------------------------
 
+    /// The target lives in `meta.id`, the filename: a LIST of the bookmarks prefix recovers
+    /// every target with no GETs. Reading one back is `bookmarkTarget`.
     #[wasm_bindgen(js_name = createBookmark)]
-    pub fn create_bookmark(&self, uri: String) -> Result<BookmarkResult, String> {
-        let bookmark = PubkySocialBookmark::new(uri);
-        let bookmark_id = bookmark.create_id();
-        bookmark.validate(Some(&bookmark_id), &PUB_CTX)?;
+    pub fn create_bookmark(&self, target: String) -> Result<BookmarkResult, String> {
+        let created = crate::create_bookmark(&target)?;
+        let meta = Meta::from_object(Some(&created.filename), self.pubky_id.clone(), created.path);
 
-        let path = PubkySocialBookmark::create_path(&bookmark_id);
-        let meta = Meta::from_object(Some(&bookmark_id), self.pubky_id.clone(), path);
-
-        Ok(BookmarkResult { bookmark, meta })
+        Ok(BookmarkResult {
+            bookmark: created.bookmark,
+            meta,
+        })
     }
 
     // -----------------------------------------------------------------------------
@@ -562,6 +563,14 @@ impl ParsedUriResult {
     pub fn resource_id(&self) -> Option<String> {
         self.resource_id.clone()
     }
+}
+
+/// The target a stored bookmark names: decoded from the filename in the primary form, read
+/// from the content in the overflow form. Throws when the entry breaks the filename rules,
+/// which is how a reader tells an invalid entry from a bookmark it should show.
+#[wasm_bindgen(js_name = bookmarkTarget)]
+pub fn bookmark_target_js(filename: &str, content: &PubkySocialBookmark) -> Result<String, String> {
+    crate::bookmark_target(filename, content)
 }
 
 /// Returns the list of valid MIME types for file attachments.

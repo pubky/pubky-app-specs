@@ -5,6 +5,7 @@ import {
   userUriBuilder,
   postUriBuilder,
   bookmarkUriBuilder,
+  bookmarkTarget,
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
@@ -161,13 +162,14 @@ field("Lock", lockedPost.lock);
 // =============================================================================
 header("SOCIAL ACTIONS");
 
-// Bookmark
+// Bookmark: the target lives in the filename, under the private root
 console.log(`  ${c.yellow}▸ Bookmark${c.reset}`);
 const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(
   `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
 );
-field("ID", bookmarkMeta.id);
-field("URI", bookmark.toJson().uri);
+field("Filename", bookmarkMeta.id);
+field("Path", bookmarkMeta.path);
+field("Target", bookmarkTarget(bookmarkMeta.id, bookmark));
 console.log();
 
 // Follow
