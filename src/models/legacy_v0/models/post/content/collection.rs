@@ -5,11 +5,15 @@ use url::Url;
 
 use super::super::PubkyAppPost;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Creator-chosen default layout for experiencing a collection.
 ///
 /// Unrecognized values deserialize as `Unknown` so future layouts never
 /// invalidate the whole post (same policy as `PubkyAppPostKind`).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum PubkyAppCollectionLayout {
     Grid,
@@ -50,6 +54,7 @@ impl FromStr for PubkyAppCollectionLayout {
 /// future minor versions can add fields (e.g. `cover_image`) without breaking
 /// older parsers. New fields must be additive and ignorable.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkyAppCollectionContent {
     /// Display name of the collection. Length bounded by

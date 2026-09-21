@@ -7,6 +7,9 @@ use crate::models::legacy_v0::{
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver tag with id
 /// URI: /pub/pubky.app/tags/:tag_id
 ///
@@ -16,6 +19,7 @@ use url::Url;
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppTag {
     /// The URI of the resource this is a tag on
     pub uri: String,

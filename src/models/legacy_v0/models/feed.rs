@@ -8,9 +8,13 @@ use crate::models::legacy_v0::{
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Enum representing the reach of the feed.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppFeedReach {
     Following,
     Followers,
@@ -23,6 +27,7 @@ pub enum PubkyAppFeedReach {
 /// Enum representing the layout of the feed.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppFeedLayout {
     Columns,
     Wide,
@@ -33,6 +38,7 @@ pub enum PubkyAppFeedLayout {
 /// Enum representing the sort order of the feed.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppFeedSort {
     Recent,
     Popularity,
@@ -40,6 +46,7 @@ pub enum PubkyAppFeedSort {
 
 /// Configuration object for the feed.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFeedConfig {
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,6 +144,7 @@ impl Validatable for PubkyAppFeedConfig {
 
 /// Represents a feed configuration.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFeed {
     pub feed: PubkyAppFeedConfig,
     pub name: String,

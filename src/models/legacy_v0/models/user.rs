@@ -7,8 +7,12 @@ use crate::models::legacy_v0::{
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// URI: /pub/pubky.app/profile.json
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUser {
     // Avoid wasm-pack automatically generating getter/setters for the pub fields.
     pub name: String,
@@ -33,6 +37,7 @@ impl Default for PubkyAppUser {
 
 /// Represents a user's single link with a title and URL.
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppUserLink {
     pub title: String,
     pub url: String,

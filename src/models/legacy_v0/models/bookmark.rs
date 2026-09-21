@@ -6,6 +6,9 @@ use crate::models::legacy_v0::{
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents raw homeserver bookmark with id
 /// URI: /pub/pubky.app/bookmarks/:bookmark_id
 ///
@@ -15,6 +18,7 @@ use url::Url;
 ///
 /// Where bookmark_id is Crockford-base32(Blake3("{uri_bookmarked}"")[:half])
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBookmark {
     /// The URI of the resource this is a bookmark of
     pub uri: String,

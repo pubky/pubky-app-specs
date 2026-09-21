@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Valid MIME types for file attachments.
 pub const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
@@ -37,6 +40,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 /// Represents a file uploaded by the user.
 /// URI: /pub/pubky.app/files/:file_id
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppFile {
     pub name: String,
     pub created_at: i64,

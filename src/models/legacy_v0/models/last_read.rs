@@ -5,9 +5,13 @@ use crate::models::legacy_v0::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents the last read timestamp for notifications.
 /// URI: /pub/pubky.app/last_read
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppLastRead {
     pub timestamp: i64, // Unix epoch time in milliseconds
 }

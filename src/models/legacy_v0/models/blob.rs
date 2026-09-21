@@ -7,9 +7,13 @@ use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 /// Represents a blob, which backs a file uploaded by the user.
 /// URI: /pub/pubky.app/blobs/:blob_id
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppBlob(pub Vec<u8>);
 
 impl PubkyAppBlob {

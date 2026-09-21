@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use url::Url;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 // Reserved keyword used by the system to mark deleted posts with relationships
 const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 
@@ -20,6 +23,7 @@ const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum PubkyAppPostKind {
     #[default]
     Short,
@@ -76,6 +80,7 @@ impl PubkyAppPostKind {
 
 /// Represents embedded content within a post
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPostEmbed {
     pub kind: PubkyAppPostKind, // Kind of the embedded content
     pub uri: String,            // URI of the embedded content
@@ -89,6 +94,7 @@ pub struct PubkyAppPostEmbed {
 ///
 /// `/pub/pubky.app/posts/00321FCW75ZFY`
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkyAppPost {
     pub content: String,
     pub kind: PubkyAppPostKind,
