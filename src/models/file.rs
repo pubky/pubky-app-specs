@@ -34,6 +34,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
     "image/webp",
     "multipart/form-data",
     "text/css",
+    "text/csv",
     "text/html",
     "text/plain",
     "text/xml",
@@ -130,6 +131,11 @@ impl Validatable for PubkySocialFile {
     // Bytes, not JSON: the media cap below is the size rule, so skip the JSON re-serialization.
     fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
         self.validate_fields(id, ctx)
+    }
+
+    // Bytes, not JSON: the media cap in validate_fields is the size rule
+    fn validate_size(&self) -> Result<(), ValidationError> {
+        Ok(())
     }
 
     fn validate_fields(

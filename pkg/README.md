@@ -149,7 +149,7 @@ if (!validMimeTypes.includes(file.type)) {
 }
 
 mimeToExt("IMAGE/PNG; charset=x"); // "png", and "bin" for anything unmapped
-essence("IMAGE/PNG; charset=x"); // "image/png", null when malformed
+essence("IMAGE/PNG; charset=x"); // "image/png", undefined when malformed
 mimeToExtTable(); // the whole frozen map as a plain object
 ```
 

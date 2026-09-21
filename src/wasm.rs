@@ -27,7 +27,7 @@ pub fn mime_to_ext_js(declared: &str) -> String {
     crate::mime_to_ext(declared)
 }
 
-/// The essence of a declared type (before the first ";", ASCII-folded), or null when the
+/// The essence of a declared type (before the first ";", ASCII-folded), or undefined when the
 /// value is malformed.
 #[wasm_bindgen(js_name = essence)]
 pub fn essence_js(declared: &str) -> Option<String> {
@@ -275,9 +275,11 @@ impl PubkySpecsBuilder {
     /// Media is content addressed: `meta.id` is the hash of the bytes, and `meta.path` carries
     /// the extension the declared type maps to. The declared type is not stored.
     #[wasm_bindgen(js_name = createFile)]
-    pub fn create_file(&self, bytes: JsValue, declared_type: String) -> Result<FileResult, String> {
-        let bytes: Vec<u8> = from_value(bytes).map_err(|e| e.to_string())?;
-        let created = PubkySocialFile::create_file(bytes, &declared_type, PubkySocialFile::ROOT)?;
+    // A byte slice crosses the boundary as one memcpy from a Uint8Array; a JsValue would be
+    // deserialized one element at a time, which is seconds at the media cap
+    pub fn create_file(&self, bytes: &[u8], declared_type: String) -> Result<FileResult, String> {
+        let created =
+            PubkySocialFile::create_file(bytes.to_vec(), &declared_type, PubkySocialFile::ROOT)?;
         let meta = Meta::from_object(Some(&created.id), self.pubky_id.clone(), created.path);
 
         Ok(FileResult {

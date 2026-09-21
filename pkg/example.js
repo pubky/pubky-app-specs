@@ -201,7 +201,7 @@ header("MEDIA FILES");
 
 console.log(`  ${c.yellow}▸ File (raw bytes)${c.reset}`);
 const fileBytes = Array.from({ length: 8 }, () => Math.floor(Math.random() * 256));
-const { file, meta: fileMeta } = specsBuilder.createFile(fileBytes, "application/pdf");
+const { file, meta: fileMeta } = specsBuilder.createFile(new Uint8Array(fileBytes), "application/pdf");
 field("ID", fileMeta.id);
 field("URL", fileMeta.url);
 field("Size", `${file.data.length} bytes`);

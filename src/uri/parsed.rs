@@ -563,6 +563,7 @@ mod tests {
             (Visibility::Public, post(TS, Some("nope"), None)),
             (Visibility::Public, post(TS, Some(TS2), Some("Bad_Label"))),
             (Visibility::Public, Resource::File(format!("{H26}.JPG"))),
+            (Visibility::Public, Resource::File(H26.into())),
         ];
         for (i, (visibility, resource)) in cases.into_iter().enumerate() {
             let value = ParsedUri {

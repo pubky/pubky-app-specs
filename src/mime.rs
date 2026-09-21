@@ -56,8 +56,8 @@ pub const MIME_TO_EXT: &[(&str, &str); 19] = &[
 ];
 
 /// Full declared header value in, extension out. Malformed or unmapped (empty,
-/// application/octet-stream, multipart/form-data, ...) -> "bin", which mime_guess maps back to
-/// octet-stream: correct for unknown content.
+/// application/octet-stream, multipart/form-data, ...) -> "bin", which an extension lookup maps
+/// back to octet-stream: correct for unknown content.
 pub fn mime_to_ext(declared: &str) -> String {
     essence(declared)
         .and_then(|e| {

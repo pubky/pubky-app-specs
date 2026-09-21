@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -679,7 +679,7 @@ describe("PubkySpecs Example Objects Tests", () => {
     it("should create a media file with correct properties", () => {
       const length = 8
       const bytes = Array.from({length}, () => Math.floor(Math.random() * 256));
-      const { file, meta: fileMeta } = specsBuilder.createFile(bytes, "application/pdf");
+      const { file, meta: fileMeta } = specsBuilder.createFile(new Uint8Array(bytes), "application/pdf");
 
       // Test meta properties
       assert.ok(fileMeta.id, "File should have an ID");
@@ -696,9 +696,20 @@ describe("PubkySpecs Example Objects Tests", () => {
     });
 
     it("should map a declared type the table does not carry to .bin", () => {
-      const { meta } = specsBuilder.createFile([1, 2], "application/x-not-a-real-type");
+      const { meta } = specsBuilder.createFile(new Uint8Array([1, 2]), "application/x-not-a-real-type");
       assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
       assert.ok(meta.url.endsWith(meta.id + ".bin"), "an unmapped type lands on .bin");
+    });
+
+    it("exposes the essence and the whole frozen map", () => {
+      assert.strictEqual(essence("IMAGE/PNG; charset=x"), "image/png");
+      assert.strictEqual(essence(" image/png"), undefined, "no trimming, a padded type is malformed");
+      const table = mimeToExtTable();
+      assert.strictEqual(table["image/svg+xml"], "svg");
+      assert.strictEqual(Object.keys(table).length, 19, "the map has exactly 19 rows");
+      for (const [mime, ext] of Object.entries(table)) {
+        assert.strictEqual(mimeToExt(mime), ext, `${mime} maps through mimeToExt the same way`);
+      }
     });
   });
 
@@ -849,7 +860,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       const mimeTypes = getValidMimeTypes();
       const validMimeType = mimeTypes[0]; // Pick the first valid MIME type
 
-      const { meta } = specsBuilder.createFile([1, 2], validMimeType);
+      const { meta } = specsBuilder.createFile(new Uint8Array([1, 2]), validMimeType);
       assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
       assert.strictEqual(
         meta.url.split("/").pop(),

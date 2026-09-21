@@ -22,9 +22,9 @@ pub use common::{
     validate_hash_id_format, validate_safe_json_int, validate_timestamp_id_format,
     FROZEN_WHITESPACE, MAX_SAFE_JSON_INT,
 };
-// Re-export the frozen MIME map
 #[doc(inline)]
 pub use limits::*;
+// Re-export the frozen MIME map
 pub use mime::{essence, mime_to_ext, MIME_TO_EXT, STRIP_SET};
 pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 // Re-export domain types
