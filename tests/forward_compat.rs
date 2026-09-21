@@ -61,6 +61,31 @@ fn unknown_primary_feed_enum_fails_validation_with_a_clear_message() {
     assert!(err.contains("reach") && err.contains("unknown"), "{err}");
 }
 
+/// The id is a write-side guarantee. A v1.x writer that knows a `short` post kind names the
+/// file after "all:columns:recent:short:-:-", a string this reader cannot rebuild: it has no
+/// spelling for the value. So it takes the id as named and treats the filter as no filter.
+#[test]
+fn an_unknown_content_filter_leaves_the_id_unchecked() {
+    let feed = format!(
+        r#"{{"feed":{},"name":"Shorts","created_at":1727740800000000}}"#,
+        config("all", "columns", "recent", r#""short""#)
+    );
+    // blake3("all:columns:recent:short:-:-")[..16] in Crockford, what that writer wrote
+    for id in ["XN7CKDC4Q23NQMN5PQD81TDVP0", "8Z8CWH8NVYQY39ZEBFGKQWWEKG"] {
+        let f = <PubkySocialFeed as Validatable>::try_from(feed.as_bytes(), id, &PUB_CTX).unwrap();
+        assert_eq!(f.feed.content, Some(PubkySocialPostKind::Unknown));
+    }
+    // the guard stops at `content`: an unknown reach is still a rejection, by name
+    let broken = feed.replace(r#""reach":"all""#, r#""reach":"short""#);
+    let err = <PubkySocialFeed as Validatable>::try_from(
+        broken.as_bytes(),
+        "XN7CKDC4Q23NQMN5PQD81TDVP0",
+        &PUB_CTX,
+    )
+    .unwrap_err();
+    assert!(err.contains("reach") && err.contains("unknown"), "{err}");
+}
+
 #[test]
 fn from_str_never_produces_unknown() {
     assert!("unknown".parse::<PubkySocialFeedReach>().is_err());

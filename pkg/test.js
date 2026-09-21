@@ -736,7 +736,7 @@ describe("PubkySpecs Example Objects Tests", () => {
       const feedJson = feed.toJson();
       assert.ok(feedJson.feed, "Feed should have feed property");
       assert.ok(Array.isArray(feedJson.feed.tags), "Feed tags should be an array");
-      assert.deepStrictEqual(feedJson.feed.tags, ["mountain","hike"], "Feed tags should match");
+      assert.deepStrictEqual(feedJson.feed.tags, ["hike","mountain"], "the builder sorts the tag filter, so one filter is one feed");
       assert.strictEqual(feedJson.feed.reach, "all", "Feed reach should match");
       assert.strictEqual(feedJson.feed.layout, "columns", "Feed layout should match");
       assert.strictEqual(feedJson.feed.sort, "recent", "Feed sort should match");

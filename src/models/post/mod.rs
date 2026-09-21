@@ -46,11 +46,7 @@ pub enum PubkySocialPostKind {
 
 impl fmt::Display for PubkySocialPostKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let string_repr = serde_json::to_value(self)
-            .ok()
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_default();
-        write!(f, "{}", string_repr)
+        write!(f, "{}", self.wire_name())
     }
 }
 
@@ -82,6 +78,21 @@ impl PubkySocialPostKind {
     /// `if !matches!(kind, PubkySocialPostKind::Unknown) { ... }`.
     pub fn is_known(&self) -> bool {
         !matches!(self, PubkySocialPostKind::Unknown)
+    }
+
+    /// The frozen wire spelling. One function, so the feed id input, `Display` and every
+    /// other text rendering of a kind can never disagree.
+    pub fn wire_name(&self) -> &'static str {
+        match self {
+            PubkySocialPostKind::Note => "note",
+            PubkySocialPostKind::Article => "article",
+            PubkySocialPostKind::Image => "image",
+            PubkySocialPostKind::Video => "video",
+            PubkySocialPostKind::Link => "link",
+            PubkySocialPostKind::File => "file",
+            PubkySocialPostKind::Collection => "collection",
+            PubkySocialPostKind::Unknown => "unknown",
+        }
     }
 
     #[cfg(target_arch = "wasm32")]

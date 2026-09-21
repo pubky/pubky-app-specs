@@ -248,15 +248,9 @@ impl PubkySpecsBuilder {
             None => None,
         };
 
-        // Create the feed
-        let config = PubkySocialFeedConfig {
-            tags: input.tags,
-            domain_tags: input.domain_tags,
-            reach,
-            layout,
-            sort,
-            content,
-        };
+        // Create the feed. The config builder canonicalizes both tag lists.
+        let config =
+            PubkySocialFeedConfig::new(input.tags, input.domain_tags, reach, layout, sort, content);
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
         let feed_id = feed.create_id();
