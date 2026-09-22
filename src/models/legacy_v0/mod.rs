@@ -23,8 +23,9 @@
 
 mod common;
 mod constants;
-pub mod limits;
+mod limits;
 mod models;
+// `traits` stays a module path: it is the only way in, not a second one.
 pub mod traits;
 mod uri;
 
