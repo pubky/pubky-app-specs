@@ -154,13 +154,16 @@ const BOOKMARK_FILENAME_MAX: usize =
 
 /// The FORM of a bookmark filename: `~` plus a canonical HashId for the overflow form, an
 /// unpadded base64url string of a length base64 can actually produce for the primary one
-/// (4n+1 characters never encode anything). Only the form: the decode round trip that
-/// recovers the target runs when the object is read.
+/// (4n+1 characters never encode anything). A leading `_` is reserved across every leaf, and
+/// it happens to be a base64url character, so the primary arm refuses it there and accepts it
+/// anywhere else in the name. Only the form: the decode round trip that recovers the target
+/// runs when the object is read.
 fn is_bookmark_filename(name: &str) -> bool {
     match name.strip_prefix('~') {
         Some(hash) => validate_hash_id_format(hash).is_ok(),
         None => {
             !name.is_empty()
+                && !name.starts_with('_')
                 && name.len() <= BOOKMARK_FILENAME_MAX
                 && name.len() % 4 != 1
                 && name
@@ -387,6 +390,9 @@ mod tests {
             (p("/priv/social/v1/bookmarks/cHVia3k+.json"), Some((Private, Resource::Unknown))),
             (p("/priv/social/v1/bookmarks/.json"), Some((Private, Resource::Unknown))),
             (p("/priv/social/v1/bookmarks/a.json"), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/_a.json"), Some((Private, Resource::Unknown))),
+            // base64url of "https://example.com/?q=1": a `_` anywhere but the front is a byte
+            (p("/priv/social/v1/bookmarks/aHR0cHM6Ly9leGFtcGxlLmNvbS8_cT0x.json"), Some((Private, Resource::Bookmark("aHR0cHM6Ly9leGFtcGxlLmNvbS8_cT0x".into())))),
             (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(250))), Some((Private, Resource::Bookmark("a".repeat(250))))),
             (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(251))), Some((Private, Resource::Unknown))),
             // Media: the hash carries a path-only extension, dual-root

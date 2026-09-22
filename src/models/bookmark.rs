@@ -1,7 +1,7 @@
-use crate::canonicalize::canonicalize_universal;
+use crate::canonicalize::{checked, validate_reference, AllowedSchemes};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
-use crate::traits::{hash_id_of, Root, ValidationCtx, ValidationError};
+use crate::traits::{hash_id_of, Root, ValidationCtx, ValidationError, PUB_CTX};
 use crate::{
     common::{check_extra, timestamp, validate_safe_json_int},
     traits::{HasIdPath, Validatable},
@@ -87,16 +87,34 @@ pub fn bookmark_filename(target: &str) -> Result<String, ValidationError> {
     Ok(filename_of(&canonical_target(target)?))
 }
 
-/// One verdict for a target: the canonicalizer carries the reference cap, so junk and an
-/// over-long value fail the same way.
+/// Names the target in every message the gate produces, on both sides.
+const TARGET_FIELD: &str = "bookmark target";
+
+/// The canonical form of a target, through the same gate every stored reference passes: any
+/// scheme, the reference cap, a public resource, and a versionless post. The context is the
+/// PUBLIC root even though the bookmark itself is private, because whoever resolves the
+/// bookmark has to be able to open the target, and a private URI opens for its owner alone.
 fn canonical_target(target: &str) -> Result<String, ValidationError> {
-    canonicalize_universal(target).map_err(|_| non_canonical(target))
+    validate_reference(
+        target,
+        AllowedSchemes::Universal,
+        VALIDATION_LIMITS.reference_uri_max_length,
+        &PUB_CTX,
+        None,
+    )
+    .map_err(|e| format!("Validation Error: {TARGET_FIELD} {e}"))
 }
 
-fn non_canonical(target: &str) -> String {
-    format!(
-        "Validation Error: bookmark target must be a canonical URI of at most {} code points: {target}",
-        VALIDATION_LIMITS.reference_uri_max_length
+/// The gate again, plus the fixed point: a stored target is spelled canonically or the entry
+/// is invalid. Nothing is rewritten on the way in or out.
+fn check_gate_and_fixed_point(target: &str) -> Result<(), ValidationError> {
+    checked(
+        TARGET_FIELD,
+        target,
+        AllowedSchemes::Universal,
+        VALIDATION_LIMITS.reference_uri_max_length,
+        &PUB_CTX,
+        None,
     )
 }
 
@@ -143,10 +161,9 @@ fn primary_target(
     // Fatal on invalid UTF-8; a replacement character would invent a target.
     let target = String::from_utf8(bytes)
         .map_err(|_| format!("Validation Error: bookmark filename is not UTF-8: {filename}"))?;
-    // The fixed point: a short-form or padded spelling of one target must not fork dedup.
-    if canonical_target(&target)? != target {
-        return Err(non_canonical(&target));
-    }
+    // The gate and the fixed point: a short-form or padded spelling of one target must not
+    // fork dedup, and a target nobody but its owner can open is not a bookmark.
+    check_gate_and_fixed_point(&target)?;
     // The upper bound closes the same fork from the other side: without it one target has a
     // primary spelling AND an overflow one, and the leaf runs past the 255-character segment.
     if target.len() > VALIDATION_LIMITS.bookmark_target_uri_max_bytes {
@@ -175,9 +192,7 @@ fn overflow_target(hash: &str, content: &PubkySocialBookmark) -> Result<String, 
 /// so it is canonical and past what the primary filename can carry, whether or not the caller
 /// brought the filename that would say so.
 fn check_stored_target(target: &str) -> Result<(), ValidationError> {
-    if canonical_target(target)? != target {
-        return Err(non_canonical(target));
-    }
+    check_gate_and_fixed_point(target)?;
     if target.len() <= VALIDATION_LIMITS.bookmark_target_uri_max_bytes {
         return Err(format!(
             "Validation Error: a target of {} bytes belongs in the primary bookmark form",
@@ -413,6 +428,35 @@ mod tests {
         )
         .unwrap_err()
         .contains("1024"));
+    }
+
+    #[test]
+    fn a_target_takes_the_same_gate_every_stored_reference_takes() {
+        // A private URI opens for its owner alone, and a version is not the post's identity
+        for (bad, why) in [
+            (
+                format!("pubky://{PK}/priv/social/v1/posts/0032SSN7Q4EVG"),
+                "cannot reference a private one",
+            ),
+            (
+                format!("pubky://{PK}/pub/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52G.json"),
+                "must be versionless",
+            ),
+        ] {
+            assert!(bookmark_filename(&bad).unwrap_err().contains(why), "{bad}");
+            assert!(create_bookmark(&bad).unwrap_err().contains(why), "{bad}");
+            // and the same value stored AS a primary filename is an invalid entry
+            let spelled = URL_SAFE_NO_PAD.encode(&bad);
+            assert!(
+                bookmark_target(&spelled, &content(1, None))
+                    .unwrap_err()
+                    .contains(why),
+                "{bad} was read back"
+            );
+        }
+        assert!(bookmark_filename(&target()).is_ok());
+        assert!(bookmark_filename("https://example.com/a").is_ok());
+        assert!(bookmark_filename("nostr:nevent1abc").is_ok());
     }
 
     #[test]

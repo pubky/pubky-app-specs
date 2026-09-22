@@ -1,8 +1,8 @@
-//! The engine-free URI canonicalizers. Every stored reference validates through
-//! [`validate_reference`] as the fixed point of its canonical form; the bookmark target is the
-//! one field still on `url::Url` until the private tier lands. No `url::Url` here or in the
-//! parser: an engine parser repairs junk into acceptance (userinfo stripped, `..` collapsed,
-//! query and fragment ignored) and its behavior cannot be pinned across versions.
+//! The engine-free URI canonicalizers. Every stored reference, the bookmark target included,
+//! validates through [`validate_reference`] as the fixed point of its canonical form. No
+//! `url::Url` here or in the parser: an engine parser repairs junk into acceptance (userinfo
+//! stripped, `..` collapsed, query and fragment ignored) and its behavior cannot be pinned
+//! across versions.
 
 use crate::common::{ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace};
 use crate::limits::VALIDATION_LIMITS;
