@@ -77,6 +77,10 @@ fn an_unknown_content_filter_leaves_the_id_unchecked() {
         assert_eq!(f.feed.content, Some(PubkySocialPostKind::Unknown));
     }
     // the guard stops at `content`: an unknown reach is still a rejection, by name
+    // an unknown filter skips the hash comparison, never the id's own spelling rule
+    let e = <PubkySocialFeed as Validatable>::try_from(feed.as_bytes(), "not-an-id", &PUB_CTX)
+        .unwrap_err();
+    assert!(e.contains("Validation Error"), "{e}");
     let broken = feed.replace(r#""reach":"all""#, r#""reach":"short""#);
     let err = <PubkySocialFeed as Validatable>::try_from(
         broken.as_bytes(),

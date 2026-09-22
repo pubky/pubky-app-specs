@@ -51,7 +51,8 @@ pub fn feed_paths_js(id: String) -> Result<JsValue, String> {
 }
 
 /// The JS spelling of the feed lifecycle planners: the copy a publish is, and the deletes an
-/// unpublish and a delete are, in the order to run them. A path that is not there is a skip.
+/// unpublish and a delete are, in the order to run them. A delete of a path that is not there
+/// is a skip; the publish copy always runs, since name and icon live outside the id.
 #[derive(Serialize)]
 struct FeedLifecycle {
     publish: FeedCopy,

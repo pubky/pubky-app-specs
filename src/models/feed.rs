@@ -454,7 +454,9 @@ fn checked_feed_paths(id: &str) -> Result<FeedPaths, String> {
 
 /// Publish: PUT the bytes read from the first path at the second. A feed config carries no
 /// root-bearing URIs, so nothing inside the file changes and there is nothing to rewrite.
-/// Skip-if-exists is the caller's: a public copy that is already there proves the publish ran.
+/// Always copy, never skip an existing public copy: the name, the icon and unknown members
+/// sit outside the id, so the same path can hold stale bytes, and a copy of identical bytes
+/// is a harmless overwrite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeedPublishPlan {
     /// `(private path, public path)`.
@@ -598,7 +600,9 @@ impl Validatable for PubkySocialFeed {
         if let Some(id) = id {
             // The id is a write-side guarantee. A reader that does not know the content
             // filter cannot rebuild the writer's string around it, so it takes the id as
-            // named; reach, layout and sort are rejected above, before ever reaching here.
+            // named, but only a canonically spelled one; reach, layout and sort are rejected
+            // above, before ever reaching here.
+            validate_hash_id_format(id)?;
             if self.feed.content.as_ref().is_none_or(|c| c.is_known()) {
                 self.validate_id(id)?;
             }
