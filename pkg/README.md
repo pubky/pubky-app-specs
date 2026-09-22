@@ -142,11 +142,8 @@ console.log(limitsJson.postAttachmentsMaxCount);
 ```js
 import { getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "pubky-social-specs";
 
-const validMimeTypes = getValidMimeTypes();
-
-if (!validMimeTypes.includes(file.type)) {
-  throw new Error(`Unsupported file type: ${file.type}`);
-}
+// A picker hint only: createFile accepts any declared type, unmapped ones land on .bin
+const accept = getValidMimeTypes().join(",");
 
 mimeToExt("IMAGE/PNG; charset=x"); // "png", and "bin" for anything unmapped
 essence("IMAGE/PNG; charset=x"); // "image/png", undefined when malformed

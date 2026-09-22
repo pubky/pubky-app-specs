@@ -133,8 +133,8 @@ impl PubkySocialObject {
                 Ok(PubkySocialObject::Tag(tag))
             }
             Resource::File(filename) => {
-                let id = strip_media_ext(filename);
-                let file = <PubkySocialFile as Validatable>::try_from(blob, id, ctx)?;
+                // Media is raw bytes with no JSON form, so it has its own reader
+                let file = PubkySocialFile::from_bytes(blob, strip_media_ext(filename))?;
                 Ok(PubkySocialObject::File(file))
             }
             Resource::Feed(feed_id) => {

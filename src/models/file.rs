@@ -1,19 +1,12 @@
 use crate::constants::social_path;
 use crate::mime::mime_to_ext;
-use crate::traits::{Root, ValidationCtx, ValidationError};
-use crate::{
-    limits::VALIDATION_LIMITS,
-    traits::{HashId, Validatable},
-};
+use crate::traits::{Root, ValidationError};
+use crate::{limits::VALIDATION_LIMITS, traits::HashId};
 use base32::{encode, Alphabet};
 use blake3::Hasher;
-use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
 
 /// Advisory client hint only; gates nothing. The upload pipeline maps ANY declared type via
 /// mime_to_ext.
@@ -47,11 +40,11 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 /// path-only, cannot fork identity.
 /// URI: /{pub|priv}/social/v1/files/:hash.:ext
 ///
-/// The serde derives are there for the `Validatable` bound; the raw `try_from` below is what
-/// keeps JSON out of the media path.
+/// Not a `Validatable`: that trait is the JSON-resource contract (parse, size cap on the
+/// serialized form) and a media object has no JSON form at all, so it carries no serde derives
+/// and no schema. Reading one is `from_bytes`.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Deserialize, Serialize, Debug, Default, Clone)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[derive(Debug, Clone)]
 pub struct PubkySocialFile(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
 
 /// What an upload needs: the object, its id, and the path carrying the extension.
@@ -82,7 +75,7 @@ impl PubkySocialFile {
         root: Root,
     ) -> Result<CreatedFile, String> {
         let file = Self(bytes);
-        file.validate(None, &ValidationCtx { root })?;
+        file.validate(None)?;
         let id = file.create_id();
         let path = Self::create_path_in(root, &format!("{id}.{}", mime_to_ext(declared_type)));
         Ok(CreatedFile { file, id, path })
@@ -121,39 +114,25 @@ impl HashId for PubkySocialFile {
     }
 }
 
-impl Validatable for PubkySocialFile {
-    fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, String> {
-        let instance = Self(blob.to_vec());
-        instance.validate(Some(id), ctx)?;
-        Ok(instance)
+impl PubkySocialFile {
+    /// Reads a stored media object: the bytes as served, checked against the id in its path.
+    pub fn from_bytes(bytes: &[u8], id: &str) -> Result<Self, String> {
+        let file = Self(bytes.to_vec());
+        file.validate(Some(id))?;
+        Ok(file)
     }
 
-    // Bytes, not JSON: the media cap below is the size rule, so skip the JSON re-serialization.
-    fn validate(&self, id: Option<&str>, ctx: &ValidationCtx) -> Result<(), ValidationError> {
-        self.validate_fields(id, ctx)
-    }
-
-    // Bytes, not JSON: the media cap in validate_fields is the size rule
-    fn validate_size(&self) -> Result<(), ValidationError> {
-        Ok(())
-    }
-
-    fn validate_fields(
-        &self,
-        id: Option<&str>,
-        _ctx: &ValidationCtx,
-    ) -> Result<(), ValidationError> {
+    /// Non-empty, within the media cap, and the id (when given) is the hash of the bytes.
+    pub fn validate(&self, id: Option<&str>) -> Result<(), ValidationError> {
         if self.0.is_empty() {
             return Err("Validation Error: File size cannot be zero".to_string());
         }
         if self.0.len() > VALIDATION_LIMITS.max_file_size_bytes {
             return Err("Validation Error: File size exceeds maximum limit of 100MB".to_string());
         }
-
         if let Some(id) = id {
             self.validate_id(id)?;
-        };
-
+        }
         Ok(())
     }
 }
@@ -161,7 +140,6 @@ impl Validatable for PubkySocialFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::PUB_CTX;
     use crate::uri::file_uri_builder;
 
     /// blake3 over [1, 2], first 16 bytes, Crockford.
@@ -186,28 +164,28 @@ mod tests {
     fn test_validate() {
         let file = PubkySocialFile(vec![1, 2, 3]);
         let id = file.create_id();
-        assert!(file.validate(Some(&id), &PUB_CTX).is_ok());
+        assert!(file.validate(Some(&id)).is_ok());
 
         // Test without ID
-        assert!(file.validate(None, &PUB_CTX).is_ok());
+        assert!(file.validate(None).is_ok());
     }
 
     #[test]
     fn test_validate_size_errors() {
         let max_size_file = PubkySocialFile(vec![0; VALIDATION_LIMITS.max_file_size_bytes]);
         let id = max_size_file.create_id();
-        let result = max_size_file.validate(Some(&id), &PUB_CTX);
+        let result = max_size_file.validate(Some(&id));
         assert!(result.is_ok(), "a file at max size should be valid");
 
         let zero_size_file = PubkySocialFile(vec![]);
         let id = zero_size_file.create_id();
-        let result = zero_size_file.validate(Some(&id), &PUB_CTX);
+        let result = zero_size_file.validate(Some(&id));
         assert!(result.is_err(), "a zero-size file should be invalid");
         assert!(result.unwrap_err().contains("cannot be zero"));
 
         let oversized_file = PubkySocialFile(vec![0; VALIDATION_LIMITS.max_file_size_bytes + 1]);
         let id = oversized_file.create_id();
-        let result = oversized_file.validate(Some(&id), &PUB_CTX);
+        let result = oversized_file.validate(Some(&id));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds maximum limit"));
     }
@@ -215,7 +193,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_id() {
         let file = PubkySocialFile(vec![1, 2, 3]);
-        assert!(file.validate(Some("INVALIDID"), &PUB_CTX).is_err());
+        assert!(file.validate(Some("INVALIDID")).is_err());
     }
 
     #[test]
@@ -223,13 +201,13 @@ mod tests {
         let bytes = vec![1, 2, 3, 4, 5];
         let id = PubkySocialFile(bytes.clone()).create_id();
 
-        let result = <PubkySocialFile as Validatable>::try_from(&bytes, &id, &PUB_CTX);
+        let result = PubkySocialFile::from_bytes(&bytes, &id);
         assert_eq!(result.unwrap().0, bytes);
     }
 
     #[test]
     fn test_try_from_invalid_id() {
-        let result = <PubkySocialFile as Validatable>::try_from(&[1, 2, 3], "INVALIDID", &PUB_CTX);
+        let result = PubkySocialFile::from_bytes(&[1, 2, 3], "INVALIDID");
         assert!(result.is_err());
     }
 
