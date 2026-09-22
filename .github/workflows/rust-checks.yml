@@ -68,4 +68,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: '! git grep -n -E "PubkyApp[A-Za-z]|pubky_app_specs|pubky-app-specs" -- . ":!SPEC.md" ":!docs/SPEC_V0.md" ":!.github/workflows/rust-checks.yml"'
+      # The frozen 0.x reader and its fixtures carry the old names on purpose.
+      - run: '! git grep -n -E "PubkyApp[A-Za-z]|pubky_app_specs|pubky-app-specs" -- . ":!SPEC.md" ":!docs/SPEC_V0.md" ":!.github/workflows/rust-checks.yml" ":!src/models/legacy_v0/**" ":!tests/fixtures/legacy_v0/**" ":!tests/legacy_v0_replay.rs"'

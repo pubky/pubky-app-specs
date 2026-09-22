@@ -72,17 +72,17 @@ pubky-social-specs = { version = "1.0.0-alpha.3", features = ["openapi"] }
 
 ## Reading 0.x data
 
-`legacy_v0` is the 0.x reader, frozen at the 0.8.0 pin. It carries that release's parser, read models and validation copied unchanged, so an object 0.x accepted or rejected keeps the same answer forever, and none of it is edited to match the 1.x rules.
+`legacy_v0` is the 0.x reader, frozen at the 0.8.0 pin. It carries that release's parser, read models and validation copied unchanged, so an object 0.x accepted or rejected keeps the same answer forever, and none of it is edited to match the 1.x rules. Hand its object enum a stored URI and the bytes and it answers what 0.8.0 answered.
+
+`stable_id` keys a stored path the same under either epoch, so a migrated object indexes in place rather than twice:
 
 ```rust
-use pubky_social_specs::legacy_v0::PubkyAppObject;
 use pubky_social_specs::stable_id;
 
-let object = PubkyAppObject::from_uri(uri, &bytes)?;
-
-// A 0.x path and its 1.x counterpart carry one dedup key, so a migrated object
-// indexes in place rather than twice.
-assert_eq!(stable_id("pub/pubky.app/posts/0RDX5H0000000"), stable_id("pub/social/v1/posts/0RDX5H0000000/0RDX5J0000002.json"));
+assert_eq!(
+    stable_id("pub/pubky.app/posts/0RDX5H0000000"),
+    stable_id("pub/social/v1/posts/0RDX5H0000000/0RDX5J0000002.json"),
+);
 ```
 
 ## Specification
