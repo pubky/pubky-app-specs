@@ -129,7 +129,7 @@ pub(crate) fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)>
 
 /// The pre-dot part of a media filename when its rightmost extension is in the closed strip
 /// set, else `None`. Case-sensitive: `.JPG` is not the same extension as `.jpg`.
-fn media_stem(filename: &str) -> Option<&str> {
+pub(crate) fn media_stem(filename: &str) -> Option<&str> {
     match filename.rsplit_once('.') {
         Some((hash, ext)) if STRIP_SET.contains(&ext) => Some(hash),
         _ => None,

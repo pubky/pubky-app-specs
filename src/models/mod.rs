@@ -43,7 +43,7 @@
 //! fails its id check. That goes away when feed ids stop being derived
 //! from the serialized config.
 
-use crate::uri::strip_media_ext;
+use crate::uri::media_stem;
 use crate::{traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
 
 pub mod bookmark;
@@ -133,8 +133,13 @@ impl PubkySocialObject {
                 Ok(PubkySocialObject::Tag(tag))
             }
             Resource::File(filename) => {
+                // A hand-built value takes the parser's leaf rule too, so a filename without a
+                // media extension is refused here as it is there
+                let id = media_stem(filename).ok_or_else(|| {
+                    format!("a media filename needs a known extension: {filename}")
+                })?;
                 // Media is raw bytes with no JSON form, so it has its own reader
-                let file = PubkySocialFile::from_bytes(blob, strip_media_ext(filename))?;
+                let file = PubkySocialFile::from_bytes(blob, id)?;
                 Ok(PubkySocialObject::File(file))
             }
             Resource::Feed(feed_id) => {
@@ -369,6 +374,10 @@ mod tests {
 
         let other = Resource::File("8Z8CWH8NVYQY39ZEBFGKQWWEKG.bin".to_string());
         assert!(PubkySocialObject::from_resource(&other, &bytes, &PUB_CTX).is_err());
+        // a leaf without a media extension is refused here as the parser refuses it
+        let bare = Resource::File(id.clone());
+        let e = PubkySocialObject::from_resource(&bare, &bytes, &PUB_CTX).unwrap_err();
+        assert!(e.contains("known extension"), "{e}");
     }
 
     #[test]
