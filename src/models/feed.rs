@@ -2,7 +2,8 @@ use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
     common::{
-        ascii_fold, check_extra, code_point_len, frozen_trim, timestamp, validate_safe_json_int,
+        ascii_fold, check_extra, code_point_len, frozen_trim, timestamp, validate_hash_id_format,
+        validate_safe_json_int,
     },
     limits::VALIDATION_LIMITS,
     models::tag::{sanitize_tag_label, validate_tag_label},
@@ -152,8 +153,8 @@ pub struct PubkySocialFeedConfig {
 
 impl PubkySocialFeedConfig {
     /// The one builder. It canonicalizes both tag lists, so one filter has one spelling and
-    /// one id; an empty result is stored as `None`, "no filter". It then validates them, so a
-    /// caller can never hold a config whose id string would be ambiguous.
+    /// one id, then validates them, so a caller can never hold a config whose id string would
+    /// be ambiguous. `None` is "no filter"; a blank label or an empty list is an error.
     pub fn new(
         tags: Option<Vec<String>>,
         domain_tags: Option<Vec<String>>,
@@ -162,8 +163,8 @@ impl PubkySocialFeedConfig {
         sort: PubkySocialFeedSort,
         content: Option<PubkySocialPostKind>,
     ) -> Result<Self, String> {
-        let tags = canonical_filter(tags);
-        let domain_tags = canonical_filter(domain_tags);
+        let tags = canonical_filter(tags, "tags")?;
+        let domain_tags = canonical_filter(domain_tags, "domain_tags")?;
         validate_tag_list(&tags, "tags")?;
         validate_tag_list(&domain_tags, "domain_tags")?;
         Ok(Self {
@@ -228,21 +229,35 @@ impl PubkySocialFeedConfig {
     }
 }
 
-/// Folds every label, drops what folds to nothing, deduplicates and sorts by code point
-/// (`str` order is UTF-8 byte order is code point order). Builders call this; a stored list
-/// is already its own fixed point, so the id input joins it verbatim.
+/// Folds every label, deduplicates and sorts by code point (`str` order is UTF-8 byte order is
+/// code point order). Builders call this; a stored list is already its own fixed point, so the
+/// id input joins it verbatim.
 fn canonical_tag_list(tags: Vec<String>) -> Vec<String> {
     tags.into_iter()
         .map(|tag| sanitize_tag_label(&tag))
-        .filter(|tag| !tag.is_empty())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
 }
 
-/// A list that canonicalizes to nothing is not a filter, so it is stored as `None`.
-fn canonical_filter(tags: Option<Vec<String>>) -> Option<Vec<String>> {
-    tags.map(canonical_tag_list).filter(|list| !list.is_empty())
+/// A caller's list in canonical form, or the reason it is not a filter at all. A blank label
+/// and an empty list are typos, and dropping either silently would write a feed the caller did
+/// not ask for: one with no filter, under a different id. `None` is how a caller says that.
+fn canonical_filter(tags: Option<Vec<String>>, field: &str) -> Result<Option<Vec<String>>, String> {
+    let Some(tags) = tags else {
+        return Ok(None);
+    };
+    if tags.is_empty() {
+        return Err(format!(
+            "Validation Error: {field} must not be an empty list; pass None for no filter"
+        ));
+    }
+    if tags.iter().any(|tag| sanitize_tag_label(tag).is_empty()) {
+        return Err(format!(
+            "Validation Error: {field} must not contain a blank label"
+        ));
+    }
+    Ok(Some(canonical_tag_list(tags)))
 }
 
 /// Only the shape of the name is validated, not whether the icon exists: the icon set is
@@ -430,6 +445,57 @@ pub fn feed_paths(id: &str) -> FeedPaths {
         private: PubkySocialFeed::create_path_in(Root::Priv, id),
         public: PubkySocialFeed::create_path_in(Root::Pub, id),
     }
+}
+
+fn checked_feed_paths(id: &str) -> Result<FeedPaths, String> {
+    validate_hash_id_format(id)?;
+    Ok(feed_paths(id))
+}
+
+/// Publish: PUT the bytes read from the first path at the second. A feed config carries no
+/// root-bearing URIs, so nothing inside the file changes and there is nothing to rewrite.
+/// Skip-if-exists is the caller's: a public copy that is already there proves the publish ran.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedPublishPlan {
+    /// `(private path, public path)`.
+    pub copy: (String, String),
+}
+
+/// Unpublish: the public copy goes, the feed stays where its owner reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedUnpublishPlan {
+    pub delete: String,
+}
+
+/// Delete: both copies, public first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedDeletePlan {
+    pub deletes: Vec<String>,
+}
+
+/// Plans a publish of the feed with this id. Pure: the caller does the GET and the PUT.
+pub fn plan_feed_publish(id: &str) -> Result<FeedPublishPlan, String> {
+    let paths = checked_feed_paths(id)?;
+    Ok(FeedPublishPlan {
+        copy: (paths.private, paths.public),
+    })
+}
+
+/// Plans an unpublish of the feed with this id.
+pub fn plan_feed_unpublish(id: &str) -> Result<FeedUnpublishPlan, String> {
+    Ok(FeedUnpublishPlan {
+        delete: checked_feed_paths(id)?.public,
+    })
+}
+
+/// Plans a delete of the feed with this id, in order. The public copy goes first so the feed
+/// stops being world-readable before the one its owner reads disappears. A path that is not
+/// there is a skip for the caller, never an error.
+pub fn plan_feed_delete(id: &str) -> Result<FeedDeletePlan, String> {
+    let paths = checked_feed_paths(id)?;
+    Ok(FeedDeletePlan {
+        deletes: vec![paths.public, paths.private],
+    })
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -781,15 +847,10 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_folds_dedups_and_drops_empties() {
+    fn test_builder_folds_and_dedups() {
         let config = PubkySocialFeedConfig::new(
-            Some(vec![
-                "  RUST ".into(),
-                "rust".into(),
-                "  ".into(),
-                "Bitcoin".into(),
-            ]),
-            Some(vec!["  ".into()]),
+            Some(vec!["  RUST ".into(), "rust".into(), "Bitcoin".into()]),
+            None,
             R::All,
             L::Columns,
             S::Recent,
@@ -800,9 +861,44 @@ mod tests {
             config.tags,
             Some(vec!["bitcoin".to_string(), "rust".to_string()])
         );
-        // a list that canonicalizes to nothing is "no filter", never Some([])
         assert_eq!(config.domain_tags, None);
         assert!(validate(&feed(config)).is_ok());
+    }
+
+    #[test]
+    fn test_builder_refuses_a_blank_label_and_an_empty_list() {
+        // Dropping either would hand back a feed with no filter, under an id the caller never
+        // asked for. None is how a caller says "no filter".
+        let build = |tags: Option<Vec<&str>>, domain_tags: Option<Vec<&str>>| {
+            let own = |l: Option<Vec<&str>>| l.map(|l| l.into_iter().map(String::from).collect());
+            PubkySocialFeedConfig::new(
+                own(tags),
+                own(domain_tags),
+                R::All,
+                L::Columns,
+                S::Recent,
+                None,
+            )
+        };
+        for (list, expected) in [
+            (vec![], "must not be an empty list"),
+            (vec![" "], "must not contain a blank label"),
+            (vec!["\u{3000}"], "must not contain a blank label"),
+            (vec!["rust", "  "], "must not contain a blank label"),
+        ] {
+            let e = build(Some(list.clone()), None).unwrap_err();
+            assert!(
+                e.starts_with("Validation Error: tags ") && e.contains(expected),
+                "{list:?}: {e}"
+            );
+            let e = build(None, Some(list.clone())).unwrap_err();
+            assert!(
+                e.starts_with("Validation Error: domain_tags ") && e.contains(expected),
+                "{list:?}: {e}"
+            );
+        }
+        // None is not a mistake
+        assert!(build(None, None).is_ok());
     }
 
     #[test]
@@ -1074,6 +1170,30 @@ mod tests {
             assert_eq!(parsed.visibility, visibility);
             assert_eq!(parsed.resource, crate::Resource::Feed(id.clone()));
             assert_eq!(parsed.try_to_uri_str().unwrap(), uri);
+        }
+    }
+
+    #[test]
+    fn test_lifecycle_planners_are_paths_in_order() {
+        let id = feed(stored(None, None, R::All, L::List, S::Recent, None)).create_id();
+        let paths = feed_paths(&id);
+
+        assert_eq!(
+            plan_feed_publish(&id).unwrap().copy,
+            (paths.private.clone(), paths.public.clone())
+        );
+        assert_eq!(plan_feed_unpublish(&id).unwrap().delete, paths.public);
+        // public first: the feed stops being world-readable before the owner's copy goes
+        assert_eq!(
+            plan_feed_delete(&id).unwrap().deletes,
+            vec![paths.public.clone(), paths.private.clone()]
+        );
+
+        // a planner takes an id, not a path, so a spelling no homeserver key can hold stops here
+        for bad in ["", "not-an-id", &id.to_lowercase(), &format!("{id}.json")] {
+            assert!(plan_feed_publish(bad).is_err(), "{bad}");
+            assert!(plan_feed_unpublish(bad).is_err(), "{bad}");
+            assert!(plan_feed_delete(bad).is_err(), "{bad}");
         }
     }
 

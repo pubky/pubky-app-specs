@@ -50,6 +50,34 @@ pub fn feed_paths_js(id: String) -> Result<JsValue, String> {
     to_value(&crate::feed_paths(&id)).map_err(|e| e.to_string())
 }
 
+/// The JS spelling of the feed lifecycle planners: the copy a publish is, and the deletes an
+/// unpublish and a delete are, in the order to run them. A path that is not there is a skip.
+#[derive(Serialize)]
+struct FeedLifecycle {
+    publish: FeedCopy,
+    unpublish: Vec<String>,
+    delete: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct FeedCopy {
+    from: String,
+    to: String,
+}
+
+/// Every path a feed lifecycle step touches, as
+/// `{publish: {from, to}, unpublish: [...], delete: [...]}`.
+#[wasm_bindgen(js_name = feedLifecycle)]
+pub fn feed_lifecycle_js(id: String) -> Result<JsValue, String> {
+    let (from, to) = crate::plan_feed_publish(&id)?.copy;
+    let lifecycle = FeedLifecycle {
+        publish: FeedCopy { from, to },
+        unpublish: vec![crate::plan_feed_unpublish(&id)?.delete],
+        delete: crate::plan_feed_delete(&id)?.deletes,
+    };
+    to_value(&lifecycle).map_err(|e| e.to_string())
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Meta {

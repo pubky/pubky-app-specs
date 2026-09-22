@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable, feedPaths } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable, feedPaths, feedLifecycle } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -738,6 +738,11 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(paths.private, `/priv/social/v1/feeds/${feedMeta.id}.json`, "private path");
       assert.strictEqual(paths.public, `/pub/social/v1/feeds/${feedMeta.id}.json`, "public path");
       assert.strictEqual(paths.private, feedMeta.path, "the builder writes the private path");
+
+      const lifecycle = feedLifecycle(feedMeta.id);
+      assert.deepStrictEqual(lifecycle.publish, { from: paths.private, to: paths.public }, "publish copies the bytes");
+      assert.deepStrictEqual(lifecycle.unpublish, [paths.public], "unpublish drops the public copy");
+      assert.deepStrictEqual(lifecycle.delete, [paths.public, paths.private], "delete takes the public copy first");
 
       // Test feed content
       const feedJson = feed.toJson();
