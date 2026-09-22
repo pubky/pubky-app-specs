@@ -56,6 +56,12 @@ fn keyed(segment: &str, id: &str) -> Option<String> {
 /// No id is validated here: the key comes from a path the ingest already accepted. Pure
 /// string work, no parse, so a later epoch keys its leaves without touching this.
 ///
+/// A leaf is read on the terms of the epoch that wrote it. A post leaf is the version path,
+/// so everything from its first segment on is dropped under every epoch. Any other leaf is
+/// the id: under `pubky.app` a trailing extra segment is ignored, because the v0 parser
+/// ignores it and keys the object anyway, and under a social epoch it makes the path no
+/// object at all, because the v1 parser rejects it.
+///
 /// What collapses across epochs is the path grammar, not the id inside it. `posts`, `files`
 /// and `blobs`, `follows`, `mutes`, `profile`, `settings` and `last_read` carry the same id
 /// in both spellings of one object, so the two paths key onto one row. `tags`, `bookmarks`
@@ -86,21 +92,29 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
         return None;
     };
 
-    // The resource segment and everything after it. A post leaf keeps its own slash.
+    // The resource segment and everything after it.
     let (segment, leaf) = match rest.split_once('/') {
         Some((s, l)) => (s, Some(l)),
         None => (rest, None),
     };
     let leaf = leaf.filter(|l| !l.is_empty());
 
+    // A post leaf is a version path under every epoch, so it always trims to its first
+    // segment. For every other resource the leaf is the id, and the two epochs read an
+    // extra segment differently: the v0 parser matches `[resource, id, ..]` and ignores
+    // whatever follows, the v1 parser rejects it. Each epoch gets its own answer, or a
+    // read-then-key pass drops objects the epoch's own parser accepted.
+    let leaf = match leaf {
+        Some(l) if segment == "posts" || legacy => match l.split('/').next().unwrap_or(l) {
+            "" => return None,
+            first => Some(first),
+        },
+        Some(l) if l.contains('/') => return None,
+        none_or_plain => none_or_plain,
+    };
+
     let key = match (segment, leaf) {
-        ("posts", Some(leaf)) => {
-            let id = leaf.split('/').next().unwrap_or(leaf);
-            keyed("posts", id)?
-        }
-        // Every other resource holds its whole id in one leaf, so a leaf that is itself a
-        // path, a trailing slash included, is not a stored object under any epoch.
-        (_, Some(leaf)) if leaf.contains('/') => return None,
+        ("posts", Some(id)) => keyed("posts", id)?,
         ("files", Some(leaf)) => {
             if legacy {
                 // The v0 metadata object names the bytes; only its `src` completes the key.
@@ -348,21 +362,56 @@ mod tests {
     }
 
     #[test]
-    fn only_a_post_leaf_may_be_a_path() {
-        // A post drops everything from its version leaf on, so a deeper path still keys.
-        // Every other resource holds its whole id in the leaf, so a slash means the path
-        // is not one of its objects.
+    fn a_post_leaf_is_a_path_under_every_epoch() {
+        for root in ["pub/social/v1", "pub/pubky.app"] {
+            assert_eq!(
+                key(&format!("{root}/posts/0RDX5H0000000/a/b/c")).as_deref(),
+                Some("posts/0RDX5H0000000"),
+                "{root}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_v0_leaf_ignores_an_extra_segment_the_way_the_v0_parser_does() {
+        // The v0 parser matches [resource, id, ..] and keys on the id, so dropping these
+        // would lose objects that v0 itself accepted.
         assert_eq!(
-            key("pub/social/v1/posts/0RDX5H0000000/a/b/c").as_deref(),
-            Some("posts/0RDX5H0000000")
+            stable_id(&format!("pub/pubky.app/files/{HASH}/extra")),
+            Some(StableId::NeedsDeref {
+                tsid: HASH.to_string()
+            })
         );
+        let cases: &[(&str, &str)] = &[
+            ("pub/pubky.app/tags/ABC/x", "tags/ABC"),
+            ("pub/pubky.app/tags/ABC/", "tags/ABC"),
+            ("priv/pubky.app/bookmarks/ABC/x/y", "bookmarks/ABC"),
+            ("pub/pubky.app/follows/PK/x", "follows/PK"),
+            ("pub/pubky.app/blobs/ABC/x", "files/ABC"),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(key(path).as_deref(), Some(*expected), "{path}");
+        }
+        // An empty first segment is still no object.
+        for path in [
+            "pub/pubky.app/tags//x",
+            "pub/pubky.app/files//extra",
+            "pub/pubky.app/posts//x",
+        ] {
+            assert_eq!(stable_id(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_social_epoch_leaf_may_not_be_a_path() {
+        // The v1 parser rejects the extra segment, so nothing was ever stored there.
         for path in [
             &format!("pub/social/v1/tags/{HASH}/"),
             &format!("pub/social/v1/files/{HASH}.png/x"),
             &format!("pub/social/v1/blobs/{HASH}/x"),
-            &format!("pub/pubky.app/files/{HASH}/x"),
             &format!("pub/social/v1/follows/{HASH}/x"),
             "pub/social/v1/profile.json/x",
+            "pub/pubky.app/profile.json/x",
         ] {
             assert_eq!(stable_id(path), None, "{path}");
         }
