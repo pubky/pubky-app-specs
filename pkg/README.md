@@ -56,7 +56,7 @@ console.log(post.toJson());
 Each create method returns:
 
 - `meta`: generated `id`, storage `path`, and full `url`
-- a typed WASM model object with `.toJson()`
+- a typed WASM model object with `.toJson()` (`createFile` returns bytes instead: read `file.data`, there is no JSON form)
 
 ## Common Models
 
@@ -64,8 +64,7 @@ Each create method returns:
 const { user, meta } = specs.createUser(name, bio, image, links, status);
 const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
 const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments, lock);
-const { file, meta } = specs.createFile(name, src, contentType, size);
-const { blob, meta } = specs.createBlob(bytes);
+const { file, meta } = specs.createFile(bytes, declaredType); // bytes: Uint8Array
 const { bookmark, meta } = specs.createBookmark(uri);
 const { tag, meta } = specs.createTag(uri, label);
 const { follow, meta } = specs.createFollow(pubkyId);
@@ -84,6 +83,8 @@ const { feed, meta } = specs.createFeed({
 
 `createCollectionPost(name, description, items, coverImage, layout)` takes an array of `PubkySocialCollectionItem(uri, note)`; an item URI can be anything (a post, a user, a web page, a `nostr:` event) and the note is optional but never blank. The stored envelope is `{name, description?, items: [{uri, note?}], cover_image?, layout?}`. `createTag(uri, label)` stores the uri as written, so it must already be canonical (`pubky://...`, never the short form, no surrounding whitespace); the label is trimmed and ASCII-lowercased by the builder and a stored label must already be in that form. `createUser` stores `image` and every `links[].url` as written, so they must already be canonical: an image is a `pubky://`, `http://` or `https://` URI, a link url is `http://` or `https://`, and surrounding whitespace or the short `pubky<pk>` form rejects. The builder trims `name`, `bio`, `status` and every link title; `PubkySocialUser.fromJson` never rewrites what it reads, so what you stored is what you get, padding included. `parent` and `embed` are any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty.
 
+`createFile(bytes, declaredType)` stores the bytes as they are, with no metadata object: `meta.id` is the hash of the bytes and `meta.path` is `files/{hash}.{ext}`, where the extension comes from the declared type and is path-only. The declared type is read once, here, and never stored. `fileUriBuilder(pubkyId, filename)` takes that whole filename, since an extension cannot be derived from an id.
+
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
 For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-social-specs/blob/main/pkg/example.js).
@@ -98,7 +99,6 @@ import {
   followUriBuilder,
   tagUriBuilder,
   muteUriBuilder,
-  blobUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
   parse_uri,
@@ -140,14 +140,17 @@ console.log(limitsJson.postAttachmentsMaxCount);
 ## MIME Types
 
 ```js
-import { getValidMimeTypes } from "pubky-social-specs";
+import { getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "pubky-social-specs";
 
-const validMimeTypes = getValidMimeTypes();
+// A picker hint only: createFile accepts any declared type, unmapped ones land on .bin
+const accept = getValidMimeTypes().join(",");
 
-if (!validMimeTypes.includes(file.type)) {
-  throw new Error(`Unsupported file type: ${file.type}`);
-}
+mimeToExt("IMAGE/PNG; charset=x"); // "png", and "bin" for anything unmapped
+essence("IMAGE/PNG; charset=x"); // "image/png", undefined when malformed
+mimeToExtTable(); // the whole frozen map as a plain object
 ```
+
+`getValidMimeTypes` is an advisory hint for a file picker; it gates nothing. `createFile` accepts any declared type and maps it through `mimeToExt`.
 
 ## Specification
 

@@ -12,13 +12,13 @@ mod scheme;
 
 // Build
 pub use builders::{
-    blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder, follow_uri_builder,
+    bookmark_uri_builder, feed_uri_builder, file_uri_builder, follow_uri_builder,
     list_prefix_builder, mute_uri_builder, post_uri_builder, private_list_prefix_builder,
     tag_uri_builder, user_uri_builder,
 };
 
 // Strict
-pub(crate) use parsed::{is_valid_label, parse_version_leaf};
+pub(crate) use parsed::{is_valid_label, media_stem, parse_version_leaf};
 pub use parsed::{ParsedUri, Visibility};
 pub use resource::Resource;
 

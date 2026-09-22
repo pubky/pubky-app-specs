@@ -1,29 +1,15 @@
 use crate::constants::social_path;
-use crate::traits::{Root, ValidationCtx, ValidationError};
-use crate::{
-    common::timestamp,
-    limits::VALIDATION_LIMITS,
-    traits::{HasIdPath, TimestampId, Validatable},
-};
-use mime::Mime;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use url::Url;
+use crate::mime::mime_to_ext;
+use crate::traits::{Root, ValidationError};
+use crate::{limits::VALIDATION_LIMITS, traits::HashId};
+use base32::{encode, Alphabet};
+use blake3::Hasher;
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
-
-// Local to this model so the shared limits table carries only 1.0 rows.
-const FILE_NAME_MIN_LENGTH: usize = 1;
-const FILE_NAME_MAX_LENGTH: usize = 255;
-const FILE_SRC_MAX_LENGTH: usize = 1024;
-
-/// Valid MIME types for file attachments.
+/// Advisory client hint only; gates nothing. The upload pipeline maps ANY declared type via
+/// mime_to_ext.
 pub const VALID_MIME_TYPES: &[&str] = &[
     "application/javascript",
     "application/json",
@@ -41,6 +27,7 @@ pub const VALID_MIME_TYPES: &[&str] = &[
     "image/webp",
     "multipart/form-data",
     "text/css",
+    "text/csv",
     "text/html",
     "text/plain",
     "text/xml",
@@ -48,150 +35,103 @@ pub const VALID_MIME_TYPES: &[&str] = &[
     "video/mpeg",
 ];
 
-/// Represents a file uploaded by the user.
-/// URI: /pub/social/v1/files/:file_id
+/// A media file: the raw bytes, written as raw bytes and never as JSON. The id is the hash of
+/// those bytes, so identical uploads collapse to one object and the extension, which is
+/// path-only, cannot fork identity.
+/// URI: /{pub|priv}/social/v1/files/:hash.:ext
+///
+/// Not a `Validatable`: that trait is the JSON-resource contract (parse, size cap on the
+/// serialized form) and a media object has no JSON form at all, so it carries no serde derives
+/// and no schema. Reading one is `from_bytes`.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Deserialize, Serialize, Debug, Default, Clone)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkySocialFile {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub name: String,
-    pub created_at: i64,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub src: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    pub content_type: String,
-    pub size: usize,
+#[derive(Debug, Clone)]
+pub struct PubkySocialFile(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
+
+/// What an upload needs: the object, its id, and the path carrying the extension.
+#[derive(Debug, Clone)]
+pub struct CreatedFile {
+    pub file: PubkySocialFile,
+    pub id: String,
+    pub path: String,
+}
+
+impl PubkySocialFile {
+    pub const ROOT: Root = Root::Pub;
+    pub const PATH_SEGMENT: &'static str = "files/";
+
+    /// The leaf is the full `{hash}.{ext}` filename, never the id alone.
+    pub fn create_path_in(root: Root, filename: &str) -> String {
+        social_path(root, &[Self::PATH_SEGMENT, filename].concat())
+    }
+
+    pub fn create_path(filename: &str) -> String {
+        Self::create_path_in(Self::ROOT, filename)
+    }
+
+    /// The declared type is consumed exactly once, here, and never stored.
+    pub fn create_file(
+        bytes: Vec<u8>,
+        declared_type: &str,
+        root: Root,
+    ) -> Result<CreatedFile, String> {
+        let file = Self(bytes);
+        file.validate(None)?;
+        let id = file.create_id();
+        let path = Self::create_path_in(root, &format!("{id}.{}", mime_to_ext(declared_type)));
+        Ok(CreatedFile { file, id, path })
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialFile {
-    // Getters clone the data out because String/JsValue is not Copy.
+    /// Getter for the file bytes as a `Uint8Array`. Media is bytes, so there is no
+    /// `toJson`/`fromJson` pair.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn src(&self) -> String {
-        self.src.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn content_type(&self) -> String {
-        self.content_type.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
+    pub fn data(&self) -> js_sys::Uint8Array {
+        js_sys::Uint8Array::from(&self.0[..])
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialFile {}
+impl HashId for PubkySocialFile {
+    fn get_id_data(&self) -> String {
+        // data string id hashing is not needed for PubkySocialFile as we hash the entire file
+        "".to_string()
+    }
+
+    fn create_id(&self) -> String {
+        // Create a Blake3 hash of the file bytes
+        let mut hasher = Hasher::new();
+        hasher.update(&self.0);
+        let blake3_hash = hasher.finalize();
+
+        // Get the first half of the hash bytes
+        let half_hash_length = blake3_hash.as_bytes().len() / 2;
+        let half_hash = &blake3_hash.as_bytes()[..half_hash_length];
+
+        // Encode the first half of the hash in Base32 using the Crockford alphabet
+        encode(Alphabet::Crockford, half_hash)
+    }
+}
 
 impl PubkySocialFile {
-    /// Creates a new `PubkySocialFile` instance.
-    pub fn new(name: String, src: String, content_type: String, size: usize) -> Self {
-        let created_at = timestamp();
-        Self {
-            name,
-            created_at,
-            src,
-            content_type,
-            size,
-        }
-        .sanitize()
-    }
-}
-
-impl TimestampId for PubkySocialFile {}
-
-impl HasIdPath for PubkySocialFile {
-    const ROOT: Root = Root::Pub;
-    const PATH_SEGMENT: &'static str = "files/";
-
-    fn create_path(id: &str) -> String {
-        social_path(Self::ROOT, &format!("{}{id}.json", Self::PATH_SEGMENT))
-    }
-}
-
-impl Validatable for PubkySocialFile {
-    fn sanitize(self) -> Self {
-        let name = self.name.trim().to_string();
-
-        let sanitized_src = self
-            .src
-            .trim()
-            .chars()
-            .take(FILE_SRC_MAX_LENGTH)
-            .collect::<String>();
-
-        let src = match Url::parse(&sanitized_src) {
-            Ok(_) => Some(sanitized_src),
-            Err(_) => None, // Invalid src URL, set to None
-        };
-
-        let content_type = self.content_type.trim().to_string();
-
-        Self {
-            name,
-            created_at: self.created_at,
-            src: src.unwrap_or("".to_string()),
-            content_type,
-            size: self.size,
-        }
+    /// Reads a stored media object: the bytes as served, checked against the id in its path.
+    pub fn from_bytes(bytes: &[u8], id: &str) -> Result<Self, String> {
+        let file = Self(bytes.to_vec());
+        file.validate(Some(id))?;
+        Ok(file)
     }
 
-    fn validate_fields(
-        &self,
-        id: Option<&str>,
-        _ctx: &ValidationCtx,
-    ) -> Result<(), ValidationError> {
-        // Validate the file ID
-        if let Some(id) = id {
-            self.validate_id(id)?;
-        }
-
-        // Validate size
-        if self.size == 0 {
+    /// Non-empty, within the media cap, and the id (when given) is the hash of the bytes.
+    pub fn validate(&self, id: Option<&str>) -> Result<(), ValidationError> {
+        if self.0.is_empty() {
             return Err("Validation Error: File size cannot be zero".to_string());
         }
-        if self.size > VALIDATION_LIMITS.max_file_size_bytes {
+        if self.0.len() > VALIDATION_LIMITS.max_file_size_bytes {
             return Err("Validation Error: File size exceeds maximum limit of 100MB".to_string());
         }
-
-        // Validate name
-        let name_length = self.name.chars().count();
-
-        if !(FILE_NAME_MIN_LENGTH..=FILE_NAME_MAX_LENGTH).contains(&name_length) {
-            return Err("Validation Error: Invalid name length".into());
-        }
-
-        // Validate src
-        if self.src.chars().count() == 0 {
-            return Err("Validation Error: Invalid src".into());
-        }
-        if self.src.chars().count() > FILE_SRC_MAX_LENGTH {
-            return Err("Validation Error: src exceeds maximum length".into());
-        }
-        // Validate URL format
-        Url::parse(&self.src)
-            .map_err(|_| "Validation Error: Invalid src URI format".to_string())?;
-
-        // validate content type
-        match Mime::from_str(&self.content_type) {
-            Ok(mime) => {
-                if !VALID_MIME_TYPES.contains(&mime.essence_str()) {
-                    return Err("Validation Error: Invalid content type".into());
-                }
-            }
-            Err(_) => {
-                return Err("Validation Error: Invalid content type".into());
-            }
+        if let Some(id) = id {
+            self.validate_id(id)?;
         }
         Ok(())
     }
@@ -200,161 +140,105 @@ impl Validatable for PubkySocialFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::PUB_CTX;
-    use crate::{blob_uri_builder, traits::Validatable};
+    use crate::uri::file_uri_builder;
+
+    /// blake3 over [1, 2], first 16 bytes, Crockford.
+    const KAT: &str = "PZBQ010FF079VVZPQG1RNFN6DR";
 
     #[test]
-    fn test_new() {
-        let file = PubkySocialFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "image/png".to_string(),
-            1024,
-        );
-        assert_eq!(file.name, "example.png");
-        assert_eq!(file.src, "pubky://user_id/pub/social/v1/blobs/id");
-        assert_eq!(file.content_type, "image/png");
-        assert_eq!(file.size, 1024);
-        // Check that created_at is recent
-        let now = timestamp();
-        assert!(file.created_at <= now && file.created_at >= now - 1_000_000); // within 1 second
-    }
+    fn test_create_id() {
+        let file = PubkySocialFile(vec![1, 2]);
+        let id = file.create_id();
+        assert_eq!(id, KAT);
 
-    #[test]
-    fn test_create_path() {
-        let file = PubkySocialFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "image/png".to_string(),
-            1024,
-        );
-        let file_id = file.create_id();
-        let path = PubkySocialFile::create_path(&file_id);
+        // Test that same data produces same ID
+        let file2 = PubkySocialFile(vec![1, 2]);
+        assert_eq!(file2.create_id(), id);
 
-        // Check if the path starts with the expected prefix
-        let prefix = "/pub/social/v1/files/".to_string();
-        assert!(path.starts_with(&prefix));
-
-        let expected_path_len = prefix.len() + file_id.len() + ".json".len();
-        assert_eq!(path.len(), expected_path_len);
+        // Test that different data produces different ID
+        let file3 = PubkySocialFile(vec![1, 2, 3]);
+        assert_ne!(file3.create_id(), id);
     }
 
     #[test]
     fn test_validate() {
-        let file = PubkySocialFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "image/png".to_string(),
-            1024,
-        );
+        let file = PubkySocialFile(vec![1, 2, 3]);
         let id = file.create_id();
-        let result = file.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_ok());
+        assert!(file.validate(Some(&id)).is_ok());
+
+        // Test without ID
+        assert!(file.validate(None).is_ok());
+    }
+
+    #[test]
+    fn test_validate_size_errors() {
+        let max_size_file = PubkySocialFile(vec![0; VALIDATION_LIMITS.max_file_size_bytes]);
+        let id = max_size_file.create_id();
+        let result = max_size_file.validate(Some(&id));
+        assert!(result.is_ok(), "a file at max size should be valid");
+
+        let zero_size_file = PubkySocialFile(vec![]);
+        let id = zero_size_file.create_id();
+        let result = zero_size_file.validate(Some(&id));
+        assert!(result.is_err(), "a zero-size file should be invalid");
+        assert!(result.unwrap_err().contains("cannot be zero"));
+
+        let oversized_file = PubkySocialFile(vec![0; VALIDATION_LIMITS.max_file_size_bytes + 1]);
+        let id = oversized_file.create_id();
+        let result = oversized_file.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum limit"));
     }
 
     #[test]
     fn test_validate_invalid_id() {
-        let file = PubkySocialFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "image/png".to_string(),
-            1024,
-        );
-        let invalid_id = "INVALIDID";
-        let result = file.validate(Some(invalid_id), &PUB_CTX);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_field_errors() {
-        // Test multiple validation errors
-        let test_cases = vec![
-            // Invalid content type
-            (
-                PubkySocialFile::new(
-                    "example.png".to_string(),
-                    blob_uri_builder("user_id".into(), "id".into()),
-                    "notavalid/content_type".to_string(),
-                    1024,
-                ),
-                "Invalid content type",
-            ),
-            // Invalid size (too large)
-            (
-                PubkySocialFile::new(
-                    "example.png".to_string(),
-                    blob_uri_builder("user_id".into(), "id".into()),
-                    "image/png".to_string(),
-                    VALIDATION_LIMITS.max_file_size_bytes + 1,
-                ),
-                "exceeds maximum limit",
-            ),
-            // Invalid size (zero)
-            (
-                PubkySocialFile::new(
-                    "example.png".to_string(),
-                    blob_uri_builder("user_id".into(), "id".into()),
-                    "image/png".to_string(),
-                    0,
-                ),
-                "cannot be zero",
-            ),
-        ];
-
-        for (file, expected_error) in test_cases {
-            let id = file.create_id();
-            let result = file.validate(Some(&id), &PUB_CTX);
-            assert!(
-                result.is_err(),
-                "Should reject file with {}",
-                expected_error
-            );
-            assert!(result.unwrap_err().contains(expected_error));
-        }
-    }
-
-    #[test]
-    fn test_validate_invalid_src() {
-        // Create file directly without sanitization to test validation logic
-        let file = PubkySocialFile {
-            name: "example.png".to_string(),
-            created_at: timestamp(),
-            src: "not_a_url".to_string(), // Invalid URL - sanitization would filter this
-            content_type: "image/png".to_string(),
-            size: 1024,
-        };
-        let id = file.create_id();
-        let result = file.validate(Some(&id), &PUB_CTX);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid src"));
+        let file = PubkySocialFile(vec![1, 2, 3]);
+        assert!(file.validate(Some("INVALIDID")).is_err());
     }
 
     #[test]
     fn test_try_from_valid() {
-        let file_json = r#"
-        {
-            "name": "example.png",
-            "created_at": 1627849723,
-            "src": "pubky://user_id/pub/pubky.app/blobs/id",
-            "content_type": "image/png",
-            "size": 1024
-        }
-        "#;
+        let bytes = vec![1, 2, 3, 4, 5];
+        let id = PubkySocialFile(bytes.clone()).create_id();
 
-        let file = PubkySocialFile::new(
-            "example.png".to_string(),
-            blob_uri_builder("user_id".into(), "id".into()),
-            "image/png".to_string(),
-            1024,
+        let result = PubkySocialFile::from_bytes(&bytes, &id);
+        assert_eq!(result.unwrap().0, bytes);
+    }
+
+    #[test]
+    fn test_try_from_invalid_id() {
+        let result = PubkySocialFile::from_bytes(&[1, 2, 3], "INVALIDID");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_file() {
+        let created =
+            PubkySocialFile::create_file(vec![1, 2], "image/svg+xml", Root::Priv).unwrap();
+        assert_eq!(created.id, KAT);
+        assert_eq!(created.path, format!("/priv/social/v1/files/{KAT}.svg"));
+        assert_eq!(created.file.0, vec![1, 2]);
+
+        // A typeless upload and one the map does not carry both land on .bin
+        let created = PubkySocialFile::create_file(vec![1, 2], "", Root::Pub).unwrap();
+        assert_eq!(created.path, format!("/pub/social/v1/files/{KAT}.bin"));
+        let created =
+            PubkySocialFile::create_file(vec![1, 2], "application/octet-stream", Root::Pub)
+                .unwrap();
+        assert_eq!(created.path, format!("/pub/social/v1/files/{KAT}.bin"));
+
+        assert!(PubkySocialFile::create_file(vec![], "image/png", Root::Pub).is_err());
+    }
+
+    #[test]
+    fn test_create_path_and_builder() {
+        assert_eq!(
+            PubkySocialFile::create_path(&format!("{KAT}.png")),
+            format!("/pub/social/v1/files/{KAT}.png")
         );
-        let id = file.create_id();
-
-        let blob = file_json.as_bytes();
-        let file_parsed = <PubkySocialFile as Validatable>::try_from(blob, &id, &PUB_CTX).unwrap();
-
-        assert_eq!(file_parsed.name, "example.png");
-        assert_eq!(file_parsed.src, "pubky://user_id/pub/pubky.app/blobs/id");
-        assert_eq!(file_parsed.content_type, "image/png");
-        assert_eq!(file_parsed.size, 1024);
+        assert_eq!(
+            file_uri_builder("user_id".into(), format!("{KAT}.png")),
+            format!("pubky://user_id/pub/social/v1/files/{KAT}.png")
+        );
     }
 }

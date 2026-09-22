@@ -3,6 +3,7 @@ use crate::common::{validate_hash_id_format, validate_timestamp_id_format};
 use crate::constants::{
     epoch_segment, social_path, PRIVATE_ROOT, PROTOCOL, PUBLIC_ROOT, SOCIAL_NAMESPACE,
 };
+use crate::mime::STRIP_SET;
 use crate::models::user::PubkySocialUser;
 use crate::traits::{HasPath, Root};
 use crate::types::PubkyId;
@@ -66,8 +67,7 @@ impl ParsedUri {
             }
             Resource::Bookmark(id) => format!("bookmarks/{id}.json"),
             Resource::Tag(id) => format!("tags/{id}.json"),
-            Resource::File(id) => format!("files/{id}.json"),
-            Resource::Blob(id) => format!("blobs/{id}"),
+            Resource::File(filename) => format!("files/{filename}"),
             Resource::Feed(id) => format!("feeds/{id}.json"),
             Resource::Foreign {
                 namespace,
@@ -127,6 +127,21 @@ pub(crate) fn parse_version_leaf(leaf: &str) -> Option<(String, Option<String>)>
     Some((version.to_string(), label))
 }
 
+/// The pre-dot part of a media filename when its rightmost extension is in the closed strip
+/// set, else `None`. Case-sensitive: `.JPG` is not the same extension as `.jpg`.
+pub(crate) fn media_stem(filename: &str) -> Option<&str> {
+    match filename.rsplit_once('.') {
+        Some((hash, ext)) if STRIP_SET.contains(&ext) => Some(hash),
+        _ => None,
+    }
+}
+
+/// The id of a raw media filename. The one strip the parser, `Resource::id()` and the object
+/// dispatch all share, so recompute-and-compare cannot disagree with the path.
+pub(crate) fn strip_media_ext(filename: &str) -> &str {
+    media_stem(filename).unwrap_or(filename)
+}
+
 /// Time bounds never run here: parser verdicts must not depend on the wall clock. The
 /// object validator bounds the post id when the object is read.
 ///
@@ -154,15 +169,13 @@ fn dispatch(root: Root, rest: &[&str]) -> Resource {
                 None => Resource::Unknown,
             }
         }
-        // v0-shaped media at this stage: a metadata JSON keyed by TimestampId. The media
-        // collapse replaces this arm with the hash + known-extension strip.
-        (_, ["files", leaf]) => match leaf.strip_suffix(".json") {
-            Some(id) if validate_timestamp_id_format(id).is_ok() => Resource::File(id.into()),
+        // files (media): strip exactly one rightmost extension, only when it is in the closed
+        // strip set, then require a canonical HashId. An unknown or absent extension is left
+        // intact and fails id validation. The payload stays the RAW filename.
+        (_, ["files", leaf]) => match media_stem(leaf) {
+            Some(hash) if validate_hash_id_format(hash).is_ok() => Resource::File((*leaf).into()),
             _ => Resource::Unknown,
         },
-        (Root::Pub, ["blobs", id]) if validate_hash_id_format(id).is_ok() => {
-            Resource::Blob((*id).into())
-        }
         (_, ["feeds", leaf]) => match leaf.strip_suffix(".json") {
             Some(id) if validate_hash_id_format(id).is_ok() => Resource::Feed(id.into()),
             _ => Resource::Unknown,
@@ -338,10 +351,17 @@ mod tests {
             (p(&format!("/pub/social/v1/follows/{}.json", HOST.to_uppercase())), Some((Public, Resource::Unknown))),
             (p(&format!("/priv/social/v1/mutes/{HOST}.json")), Some((Private, Resource::Mute(pk())))),
             (p(&format!("/pub/social/v1/bookmarks/{H26}.json")), Some((Public, Resource::Bookmark(H26.into())))),
-            // v0-shaped media under the epoch (collapsed later)
-            (p(&format!("/pub/social/v1/files/{TS}.json")), Some((Public, Resource::File(TS.into())))),
-            (p(&format!("/priv/social/v1/files/{TS}.json")), Some((Private, Resource::File(TS.into())))),
-            (p(&format!("/pub/social/v1/blobs/{H26}")), Some((Public, Resource::Blob(H26.into())))),
+            // Media: the hash carries a path-only extension, dual-root
+            (p(&format!("/pub/social/v1/files/{H26}.svg")), Some((Public, Resource::File(format!("{H26}.svg"))))),
+            (p(&format!("/priv/social/v1/files/{H26}.svg")), Some((Private, Resource::File(format!("{H26}.svg"))))),
+            (p(&format!("/pub/social/v1/files/{H26}.bin")), Some((Public, Resource::File(format!("{H26}.bin"))))),
+            // A JSON document uploaded as media is legal: `json` is a media extension
+            (p(&format!("/pub/social/v1/files/{H26}.json")), Some((Public, Resource::File(format!("{H26}.json"))))),
+            (p(&format!("/pub/social/v1/files/{H26}.JPG")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/files/{H26}.tar.gz")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/files/{H26}")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/files/{TS}.json")), Some((Public, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/blobs/{H26}")), Some((Public, Resource::Unknown))),
             (p(&format!("/priv/social/v1/blobs/{H26}")), Some((Private, Resource::Unknown))),
             // Feeds are dual-root already
             (p(&format!("/pub/social/v1/feeds/{H26}.json")), Some((Public, Resource::Feed(H26.into())))),
@@ -389,7 +409,6 @@ mod tests {
             (p(&format!("/priv/social/v1/follows/{HOST}.json")), Some((Private, Resource::Unknown))),
             (p(&format!("/pub/social/v1/mutes/{HOST}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/priv/social/v1/bookmarks/{H26}.json")), Some((Private, Resource::Unknown))),
-            (p(&format!("/pub/social/v1/files/{H26}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/blobs/{H26}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/feeds/{H26}")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/posts/{TS}/{TS2}.json.json")), Some((Public, Resource::Unknown))),
@@ -510,8 +529,7 @@ mod tests {
             (Visibility::Private, Resource::Mute(pk())),
             (Visibility::Public, Resource::Bookmark(H26.into())),
             (Visibility::Public, Resource::Tag(H26.into())),
-            (Visibility::Private, Resource::File(TS.into())),
-            (Visibility::Public, Resource::Blob(H26.into())),
+            (Visibility::Private, Resource::File(format!("{H26}.svg"))),
             (Visibility::Private, Resource::Feed(H26.into())),
             (
                 Visibility::Public,
@@ -544,7 +562,8 @@ mod tests {
             (Visibility::Public, post(TS, None, Some("orphan"))),
             (Visibility::Public, post(TS, Some("nope"), None)),
             (Visibility::Public, post(TS, Some(TS2), Some("Bad_Label"))),
-            (Visibility::Private, Resource::Blob(H26.into())),
+            (Visibility::Public, Resource::File(format!("{H26}.JPG"))),
+            (Visibility::Public, Resource::File(H26.into())),
         ];
         for (i, (visibility, resource)) in cases.into_iter().enumerate() {
             let value = ParsedUri {
@@ -612,7 +631,16 @@ mod tests {
     fn display_and_id() {
         assert_eq!(post(TS, Some(TS2), Some("x")).to_string(), "posts");
         assert_eq!(post(TS, Some(TS2), Some("x")).id(), Some(TS.to_string()));
-        assert_eq!(Resource::File(TS.into()).id(), Some(TS.to_string()));
+        assert_eq!(
+            Resource::File(format!("{H26}.svg")).id(),
+            Some(H26.to_string())
+        );
+        // An extension outside the strip set is not an extension: the id keeps it, and
+        // recompute-and-compare then rejects the file
+        assert_eq!(
+            Resource::File(format!("{H26}.JPG")).id(),
+            Some(format!("{H26}.JPG"))
+        );
         assert_eq!(
             Resource::Foreign {
                 namespace: "x".into(),

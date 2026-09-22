@@ -61,14 +61,13 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | Rust type           | Purpose                                  |
 | ------------------- | ---------------------------------------- |
 | `PubkySocialUser`      | User profile information                 |
-| `PubkySocialFile`      | Uploaded file metadata                   |
+| `PubkySocialFile`      | Media bytes                              |
 | `PubkySocialPost`      | Posts, replies, embeds, and collections  |
 | `PubkySocialTag`       | Tags applied to Pubky URIs               |
 | `PubkySocialBookmark`  | Bookmarks for Pubky URIs                 |
 | `PubkySocialFollow`    | Follow relationships                     |
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |
-| `PubkySocialBlob`      | Raw binary file data                     |
 
 ## Specification
 

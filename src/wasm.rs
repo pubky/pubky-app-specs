@@ -3,6 +3,7 @@ use crate::traits::{HasIdPath, HasPath, HashId, Root, TimestampId, Validatable, 
 use crate::*;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use tsify_next::Tsify;
 use wasm_bindgen::prelude::*;
@@ -18,6 +19,28 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(js_name = getValidationLimits)]
 pub fn get_validation_limits() -> Result<JsValue, String> {
     to_value(&VALIDATION_LIMITS).map_err(|e| e.to_string())
+}
+
+/// The path extension a declared type maps to. Unmapped or malformed types give "bin".
+#[wasm_bindgen(js_name = mimeToExt)]
+pub fn mime_to_ext_js(declared: &str) -> String {
+    crate::mime_to_ext(declared)
+}
+
+/// The essence of a declared type (before the first ";", ASCII-folded), or undefined when the
+/// value is malformed.
+#[wasm_bindgen(js_name = essence)]
+pub fn essence_js(declared: &str) -> Option<String> {
+    crate::essence(declared)
+}
+
+/// The frozen map as a plain object, so a caller that needs the whole table reads this one
+/// copy instead of keeping its own.
+#[wasm_bindgen(js_name = mimeToExtTable)]
+pub fn mime_to_ext_table() -> Result<JsValue, String> {
+    let table: BTreeMap<&str, &str> = MIME_TO_EXT.iter().copied().collect();
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    table.serialize(&serializer).map_err(|e| e.to_string())
 }
 
 #[wasm_bindgen]
@@ -156,7 +179,6 @@ result_struct!(FeedResult, feed, PubkySocialFeed);
 result_struct!(TagResult, tag, PubkySocialTag);
 result_struct!(BookmarkResult, bookmark, PubkySocialBookmark);
 result_struct!(MuteResult, mute, PubkySocialMute);
-result_struct!(BlobResult, blob, PubkySocialBlob);
 
 #[wasm_bindgen]
 impl PubkySpecsBuilder {
@@ -250,22 +272,19 @@ impl PubkySpecsBuilder {
     // 3. PubkySocialFile
     // -----------------------------------------------------------------------------
 
+    /// Media is content addressed: `meta.id` is the hash of the bytes, and `meta.path` carries
+    /// the extension the declared type maps to. The declared type is not stored.
     #[wasm_bindgen(js_name = createFile)]
-    pub fn create_file(
-        &self,
-        name: String,
-        src: String,
-        content_type: String,
-        size: usize,
-    ) -> Result<FileResult, String> {
-        let file = PubkySocialFile::new(name, src, content_type, size);
-        let file_id = file.create_id();
-        file.validate(Some(&file_id), &PUB_CTX)?;
+    // An owned Vec crosses the boundary as one copy out of the Uint8Array and is moved into
+    // the object; a JsValue would be deserialized one element at a time, seconds at the cap
+    pub fn create_file(&self, bytes: Vec<u8>, declared_type: String) -> Result<FileResult, String> {
+        let created = PubkySocialFile::create_file(bytes, &declared_type, PubkySocialFile::ROOT)?;
+        let meta = Meta::from_object(Some(&created.id), self.pubky_id.clone(), created.path);
 
-        let path = PubkySocialFile::create_path(&file_id);
-        let meta = Meta::from_object(Some(&file_id), self.pubky_id.clone(), path);
-
-        Ok(FileResult { file, meta })
+        Ok(FileResult {
+            file: created.file,
+            meta,
+        })
     }
 
     // -----------------------------------------------------------------------------
@@ -462,28 +481,6 @@ impl PubkySpecsBuilder {
         let meta = Meta::from_object(Some(&mutee_id), self.pubky_id.clone(), path);
 
         Ok(MuteResult { mute, meta })
-    }
-
-    // -----------------------------------------------------------------------------
-    // 10. PubkySocialBlob
-    // -----------------------------------------------------------------------------
-
-    #[wasm_bindgen(js_name = createBlob)]
-    pub fn create_blob(&self, blob_data: JsValue) -> Result<BlobResult, String> {
-        // Convert from JsValue (Uint8Array in JS) -> Vec<u8> in Rust
-        let data_vec: Vec<u8> = from_value(blob_data).map_err(|e| e.to_string())?;
-
-        // Create the PubkySocialBlob
-        let blob = PubkySocialBlob(data_vec);
-
-        // Generate ID and path
-        let id = blob.create_id();
-        blob.validate(Some(&id), &PUB_CTX)?;
-
-        let path = PubkySocialBlob::create_path(&id);
-        let meta = Meta::from_object(Some(&id), self.pubky_id.clone(), path);
-
-        Ok(BlobResult { blob, meta })
     }
 }
 

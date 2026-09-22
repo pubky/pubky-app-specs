@@ -1,13 +1,13 @@
 //! The forward-compatibility contract: unknown enum values and unknown fields never break a
-//! reader. `PubkySocialBlob` is not covered: its wire form is raw bytes, not a JSON object.
+//! reader. `PubkySocialFile` is not covered: its wire form is raw bytes, not a JSON object.
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
     traits::Validatable, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialBookmark,
     PubkySocialCollectionContent, PubkySocialCollectionItem, PubkySocialCollectionLayout,
     PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
-    PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost,
-    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink, PUB_CTX,
+    PubkySocialFeedSort, PubkySocialFollow, PubkySocialMute, PubkySocialPost, PubkySocialPostKind,
+    PubkySocialTag, PubkySocialUser, PubkySocialUserLink, PUB_CTX,
 };
 use serde::de::DeserializeOwned;
 
@@ -196,8 +196,5 @@ fn every_json_wire_type_ignores_unknown_fields() {
     reads_with_unknown_field::<PubkySocialFeed>(&format!(
         r#"{{"feed":{},"name":"All","created_at":1727740800000000}}"#,
         config("all", "list", "popularity", "null")
-    ));
-    reads_with_unknown_field::<PubkySocialFile>(&format!(
-        r#"{{"name":"cat.jpg","created_at":1727740800000000,"src":"pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG","content_type":"image/jpeg","size":1234}}"#
     ));
 }

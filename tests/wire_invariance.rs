@@ -4,12 +4,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use pubky_social_specs::{
-    ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBlob, PubkySocialBookmark,
-    PubkySocialCollectionContent, PubkySocialCollectionItem, PubkySocialCollectionLayout,
-    PubkySocialFeed, PubkySocialFeedConfig, PubkySocialFeedLayout, PubkySocialFeedReach,
-    PubkySocialFeedSort, PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialPost,
-    PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink, Resource,
-    Visibility, VALIDATION_LIMITS,
+    ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBookmark, PubkySocialCollectionContent,
+    PubkySocialCollectionItem, PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig,
+    PubkySocialFeedLayout, PubkySocialFeedReach, PubkySocialFeedSort, PubkySocialFollow,
+    PubkySocialMute, PubkySocialPost, PubkySocialPostKind, PubkySocialTag, PubkySocialUser,
+    PubkySocialUserLink, Resource, Visibility, VALIDATION_LIMITS,
 };
 use serde::Serialize;
 
@@ -124,20 +123,10 @@ fn feed_legacy() -> PubkySocialFeed {
     }
 }
 
-fn file() -> PubkySocialFile {
-    let mut f = PubkySocialFile::new(
-        "cat.jpg".into(),
-        format!("pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG"),
-        "image/jpeg".into(),
-        1234,
-    );
-    f.created_at = TS;
-    f
-}
-
-fn blob() -> PubkySocialBlob {
-    PubkySocialBlob::new(vec![1, 2])
-}
+// Media has no entry here any more: the v0 File-metadata JSON model is deleted (its `name`
+// relocated to attachment `name`, its `content_type`, `src` and `size` dissolved), and the one
+// media object's wire form is raw bytes with no JSON serialization surface, so there is nothing
+// left to pin.
 
 fn collection_with_layout() -> PubkySocialCollectionContent {
     PubkySocialCollectionContent {
@@ -225,12 +214,6 @@ fn pinned() -> Vec<(&'static str, String, &'static str)> {
             r#"{"feed":{"tags":null,"reach":"all","layout":"list","sort":"popularity","content":null},"name":"All","created_at":1727740800000000}"#,
         ),
         (
-            "file",
-            json(&file()),
-            r#"{"name":"cat.jpg","created_at":1727740800000000,"src":"pubky://{PK}/pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG","content_type":"image/jpeg","size":1234}"#,
-        ),
-        ("blob", json(&blob()), r#"[1,2]"#),
-        (
             "collection_with_layout",
             json(&collection_with_layout()),
             r#"{"name":"Photos","description":"mine","items":[{"uri":"pubky://{PK}/pub/pubky.app/posts/0032SSN7Q4EVG","note":"first"}],"cover_image":"pubky://{PK}/pub/pubky.app/files/0032SSN7Q4EVG","layout":"visual"}"#,
@@ -284,8 +267,7 @@ fn pinned_variants() -> Vec<(String, &'static str)> {
         (json(&Resource::Mute(pk())), r#"{"Mute":"{PK}"}"#),
         (json(&Resource::Bookmark(h.clone())), r#"{"Bookmark":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::Tag(h.clone())), r#"{"Tag":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
-        (json(&Resource::File("0032SSN7Q4EVG".into())), r#"{"File":"0032SSN7Q4EVG"}"#),
-        (json(&Resource::Blob(h.clone())), r#"{"Blob":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
+        (json(&Resource::File(format!("{h}.svg"))), r#"{"File":"8Z8CWH8NVYQY39ZEBFGKQWWEKG.svg"}"#),
         (json(&Resource::Feed(h)), r#"{"Feed":"8Z8CWH8NVYQY39ZEBFGKQWWEKG"}"#),
         (json(&Resource::Unknown), r#""Unknown""#),
         (json(&K::Note), r#""note""#), (json(&K::Article), r#""article""#), (json(&K::Image), r#""image""#),

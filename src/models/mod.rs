@@ -43,9 +43,9 @@
 //! fails its id check. That goes away when feed ids stop being derived
 //! from the serialized config.
 
+use crate::uri::media_stem;
 use crate::{traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
 
-pub mod blob;
 pub mod bookmark;
 pub mod feed;
 pub mod file;
@@ -56,8 +56,8 @@ pub mod tag;
 pub mod user;
 
 use super::{
-    PubkySocialBlob, PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow,
-    PubkySocialMute, PubkySocialPost, PubkySocialTag, PubkySocialUser,
+    PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
+    PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 
 /// A unified enum wrapping all PubkySocial objects.
@@ -70,7 +70,6 @@ pub enum PubkySocialObject {
     Bookmark(bookmark::PubkySocialBookmark),
     Tag(tag::PubkySocialTag),
     File(file::PubkySocialFile),
-    Blob(blob::PubkySocialBlob),
     Feed(feed::PubkySocialFeed),
 }
 
@@ -133,14 +132,15 @@ impl PubkySocialObject {
                 let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id, ctx)?;
                 Ok(PubkySocialObject::Tag(tag))
             }
-            Resource::File(raw) => {
-                let id = raw.strip_suffix(".json").unwrap_or(raw);
-                let file = <PubkySocialFile as Validatable>::try_from(blob, id, ctx)?;
+            Resource::File(filename) => {
+                // A hand-built value takes the parser's leaf rule too, so a filename without a
+                // media extension is refused here as it is there
+                let id = media_stem(filename).ok_or_else(|| {
+                    format!("a media filename needs a known extension: {filename}")
+                })?;
+                // Media is raw bytes with no JSON form, so it has its own reader
+                let file = PubkySocialFile::from_bytes(blob, id)?;
                 Ok(PubkySocialObject::File(file))
-            }
-            Resource::Blob(blob_id) => {
-                let blob_obj = <PubkySocialBlob as Validatable>::try_from(blob, blob_id, ctx)?;
-                Ok(PubkySocialObject::Blob(blob_obj))
             }
             Resource::Feed(feed_id) => {
                 let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id, ctx)?;
@@ -159,10 +159,10 @@ impl PubkySocialObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::traits::{HasIdPath, HashId};
+    use crate::traits::{HasIdPath, HashId, PUB_CTX};
     use crate::{
-        blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
-        follow_uri_builder, mute_uri_builder, post_uri_builder, tag_uri_builder, user_uri_builder,
+        bookmark_uri_builder, feed_uri_builder, file_uri_builder, follow_uri_builder,
+        mute_uri_builder, post_uri_builder, tag_uri_builder, user_uri_builder,
     };
 
     use super::*;
@@ -344,56 +344,40 @@ mod tests {
 
     #[test]
     fn test_import_file() {
+        let bytes = vec![1, 2, 3];
+        let id = file::PubkySocialFile(bytes.clone()).create_id();
         let uri = file_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "0032SSN7Q4EVG".into(),
+            format!("{id}.png"),
         );
-        let file_json = r#"{
-            "name": "example.png",
-            "created_at": 1627849727,
-            "src": "https://example.com/example.png",
-            "content_type": "image/png",
-            "size": 1024
-        }"#;
-        let result = PubkySocialObject::from_uri(uri, file_json.as_bytes());
+        let result = PubkySocialObject::from_uri(&uri, &bytes);
         assert!(
             result.is_ok(),
             "Expected a successful import for file, got error: {:?}",
             result.err()
         );
         match result.unwrap() {
-            PubkySocialObject::File(file) => {
-                assert_eq!(file.name, "example.png", "File name mismatch");
-                assert_eq!(
-                    file.src, "https://example.com/example.png",
-                    "File src mismatch"
-                );
-            }
+            PubkySocialObject::File(file) => assert_eq!(file.0, bytes, "File bytes mismatch"),
             other => panic!("Expected a File object, got {:?}", other),
         }
+
+        // The extension is path-only, so the id is recomputed from the bytes alone
+        assert!(PubkySocialObject::from_uri(&uri, &[9, 9][..]).is_err());
     }
 
     #[test]
-    fn test_import_blob() {
-        let uri = blob_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "CDW1T5RM4PHP64QT0P6RE4PNT0".into(),
-        );
-        // For a blob, assume the JSON is an array of numbers representing the data.
-        let blob: Vec<u8> = vec![1, 2, 3, 4];
-        let result = PubkySocialObject::from_uri(uri, &blob);
-        assert!(
-            result.is_ok(),
-            "Expected a successful import for blob, got error: {:?}",
-            result.err()
-        );
-        match result.unwrap() {
-            PubkySocialObject::Blob(blob_obj) => {
-                let data = blob_obj.0;
-                assert_eq!(data, vec![1, 2, 3, 4], "Blob data mismatch");
-            }
-            other => panic!("Expected a Blob object, got {:?}", other),
-        }
+    fn test_import_file_dispatches_raw_bytes() {
+        let bytes = [1u8, 2, 3];
+        let id = file::PubkySocialFile(bytes.to_vec()).create_id();
+        let resource = Resource::File(format!("{id}.bin"));
+        assert!(PubkySocialObject::from_resource(&resource, &bytes, &PUB_CTX).is_ok());
+
+        let other = Resource::File("8Z8CWH8NVYQY39ZEBFGKQWWEKG.bin".to_string());
+        assert!(PubkySocialObject::from_resource(&other, &bytes, &PUB_CTX).is_err());
+        // a leaf without a media extension is refused here as the parser refuses it
+        let bare = Resource::File(id.clone());
+        let e = PubkySocialObject::from_resource(&bare, &bytes, &PUB_CTX).unwrap_err();
+        assert!(e.contains("known extension"), "{e}");
     }
 
     #[test]
