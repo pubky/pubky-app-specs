@@ -593,7 +593,7 @@ mod tests {
         .is_ok());
         // a file path carries no version and is not a post
         assert!(validate_reference(
-            &p("/pub/social/v1/files/0034A0X7NJ52G"),
+            &p("/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"),
             AllowedSchemes::Universal,
             max,
             &ctx(Root::Pub),

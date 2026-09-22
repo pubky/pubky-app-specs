@@ -189,11 +189,11 @@ mod tests {
 
     #[test]
     fn cover_image_rules() {
-        let file = p("/pub/social/v1/files/0034A0X7NJ52G");
+        let file = p("/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
         assert!(validate(&article("t", "b", Some(&file))).is_ok());
         assert!(validate(&article("t", "b", Some("https://example.com/c.png"))).is_ok());
         let short = format!(
-            "pubky{}/pub/social/v1/files/0034A0X7NJ52G",
+            "pubky{}/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png",
             &p("")["pubky://".len()..]
         );
         let versioned = p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json");
@@ -225,7 +225,7 @@ mod tests {
             Some(p("/pub/social/v1/posts/0032SSN7Q4EVG")),
             Some("https://example.com/source".into()),
             vec![PubkySocialAttachment::new(
-                p("/pub/social/v1/files/0034A0X7NJ52G"),
+                p("/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"),
                 None,
                 None,
             )],
@@ -239,7 +239,11 @@ mod tests {
     fn attachment_rules_still_apply_to_articles() {
         let many = (0..=VALIDATION_LIMITS.post_attachments_max_count)
             .map(|_| {
-                PubkySocialAttachment::new(p("/pub/social/v1/files/0034A0X7NJ52G"), None, None)
+                PubkySocialAttachment::new(
+                    p("/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"),
+                    None,
+                    None,
+                )
             })
             .collect();
         let post =

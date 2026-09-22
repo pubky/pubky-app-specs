@@ -56,7 +56,7 @@ console.log(post.toJson());
 Each create method returns:
 
 - `meta`: generated `id`, storage `path`, and full `url`
-- a typed WASM model object with `.toJson()`
+- a typed WASM model object with `.toJson()` (`createFile` returns bytes instead: read `file.data`, there is no JSON form)
 
 ## Common Models
 

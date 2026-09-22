@@ -583,7 +583,7 @@ mod tests {
     }
 
     fn file_uri() -> String {
-        p("/pub/social/v1/files/0034A0X7NJ52G")
+        p("/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png")
     }
 
     fn note(content: &str) -> PubkySocialPost {
@@ -899,7 +899,7 @@ mod tests {
     #[test]
     fn test_root_rule_on_every_reference_position() {
         let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
-        let priv_file = p("/priv/social/v1/files/0034A0X7NJ52G");
+        let priv_file = p("/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
         let priv_ctx = ValidationCtx { root: Root::Priv };
         let id = PubkySocialPost::default().create_id();
         let mut reply = post(PubkySocialPostKind::Note, Some(&private), None, vec![]);
@@ -1124,7 +1124,7 @@ mod tests {
     #[test]
     fn test_builders_check_the_article_cover_with_the_owner() {
         let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
-        let cover = format!("pubky://{other}/priv/social/v1/files/0034A0X7NJ52G");
+        let cover = format!("pubky://{other}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
         let article = PubkySocialPost::new_article(
             "t".into(),
             "b".into(),
@@ -1174,7 +1174,7 @@ mod tests {
     #[test]
     fn test_collection_cover_is_a_media_reference_position() {
         let id = PubkySocialPost::default().create_id();
-        let mine = p("/priv/social/v1/files/0034A0X7NJ52G");
+        let mine = p("/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
         let content = format!(r#"{{"name":"n","items":[],"cover_image":"{mine}"}}"#);
         let collection =
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
@@ -1187,7 +1187,7 @@ mod tests {
             "{e}"
         );
         let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
-        let theirs = format!("pubky://{other}/priv/social/v1/files/0034A0X7NJ52G");
+        let theirs = format!("pubky://{other}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
         let content = format!(r#"{{"name":"n","items":[],"cover_image":"{theirs}"}}"#);
         let collection =
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
@@ -1337,7 +1337,7 @@ mod tests {
 
         for bad in [
             "ipfs://bafy".to_string(),
-            format!("pubky{PK}/pub/social/v1/files/0034A0X7NJ52G"),
+            format!("pubky{PK}/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"),
             format!("{long_ok}a"),
             "not a url".to_string(),
             String::new(),

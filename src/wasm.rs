@@ -275,11 +275,10 @@ impl PubkySpecsBuilder {
     /// Media is content addressed: `meta.id` is the hash of the bytes, and `meta.path` carries
     /// the extension the declared type maps to. The declared type is not stored.
     #[wasm_bindgen(js_name = createFile)]
-    // A byte slice crosses the boundary as one memcpy from a Uint8Array; a JsValue would be
-    // deserialized one element at a time, which is seconds at the media cap
-    pub fn create_file(&self, bytes: &[u8], declared_type: String) -> Result<FileResult, String> {
-        let created =
-            PubkySocialFile::create_file(bytes.to_vec(), &declared_type, PubkySocialFile::ROOT)?;
+    // An owned Vec crosses the boundary as one copy out of the Uint8Array and is moved into
+    // the object; a JsValue would be deserialized one element at a time, seconds at the cap
+    pub fn create_file(&self, bytes: Vec<u8>, declared_type: String) -> Result<FileResult, String> {
+        let created = PubkySocialFile::create_file(bytes, &declared_type, PubkySocialFile::ROOT)?;
         let meta = Meta::from_object(Some(&created.id), self.pubky_id.clone(), created.path);
 
         Ok(FileResult {
