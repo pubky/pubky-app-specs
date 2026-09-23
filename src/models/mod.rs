@@ -45,8 +45,12 @@
 
 use crate::uri::media_stem;
 use crate::{traits::HasIdPath, traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
+use serde::{Deserialize, Serialize};
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 pub mod bookmark;
+pub mod deletion;
 pub mod feed;
 pub mod file;
 pub mod follow;
@@ -60,6 +64,39 @@ use super::{
     PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
     PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
+
+/// Which kind of stored object a value or a request is about. The JS surface tags every
+/// object it hands out with it and takes it back wherever a caller names an object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum ObjectKind {
+    User,
+    Post,
+    Follow,
+    Mute,
+    Bookmark,
+    Tag,
+    File,
+    Feed,
+}
+
+impl ObjectKind {
+    /// The frozen spelling, the one its serde form uses.
+    pub fn wire_name(&self) -> &'static str {
+        match self {
+            ObjectKind::User => "user",
+            ObjectKind::Post => "post",
+            ObjectKind::Follow => "follow",
+            ObjectKind::Mute => "mute",
+            ObjectKind::Bookmark => "bookmark",
+            ObjectKind::Tag => "tag",
+            ObjectKind::File => "file",
+            ObjectKind::Feed => "feed",
+        }
+    }
+}
 
 /// A unified enum wrapping all PubkySocial objects.
 #[derive(Debug, Clone)]
@@ -75,6 +112,19 @@ pub enum PubkySocialObject {
 }
 
 impl PubkySocialObject {
+    pub fn kind(&self) -> ObjectKind {
+        match self {
+            PubkySocialObject::User(_) => ObjectKind::User,
+            PubkySocialObject::Post(_) => ObjectKind::Post,
+            PubkySocialObject::Follow(_) => ObjectKind::Follow,
+            PubkySocialObject::Mute(_) => ObjectKind::Mute,
+            PubkySocialObject::Bookmark(_) => ObjectKind::Bookmark,
+            PubkySocialObject::Tag(_) => ObjectKind::Tag,
+            PubkySocialObject::File(_) => ObjectKind::File,
+            PubkySocialObject::Feed(_) => ObjectKind::Feed,
+        }
+    }
+
     /// Given a URI and a blob (raw data from the homeserver),
     /// this function returns the fully formed PubkySocialObject.
     pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {

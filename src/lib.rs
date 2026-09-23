@@ -42,6 +42,7 @@ pub use traits::{Root, ValidationCtx, ValidationError, PUB_CTX};
 pub use models::bookmark::{
     bookmark_filename, bookmark_target, create_bookmark, CreatedBookmark, PubkySocialBookmark,
 };
+pub use models::deletion::{deletion_paths, Listing};
 pub use models::feed::{
     feed_paths, plan_feed_delete, plan_feed_publish, plan_feed_unpublish, FeedDeletePlan,
     FeedPaths, FeedPublishPlan, FeedUnpublishPlan, PubkySocialFeed, PubkySocialFeedConfig,
@@ -60,7 +61,7 @@ pub use models::post::{
 };
 pub use models::tag::{sanitize_tag_label, validate_tag_label, PubkySocialTag};
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};
-pub use models::PubkySocialObject;
+pub use models::{ObjectKind, PubkySocialObject};
 // The frozen 0.x reader, under its own name; no v0 symbol is re-exported at the root
 pub use models::legacy_v0;
 pub use types::PubkyId;

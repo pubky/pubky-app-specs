@@ -324,6 +324,26 @@ pub fn plan_unpublish(
     })
 }
 
+/// The deletes of [`plan_delete`] alone: the legacy paths, then every v1 copy oldest first,
+/// `pub` before `priv` at equal editId so the public copy goes first.
+pub(crate) fn delete_order(
+    post_id: &str,
+    legacy_paths: &[String],
+    v1_copies: &[(Root, String)],
+) -> Result<Vec<String>, String> {
+    crate::common::validate_timestamp_id_format(post_id)?;
+    check_legacy_paths(post_id, legacy_paths)?;
+    let copies = sorted_versions(
+        post_id,
+        v1_copies,
+        |(root, p)| (*root, p.as_str()),
+        |a, b| (a.0 == Root::Priv).cmp(&(b.0 == Root::Priv)),
+    )?;
+    let mut deletes = legacy_paths.to_vec();
+    deletes.extend(copies.into_iter().map(|(_, (_, p))| p));
+    Ok(deletes)
+}
+
 /// Delete everywhere. `parsed_versions` are the versions the caller could read; one it could
 /// not contributes no GC candidates, a documented residual, since the caller's own index is
 /// the real GC source.
@@ -334,17 +354,7 @@ pub fn plan_delete(
     parsed_versions: &[PubkySocialPost],
     owner: &PubkyId,
 ) -> Result<DeletePlan, String> {
-    crate::common::validate_timestamp_id_format(post_id)?;
-    check_legacy_paths(post_id, legacy_paths)?;
-    // pub before priv at equal editId, so the public copy goes first
-    let copies = sorted_versions(
-        post_id,
-        v1_copies,
-        |(root, p)| (*root, p.as_str()),
-        |a, b| (a.0 == Root::Priv).cmp(&(b.0 == Root::Priv)),
-    )?;
-    let mut deletes = legacy_paths.to_vec();
-    deletes.extend(copies.into_iter().map(|(_, (_, p))| p));
+    let deletes = delete_order(post_id, legacy_paths, v1_copies)?;
 
     let public = media_prefix(owner, Root::Pub);
     let private = media_prefix(owner, Root::Priv);

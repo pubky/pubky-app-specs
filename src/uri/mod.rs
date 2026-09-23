@@ -17,7 +17,9 @@ pub use builders::{
 };
 
 // Strict
-pub(crate) use parsed::{is_valid_label, media_stem, parse_version_leaf, strip_media_ext};
+pub(crate) use parsed::{
+    is_bookmark_filename, is_valid_label, media_stem, parse_version_leaf, strip_media_ext,
+};
 pub use parsed::{ParsedUri, Visibility};
 pub use resource::Resource;
 

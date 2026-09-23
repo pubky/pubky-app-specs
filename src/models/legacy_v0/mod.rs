@@ -61,3 +61,15 @@ pub use uri::{
     tag_uri_builder, try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri,
     PubkyPath, Resource,
 };
+
+/// The 0.x id of a tag with this stored `uri` and `label`, as the 0.x writer derived it. Built
+/// here so the frozen formula stays the one copy; the stored values are hashed as given.
+pub fn tag_id(uri: &str, label: &str) -> String {
+    use traits::HashId;
+    PubkyAppTag {
+        uri: uri.to_string(),
+        label: label.to_string(),
+        created_at: 0,
+    }
+    .create_id()
+}

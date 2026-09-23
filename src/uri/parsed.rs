@@ -158,7 +158,7 @@ const BOOKMARK_FILENAME_MAX: usize =
 /// it happens to be a base64url character, so the primary arm refuses it there and accepts it
 /// anywhere else in the name. Only the form: the decode round trip that recovers the target
 /// runs when the object is read.
-fn is_bookmark_filename(name: &str) -> bool {
+pub(crate) fn is_bookmark_filename(name: &str) -> bool {
     match name.strip_prefix('~') {
         Some(hash) => validate_hash_id_format(hash).is_ok(),
         None => {
