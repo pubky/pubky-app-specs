@@ -1,5 +1,7 @@
 use crate::canonicalize::{checked, AllowedSchemes};
-use crate::common::{check_extra, code_point_len, frozen_trim, validate_timestamp_id_format};
+use crate::common::{
+    check_extra, code_point_len, frozen_trim, trimmed_or_none, validate_timestamp_id_format,
+};
 use crate::constants::social_path;
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
@@ -251,7 +253,8 @@ impl Json for PubkySocialPost {}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialPost {
-    /// Infallible; callers validate before writing.
+    /// Trims `content`; references pass through verbatim. Infallible; callers validate
+    /// before writing.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         content: String,
@@ -271,16 +274,15 @@ impl PubkySocialPost {
         attachments: Vec<PubkySocialAttachment>,
         lock: Option<String>,
     ) -> Self {
-        let post = PubkySocialPost {
-            content,
+        PubkySocialPost {
+            content: frozen_trim(&content).to_string(),
             kind,
             parent,
             embed,
             attachments,
             lock,
             extra: Default::default(),
-        };
-        post.sanitize()
+        }
     }
 }
 
@@ -450,14 +452,6 @@ impl PubkySocialPost {
 impl Validatable for PubkySocialPost {
     const MAX_BYTES: usize = VALIDATION_LIMITS.post_max_bytes;
 
-    fn sanitize(self) -> Self {
-        // Trim is the only documented canonicalization here; references pass through verbatim
-        PubkySocialPost {
-            content: frozen_trim(&self.content).to_string(),
-            ..self
-        }
-    }
-
     fn validate_fields(
         &self,
         id: Option<&str>,
@@ -560,6 +554,29 @@ impl PubkySocialPost {
             attachments,
             lock,
         )
+    }
+
+    /// Builds the collection envelope into `content` and wraps it in a `kind = Collection`
+    /// post. Trims the name and the description, a blank description becoming absent; item
+    /// and cover uris pass through verbatim. Infallible; callers validate before writing.
+    pub fn new_collection(
+        name: String,
+        description: Option<String>,
+        items: Vec<PubkySocialCollectionItem>,
+        cover_image: Option<String>,
+        layout: Option<PubkySocialCollectionLayout>,
+    ) -> Self {
+        let envelope = PubkySocialCollectionContent {
+            name: frozen_trim(&name).to_string(),
+            description: description.and_then(trimmed_or_none),
+            items,
+            cover_image,
+            layout,
+            extra: Default::default(),
+        };
+        let content =
+            serde_json::to_string(&envelope).expect("a string-only envelope always serializes");
+        Self::new(content, PubkySocialPostKind::Collection, None, None, vec![])
     }
 }
 
@@ -675,10 +692,10 @@ mod tests {
         assert_eq!(post.content, "Hello World!");
     }
 
-    // ---- sanitize and text ops ----
+    // ---- text ops ----
 
     #[test]
-    fn test_sanitize() {
+    fn builder_trims_content_and_leaves_references_verbatim() {
         let parent = format!("  {}  ", post_uri());
         let post = PubkySocialPost::new(
             "\u{3000}  hello  \u{3000}".to_string(),
@@ -717,7 +734,39 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize_keeps_zero_width_space() {
+    fn content_is_read_verbatim() {
+        let json =
+            r#"{"content":"  hello  ","kind":"note","parent":null,"embed":null,"attachments":[]}"#;
+        let id = note("x").create_id();
+        let post =
+            <PubkySocialPost as Validatable>::try_from(json.as_bytes(), &id, &PUB_CTX).unwrap();
+        assert_eq!(post.content, "  hello  ");
+        // Blank as stored still fails the content-or-embed-or-attachments rule
+        let blank = json.replace("  hello  ", r" \u3000 ");
+        let e = <PubkySocialPost as Validatable>::try_from(blank.as_bytes(), &id, &PUB_CTX)
+            .expect_err("blank content with nothing else is invalid");
+        assert!(e.contains("must have content"), "{e}");
+    }
+
+    #[test]
+    fn padded_content_is_counted_as_stored() {
+        let max = VALIDATION_LIMITS.post_note_content_max_length;
+        let json = |content: String| {
+            format!(
+                r#"{{"content":"{content}","kind":"note","parent":null,"embed":null,"attachments":[]}}"#
+            )
+        };
+        let id = note("x").create_id();
+        let read = |content: String| {
+            <PubkySocialPost as Validatable>::try_from(json(content).as_bytes(), &id, &PUB_CTX)
+        };
+        assert!(read("a".repeat(max)).is_ok());
+        let e = read(format!(" {}", "a".repeat(max))).expect_err("padding counts");
+        assert!(e.contains("at most"), "{e}");
+    }
+
+    #[test]
+    fn builder_trim_keeps_zero_width_space() {
         let post = note("\u{200B}hello\u{200B}");
         assert_eq!(post.content, "\u{200B}hello\u{200B}");
     }

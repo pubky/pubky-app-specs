@@ -132,10 +132,12 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
     /// counting newer known fields against the extension budget; tightening it later is a break.
     const MAX_BYTES: usize = VALIDATION_LIMITS.object_max_bytes;
 
+    /// Accepts the stored bytes as written or rejects them, never rewrites: builders trim and
+    /// fold, so a reader that rewrote would disagree with the bytes on the homeserver and with
+    /// any id derived from them.
     fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
         check_size(blob.len(), Self::MAX_BYTES)?;
-        let mut instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
-        instance = instance.sanitize();
+        let instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
         instance.validate(Some(id), ctx)?;
         Ok(instance)
     }
@@ -151,10 +153,6 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
     /// The model's own rules, without the size cap.
     fn validate_fields(&self, id: Option<&str>, ctx: &ValidationCtx)
         -> Result<(), ValidationError>;
-
-    fn sanitize(self) -> Self {
-        self
-    }
 
     fn validate_size(&self) -> Result<(), ValidationError> {
         let len = serde_json::to_vec(self).map_err(|e| e.to_string())?.len();
@@ -199,7 +197,6 @@ pub trait Json: Serialize + DeserializeOwned + Validatable {
     fn import_json(js_value: &JsValue) -> Result<Self, String> {
         let object: Self =
             from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))?;
-        let object = object.sanitize();
         object.validate(None, &PUB_CTX)?;
         Ok(object)
     }
