@@ -1,4 +1,4 @@
-import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "./index.js";
+import { PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySpecsBuilder, PubkySocialAttachment, PubkySocialCollectionItem, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes, mimeToExt, essence, mimeToExtTable, feedPaths, feedLifecycle } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -729,14 +729,26 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.ok(feedMeta.id, "Feed should have an ID");
       assert.ok(feedMeta.url, "Feed should have a URL");
       assert.ok(feedMeta.url.includes(OTTO), "URL should contain user ID");
+      assert.strictEqual(feedMeta.url.split("/")[3], "priv", "feeds live under the private root");
       assert.ok(feedMeta.url.includes("feeds"), "URL should contain feeds path");
       assert.ok(feedMeta.url.includes(feedMeta.id), "URL should contain feed ID");
+
+      // publishing is a PUT of the same bytes at the public path, unpublishing a DELETE of it
+      const paths = feedPaths(feedMeta.id);
+      assert.strictEqual(paths.private, `/priv/social/v1/feeds/${feedMeta.id}.json`, "private path");
+      assert.strictEqual(paths.public, `/pub/social/v1/feeds/${feedMeta.id}.json`, "public path");
+      assert.strictEqual(paths.private, feedMeta.path, "the builder writes the private path");
+
+      const lifecycle = feedLifecycle(feedMeta.id);
+      assert.deepStrictEqual(lifecycle.publish, { from: paths.private, to: paths.public }, "publish copies the bytes");
+      assert.deepStrictEqual(lifecycle.unpublish, [paths.public], "unpublish drops the public copy");
+      assert.deepStrictEqual(lifecycle.delete, [paths.public, paths.private], "delete takes the public copy first");
 
       // Test feed content
       const feedJson = feed.toJson();
       assert.ok(feedJson.feed, "Feed should have feed property");
       assert.ok(Array.isArray(feedJson.feed.tags), "Feed tags should be an array");
-      assert.deepStrictEqual(feedJson.feed.tags, ["mountain","hike"], "Feed tags should match");
+      assert.deepStrictEqual(feedJson.feed.tags, ["hike","mountain"], "the builder sorts the tag filter, so one filter is one feed");
       assert.strictEqual(feedJson.feed.reach, "all", "Feed reach should match");
       assert.strictEqual(feedJson.feed.layout, "columns", "Feed layout should match");
       assert.strictEqual(feedJson.feed.sort, "recent", "Feed sort should match");

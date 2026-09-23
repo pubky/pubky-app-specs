@@ -43,6 +43,42 @@ pub fn mime_to_ext_table() -> Result<JsValue, String> {
     table.serialize(&serializer).map_err(|e| e.to_string())
 }
 
+/// Both addresses of a feed, `{private, public}`. A feed lives at `private`; PUT the same
+/// bytes at `public` to publish it, DELETE `public` to unpublish.
+#[wasm_bindgen(js_name = feedPaths)]
+pub fn feed_paths_js(id: String) -> Result<JsValue, String> {
+    to_value(&crate::feed_paths(&id)).map_err(|e| e.to_string())
+}
+
+/// The JS spelling of the feed lifecycle planners: the copy a publish is, and the deletes an
+/// unpublish and a delete are, in the order to run them. A delete of a path that is not there
+/// is a skip; the publish copy always runs, since name and icon live outside the id.
+#[derive(Serialize)]
+struct FeedLifecycle {
+    publish: FeedCopy,
+    unpublish: Vec<String>,
+    delete: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct FeedCopy {
+    from: String,
+    to: String,
+}
+
+/// Every path a feed lifecycle step touches, as
+/// `{publish: {from, to}, unpublish: [...], delete: [...]}`.
+#[wasm_bindgen(js_name = feedLifecycle)]
+pub fn feed_lifecycle_js(id: String) -> Result<JsValue, String> {
+    let (from, to) = crate::plan_feed_publish(&id)?.copy;
+    let lifecycle = FeedLifecycle {
+        publish: FeedCopy { from, to },
+        unpublish: vec![crate::plan_feed_unpublish(&id)?.delete],
+        delete: crate::plan_feed_delete(&id)?.deletes,
+    };
+    to_value(&lifecycle).map_err(|e| e.to_string())
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Meta {
@@ -248,19 +284,19 @@ impl PubkySpecsBuilder {
             None => None,
         };
 
-        // Create the feed
-        let config = PubkySocialFeedConfig {
-            tags: input.tags,
-            domain_tags: input.domain_tags,
+        // Create the feed. The config builder canonicalizes and validates both tag lists.
+        let config = PubkySocialFeedConfig::new(
+            input.tags,
+            input.domain_tags,
             reach,
             layout,
             sort,
             content,
-        };
+        )?;
         let feed = PubkySocialFeed::new(config, input.name, input.icon);
 
-        let feed_id = feed.create_id();
-        feed.validate(Some(&feed_id), &PUB_CTX)?;
+        // derive_id validates the feed, so there is nothing left to check the id against
+        let feed_id = feed.derive_id()?;
 
         let path = PubkySocialFeed::create_path(&feed_id);
         let meta = Meta::from_object(Some(&feed_id), self.pubky_id.clone(), path);

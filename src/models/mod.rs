@@ -38,10 +38,9 @@
 //! variant added later is a minor release: downstream matches must carry a
 //! wildcard arm, which is the same discipline `Unknown` already asks for.
 //!
-//! One known limit: a feed id is still derived from the serialized config,
-//! so on the id-checked read path a feed carrying an unrecognized value
-//! fails its id check. That goes away when feed ids stop being derived
-//! from the serialized config.
+//! A derived id is a write-side guarantee, not a read-side one: a reader that
+//! meets a value it does not know cannot rebuild the writer's id input around
+//! it, so it takes the id as named and applies the rule above to the value.
 
 use crate::uri::media_stem;
 use crate::{traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
@@ -384,11 +383,12 @@ mod tests {
     fn test_import_feed() {
         let uri = feed_uri_builder(
             "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "5F2NDB2HJGJ2HJBY6MPQ0H5R0G".into(),
+            // blake3("following:columns:recent:::")[..16] in Crockford
+            "FXKCW1SPW80RX2AGB3MCP5CF48".into(),
         );
         let feed_json = r#"{
             "feed": {
-                "tags": [],
+                "tags": null,
                 "reach": "following",
                 "layout": "columns",
                 "sort": "recent",
