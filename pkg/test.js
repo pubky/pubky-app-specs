@@ -295,7 +295,7 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
       });
 
-      for (const layout of ["grid", "list", "visual", "cards"]) {
+      for (const layout of ["cards", "list", "visual"]) {
         it(`should round-trip a collection with the ${layout} layout`, () => {
           const { post } = specsBuilder.createCollectionPost(
             "Favorite posts",
@@ -317,26 +317,27 @@ describe("PubkySpecs Example Objects Tests", () => {
         });
       }
 
-      it("should switch an existing collection to cards without changing its ID or items", () => {
-        const { post, meta } = specsBuilder.createCollectionPost(
-          "Favorite posts",
-          null,
-          [collectionItemUri],
-          coverImageUrl,
-          "list"
+      it("should read a legacy grid collection and switch it to cards without changing its ID or items", () => {
+        const { post, meta } = specsBuilder.createPost(
+          JSON.stringify({ name: "Favorite posts", items: [collectionItemUri], cover_image: coverImageUrl, layout: "grid" }),
+          PubkyAppPostKind.Collection
         );
-        const envelope = { ...JSON.parse(post.content), layout: "cards" };
-        const updated = specsBuilder.editPost(post, meta.id, JSON.stringify(envelope));
+        const restored = PubkyAppPost.fromJson(post.toJson());
+        assert.deepStrictEqual(restored.toJson(), post.toJson());
+        const envelope = { ...JSON.parse(restored.content), layout: "cards" };
+        const updated = specsBuilder.editPost(restored, meta.id, JSON.stringify(envelope));
         assert.strictEqual(updated.meta.id, meta.id);
         assert.strictEqual(updated.meta.url, meta.url);
         assert.deepStrictEqual(JSON.parse(updated.post.content), envelope);
       });
 
-      it("cannot author an unsupported collection layout", () => {
-        assert.throws(
-          () => specsBuilder.createCollectionPost("Favorite posts", null, [], null, "spiral"),
-          (error) => String(error).includes("Invalid collection layout: spiral")
-        );
+      it("cannot author a legacy or unsupported collection layout", () => {
+        for (const layout of ["grid", "spiral"]) {
+          assert.throws(
+            () => specsBuilder.createCollectionPost("Favorite posts", null, [], null, layout),
+            (error) => String(error).includes(`Invalid collection layout: ${layout}`)
+          );
+        }
       });
 
       it("cannot create collection post with too many items", () => {

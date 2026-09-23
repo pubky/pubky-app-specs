@@ -319,7 +319,7 @@ impl PubkySpecsBuilder {
     /// cover_image, layout }`) and JSON-serializes it into `content` internally,
     /// so JS callers don't have to stringify the envelope themselves.
     ///
-    /// `layout` is one of `"grid" | "list" | "visual" | "cards"`.
+    /// `layout` is one of `"cards" | "list" | "visual"`.
     ///
     /// `parent` and `embed` are not supported for Collection posts — the
     /// validator rejects them — so this helper omits those arguments.
