@@ -84,6 +84,20 @@ const { last_read, meta } = specs.createLastRead();
 
 `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
 
+Feed `layout` accepts `columns`, `wide`, `visual`, `list`, or `cards`. `cards` displays complete post cards in columns with content-driven heights. It is also available as a collection's default layout:
+
+```js
+const { post, meta } = specs.createCollectionPost(
+  "Favorite posts",
+  "Posts worth revisiting",
+  [],
+  null,
+  "cards"
+);
+```
+
+Collection layouts are `grid`, `list`, `visual`, and `cards`; omitting the layout defaults to `grid` in clients.
+
 For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-app-specs/blob/main/pkg/example.js).
 
 ## URI Helpers

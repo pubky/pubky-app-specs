@@ -40,6 +40,7 @@ pub enum PubkyAppFeedLayout {
     Wide,
     Visual,
     List,
+    Cards,
 }
 
 /// Enum representing the sort order of the feed.
@@ -348,6 +349,7 @@ impl FromStr for PubkyAppFeedLayout {
             "wide" => Ok(PubkyAppFeedLayout::Wide),
             "visual" => Ok(PubkyAppFeedLayout::Visual),
             "list" => Ok(PubkyAppFeedLayout::List),
+            "cards" => Ok(PubkyAppFeedLayout::Cards),
             _ => Err(format!("Invalid feed layout: {}", s)),
         }
     }
@@ -1057,9 +1059,46 @@ mod tests {
             "list".parse::<PubkyAppFeedLayout>().unwrap(),
             PubkyAppFeedLayout::List
         );
+        assert_eq!(
+            "cards".parse::<PubkyAppFeedLayout>().unwrap(),
+            PubkyAppFeedLayout::Cards
+        );
 
         // Invalid case
         assert!("invalid".parse::<PubkyAppFeedLayout>().is_err());
+    }
+
+    #[test]
+    fn test_feed_layout_json_roundtrip_preserves_id() {
+        for (value, layout) in [
+            ("columns", PubkyAppFeedLayout::Columns),
+            ("wide", PubkyAppFeedLayout::Wide),
+            ("visual", PubkyAppFeedLayout::Visual),
+            ("list", PubkyAppFeedLayout::List),
+            ("cards", PubkyAppFeedLayout::Cards),
+        ] {
+            let feed = PubkyAppFeed::new(
+                feed_config(
+                    Some(vec!["rust".to_string()]),
+                    None,
+                    PubkyAppFeedReach::All,
+                    layout.clone(),
+                    PubkyAppFeedSort::Recent,
+                    None,
+                ),
+                "Rust posts".to_string(),
+                "layout-dashboard".to_string(),
+            );
+            let id = feed.create_id();
+            assert!(feed.validate(Some(&id)).is_ok());
+
+            let json = serde_json::to_value(&feed).unwrap();
+            assert_eq!(json["feed"]["layout"], value);
+            let restored: PubkyAppFeed = serde_json::from_value(json).unwrap();
+            assert_eq!(restored.feed.layout, layout);
+            assert_eq!(restored.create_id(), id);
+            assert!(restored.validate(Some(&id)).is_ok());
+        }
     }
 
     #[test]

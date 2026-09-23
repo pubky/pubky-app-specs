@@ -23,6 +23,7 @@ pub enum PubkyAppCollectionLayout {
     Grid,
     List,
     Visual,
+    Cards,
     #[serde(other)]
     Unknown,
 }
@@ -35,6 +36,7 @@ impl FromStr for PubkyAppCollectionLayout {
             "grid" => Ok(Self::Grid),
             "list" => Ok(Self::List),
             "visual" => Ok(Self::Visual),
+            "cards" => Ok(Self::Cards),
             _ => Err(format!("Invalid collection layout: {}", s)),
         }
     }
@@ -505,18 +507,29 @@ mod tests {
 
     #[test]
     fn test_collection_post_roundtrip_layout() {
-        let envelope_json = r#"{"name":"Photos","layout":"visual"}"#;
-        let post = PubkyAppPost::new(
-            envelope_json.to_string(),
-            PubkyAppPostKind::Collection,
-            None,
-            None,
-            None,
-        );
-        let id = post.create_id();
-        assert!(post.validate(Some(&id)).is_ok());
-        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Visual));
+        for (value, layout) in [
+            ("grid", PubkyAppCollectionLayout::Grid),
+            ("list", PubkyAppCollectionLayout::List),
+            ("visual", PubkyAppCollectionLayout::Visual),
+            ("cards", PubkyAppCollectionLayout::Cards),
+        ] {
+            assert_eq!(value.parse::<PubkyAppCollectionLayout>().unwrap(), layout);
+            let envelope_json = serde_json::json!({ "name": "Photos", "layout": value });
+            let post = PubkyAppPost::new(
+                envelope_json.to_string(),
+                PubkyAppPostKind::Collection,
+                None,
+                None,
+                None,
+            );
+            let id = post.create_id();
+            assert!(post.validate(Some(&id)).is_ok());
+            let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
+            assert_eq!(envelope.layout, Some(layout));
+            assert_eq!(serde_json::to_value(&envelope).unwrap()["layout"], value);
+        }
+        // Reading future layouts is tolerant, but builders must only author supported values.
+        assert!("spiral".parse::<PubkyAppCollectionLayout>().is_err());
     }
 
     #[test]
@@ -779,7 +792,7 @@ mod tests {
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
                 ]),
                 Some("https://example.com/cover.png".to_string()),
-                Some("list".to_string()),
+                Some("cards".to_string()),
             )
             .expect("createCollectionPost should succeed");
 
@@ -795,6 +808,6 @@ mod tests {
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")
         );
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::List));
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Cards));
     }
 }

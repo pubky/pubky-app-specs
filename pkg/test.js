@@ -1,4 +1,4 @@
-import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
+import { PubkyAppPost, PubkyAppPostKind, PubkySpecsBuilder, PubkyAppPostEmbed, PubkyAppFeed, PubkyAppFeedLayout, postUriBuilder, bookmarkUriBuilder, followUriBuilder, userUriBuilder, getValidMimeTypes } from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
 
@@ -295,6 +295,50 @@ describe("PubkySpecs Example Objects Tests", () => {
         assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
       });
 
+      for (const layout of ["grid", "list", "visual", "cards"]) {
+        it(`should round-trip a collection with the ${layout} layout`, () => {
+          const { post } = specsBuilder.createCollectionPost(
+            "Favorite posts",
+            "Posts worth revisiting",
+            [collectionItemUri],
+            coverImageUrl,
+            layout
+          );
+          const json = post.toJson();
+          const restored = PubkyAppPost.fromJson(JSON.parse(JSON.stringify(json)));
+          assert.deepStrictEqual(restored.toJson(), json);
+          assert.deepStrictEqual(JSON.parse(restored.content), {
+            name: "Favorite posts",
+            description: "Posts worth revisiting",
+            items: [collectionItemUri],
+            cover_image: coverImageUrl,
+            layout,
+          });
+        });
+      }
+
+      it("should switch an existing collection to cards without changing its ID or items", () => {
+        const { post, meta } = specsBuilder.createCollectionPost(
+          "Favorite posts",
+          null,
+          [collectionItemUri],
+          coverImageUrl,
+          "list"
+        );
+        const envelope = { ...JSON.parse(post.content), layout: "cards" };
+        const updated = specsBuilder.editPost(post, meta.id, JSON.stringify(envelope));
+        assert.strictEqual(updated.meta.id, meta.id);
+        assert.strictEqual(updated.meta.url, meta.url);
+        assert.deepStrictEqual(JSON.parse(updated.post.content), envelope);
+      });
+
+      it("cannot author an unsupported collection layout", () => {
+        assert.throws(
+          () => specsBuilder.createCollectionPost("Favorite posts", null, [], null, "spiral"),
+          (error) => String(error).includes("Invalid collection layout: spiral")
+        );
+      });
+
       it("cannot create collection post with too many items", () => {
         assert.strictEqual(
           typeof specsBuilder.createCollectionPost,
@@ -520,6 +564,44 @@ describe("PubkySpecs Example Objects Tests", () => {
   });
 
   describe("Feed Pubky-app-specs", () => {
+    it("should append Cards without changing existing JS layout enum values", () => {
+      const commonjsLayouts = require("./index.cjs").PubkyAppFeedLayout;
+      for (const [name, value] of Object.entries({ Columns: 0, Wide: 1, Visual: 2, List: 3, Cards: 4 })) {
+        assert.strictEqual(PubkyAppFeedLayout[name], value);
+        assert.strictEqual(commonjsLayouts[name], value);
+      }
+    });
+
+    it("should round-trip a cards feed and preserve its derived ID", () => {
+      const input = {
+        tags: ["rust"],
+        reach: "all",
+        layout: "cards",
+        sort: "recent",
+        name: "Rust posts",
+        icon: "layout-dashboard",
+      };
+      const { feed, meta } = specsBuilder.createFeed(input);
+      assert.strictEqual(feed.feed.layout, PubkyAppFeedLayout.Cards);
+      const json = feed.toJson();
+      assert.strictEqual(json.feed.layout, "cards");
+      const restored = PubkyAppFeed.fromJson(JSON.parse(JSON.stringify(json)));
+      assert.strictEqual(restored.feed.layout, PubkyAppFeedLayout.Cards);
+      assert.deepStrictEqual(restored.toJson(), json);
+
+      // Bootstrap recreates the feed through the builder after reading homeserver JSON.
+      const rebuilt = specsBuilder.createFeed({ ...json.feed, name: json.name, icon: json.icon });
+      assert.strictEqual(rebuilt.meta.id, meta.id);
+      assert.notStrictEqual(specsBuilder.createFeed({ ...input, layout: "columns" }).meta.id, meta.id);
+    });
+
+    it("cannot author an unsupported feed layout", () => {
+      assert.throws(
+        () => specsBuilder.createFeed({ reach: "all", layout: "spiral", sort: "recent", name: "Rust posts", icon: "rss" }),
+        (error) => String(error).includes("Invalid feed layout: spiral")
+      );
+    });
+
     it("should create feed with correct properties", () => {
       const { feed, meta: feedMeta } = specsBuilder.createFeed({
         tags: ["mountain", "hike"],

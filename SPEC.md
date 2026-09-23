@@ -172,7 +172,7 @@ Collection posts use a typed JSON envelope as their `content`. The envelope shap
 - `name`: required, 1 to 100 unicode scalars, non-whitespace-only.
 - `description`: optional, max 500 scalars.
 - `cover_image`: optional hero/cover image URL (max 200 chars). Validated as a general attachment URL — protocol must be `pubky`, `http`, or `https`.
-- `layout`: optional, one of `grid`, `list`, `visual`; the creator's default layout for experiencing the collection. Absent = `grid`. Consumers must treat unrecognized values as `grid`.
+- `layout`: optional, one of `grid`, `list`, `visual`, `cards`; the creator's default layout for experiencing the collection. `cards` displays complete post cards in columns with content-driven heights. Absent = `grid`. Consumers must treat unrecognized values as `grid`.
 - `items`: ordered list of pubky.app post URIs (max 100). Each URI must be in exact canonical form `pubky://<pubky-id>/pub/pubky.app/posts/<post-id>` (94 chars); any deviation (extra path segments, query, fragment, userinfo, etc.) is rejected.
 
 For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset. The `content` field is bounded by 40000 scalars instead of the regular short/long caps.
@@ -296,7 +296,7 @@ For `kind = collection`, `parent`, `embed`, and `post.attachments` must be unset
 | `tags`      | Array    | Tags for filtering.                | Optional. Max 5 tags. Each tag follows tag label rules.     |
 | `domain_tags` | Array  | Domain tags for filtering.         | Optional. Max 5 tags. Each tag follows tag label rules.   |
 | `reach`     | String   | Feed visibility scope.             | Required. One of: `following`, `followers`, `friends`, `all`, `wot`, `me`. |
-| `layout`    | String   | Feed layout style.                 | Required. One of: `columns`, `wide`, `visual`, `list`.    |
+| `layout`    | String   | Feed layout style.                 | Required. One of: `columns`, `wide`, `visual`, `list`, `cards`.    |
 | `sort`      | String   | Sort order.                        | Required. One of: `recent`, `popularity`.                   |
 | `content`   | String   | Post kind to filter by.            | Optional. A valid `PubkyAppPostKind` value.               |
 
