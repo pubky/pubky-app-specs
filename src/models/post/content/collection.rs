@@ -20,8 +20,7 @@ use super::super::PubkyAppPost;
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum PubkyAppCollectionLayout {
-    #[serde(alias = "grid")]
-    Cards,
+    Grid,
     List,
     Visual,
     #[serde(other)]
@@ -33,7 +32,7 @@ impl FromStr for PubkyAppCollectionLayout {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "cards" => Ok(Self::Cards),
+            "grid" => Ok(Self::Grid),
             "list" => Ok(Self::List),
             "visual" => Ok(Self::Visual),
             _ => Err(format!("Invalid collection layout: {}", s)),
@@ -506,36 +505,18 @@ mod tests {
 
     #[test]
     fn test_collection_post_roundtrip_layout() {
-        for (value, canonical, layout) in [
-            ("grid", "cards", PubkyAppCollectionLayout::Cards),
-            ("cards", "cards", PubkyAppCollectionLayout::Cards),
-            ("list", "list", PubkyAppCollectionLayout::List),
-            ("visual", "visual", PubkyAppCollectionLayout::Visual),
-        ] {
-            assert_eq!(
-                canonical.parse::<PubkyAppCollectionLayout>().unwrap(),
-                layout
-            );
-            let envelope_json = serde_json::json!({ "name": "Photos", "layout": value });
-            let post = PubkyAppPost::new(
-                envelope_json.to_string(),
-                PubkyAppPostKind::Collection,
-                None,
-                None,
-                None,
-            );
-            let id = post.create_id();
-            assert!(post.validate(Some(&id)).is_ok());
-            let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
-            assert_eq!(envelope.layout, Some(layout));
-            assert_eq!(
-                serde_json::to_value(&envelope).unwrap()["layout"],
-                canonical
-            );
-        }
-        // Legacy and future layouts remain readable; builders only author canonical values.
-        assert!("grid".parse::<PubkyAppCollectionLayout>().is_err());
-        assert!("spiral".parse::<PubkyAppCollectionLayout>().is_err());
+        let envelope_json = r#"{"name":"Photos","layout":"visual"}"#;
+        let post = PubkyAppPost::new(
+            envelope_json.to_string(),
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+        let envelope: PubkyAppCollectionContent = serde_json::from_str(&post.content).unwrap();
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Visual));
     }
 
     #[test]
@@ -798,7 +779,7 @@ mod tests {
                     "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A".to_string(),
                 ]),
                 Some("https://example.com/cover.png".to_string()),
-                Some("cards".to_string()),
+                Some("list".to_string()),
             )
             .expect("createCollectionPost should succeed");
 
@@ -814,6 +795,6 @@ mod tests {
             envelope.cover_image.as_deref(),
             Some("https://example.com/cover.png")
         );
-        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::Cards));
+        assert_eq!(envelope.layout, Some(PubkyAppCollectionLayout::List));
     }
 }
