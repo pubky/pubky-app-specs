@@ -34,32 +34,30 @@ pub trait TimestampId {
     /// Validates that the provided ID is a valid Crockford Base32-encoded timestamp,
     /// 13 characters long, and represents a reasonable timestamp.
     fn validate_id(&self, id: &str) -> Result<(), String> {
+        self.validate_id_at(id, timestamp())
+    }
+
+    /// [`Self::validate_id`] against a given clock, so the time bounds are testable at their
+    /// edges. The id must be canonical, on or after 2024-10-01 UTC, and at most two hours
+    /// ahead of `now_micros`.
+    fn validate_id_at(&self, id: &str, now_micros: i64) -> Result<(), String> {
         // Canonical encoding first, then the time bounds
         let timestamp_micros = validate_timestamp_id_format(id)?;
-
-        // Get current time in microseconds
-        let now_micros = timestamp();
-
-        // Define October 1st, 2024, in microseconds since UNIX epoch
-        let oct_first_2024_micros = 1727740800000000; // Timestamp for 2024-10-01 00:00:00 UTC
-
-        let max_future_micros = now_micros + MAX_FUTURE_MICROS;
-
-        // Validate that the ID's timestamp is after October 1st, 2024
-        if timestamp_micros < oct_first_2024_micros {
+        if timestamp_micros < MIN_TIMESTAMP_ID_MICROS {
             return Err(
-                "Validation Error: Invalid ID, timestamp must be after October 1st, 2024".into(),
+                "Validation Error: Invalid ID, timestamp must be on or after October 1st, 2024"
+                    .into(),
             );
         }
-
-        // Validate that the ID's timestamp is not more than 2 hours in the future
-        if timestamp_micros > max_future_micros {
+        if timestamp_micros > now_micros.saturating_add(MAX_FUTURE_MICROS) {
             return Err("Validation Error: Invalid ID, timestamp is too far in the future".into());
         }
-
         Ok(())
     }
 }
+
+/// 2024-10-01 00:00:00 UTC, the lower bound of a valid timestamp id.
+const MIN_TIMESTAMP_ID_MICROS: i64 = 1_727_740_800_000_000;
 
 /// The one content-addressed id body: blake3 over the data, the first half of the hash bytes,
 /// Crockford base32. Shared with the overflow bookmark filename, which has no `HashId` impl
@@ -224,6 +222,38 @@ mod tests {
         shuffled.reverse();
         shuffled.sort_unstable();
         assert_eq!(shuffled, ids);
+    }
+
+    fn id_at(micros: i64) -> String {
+        encode_timestamp_id(micros)
+    }
+
+    #[test]
+    fn validate_id_at_the_two_hour_future_edge() {
+        let now = 1_758_600_000_000_000;
+        assert!(Minter
+            .validate_id_at(&id_at(now + MAX_FUTURE_MICROS), now)
+            .is_ok());
+        let err = Minter
+            .validate_id_at(&id_at(now + MAX_FUTURE_MICROS + 1), now)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "Validation Error: Invalid ID, timestamp is too far in the future"
+        );
+    }
+
+    #[test]
+    fn validate_id_at_the_lower_bound() {
+        let now = 1_758_600_000_000_000;
+        assert_eq!(id_at(MIN_TIMESTAMP_ID_MICROS), "00326QR0MQG00");
+        let err = Minter
+            .validate_id_at(&id_at(MIN_TIMESTAMP_ID_MICROS - 1), now)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "Validation Error: Invalid ID, timestamp must be on or after October 1st, 2024"
+        );
     }
 
     #[test]
