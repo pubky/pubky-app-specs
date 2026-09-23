@@ -1,7 +1,7 @@
 //! The one normalization every consumer shares, so an indexer, a migrator and a client
 //! cannot disagree about which stored paths are the same object.
 
-use crate::constants::{PRIVATE_ROOT, PUBLIC_ROOT, SOCIAL_NAMESPACE};
+use crate::constants::{epoch_segment, PRIVATE_ROOT, PUBLIC_ROOT, SOCIAL_NAMESPACE};
 use crate::models::legacy_v0::{ParsedUri, Resource};
 use crate::uri::strip_media_ext;
 
@@ -20,19 +20,9 @@ const LEGACY_EPOCH: &str = "pubky.app";
 /// object, so it has no key.
 const ID_SEGMENTS: &[&str] = &["tags", "follows", "mutes", "bookmarks", "feeds"];
 
-/// Resource names that are a whole object on their own. They also accept a leaf, so an
-/// epoch that grows one keys without a change here.
+/// v0 resources that are a whole object on their own. They key only under `pubky.app`, so
+/// the migrator can find them; in v1 they belong to the app, not to this library.
 const LEAF_SEGMENTS: &[&str] = &["last_read", "settings"];
-
-/// `true` for `v` followed by a decimal with no leading zero. Epoch 0 is the legacy
-/// namespace, which spells itself, so `v0` and `v01` are not epoch segments.
-fn is_epoch_segment(s: &str) -> bool {
-    let mut digits = match s.strip_prefix('v') {
-        Some(d) => d.chars(),
-        None => return false,
-    };
-    matches!(digits.next(), Some('1'..='9')) && digits.all(|c| c.is_ascii_digit())
-}
 
 fn strip_json(leaf: &str) -> &str {
     leaf.strip_suffix(".json").unwrap_or(leaf)
@@ -53,8 +43,11 @@ fn keyed(segment: &str, id: &str) -> Option<String> {
 ///
 /// The key drops the root, so a private draft and its published copy are one object, and it
 /// drops the whole post version leaf, label included, so every edit of a post is one row.
-/// No id is validated here: the key comes from a path the ingest already accepted. Pure
-/// string work, no parse, so a later epoch keys its leaves without touching this.
+/// No id is validated here: the key comes from a path the ingest already accepted.
+///
+/// Only `social/v1` keys. A new epoch exists for a change that breaks these rules, a
+/// re-pinned id function or a grammar break, so a later epoch adds its own rules here
+/// instead of inheriting v1's.
 ///
 /// A leaf is read on the terms of the epoch that wrote it. A post leaf is the version path,
 /// so everything from its first segment on is dropped under every epoch. Any other leaf is
@@ -63,8 +56,8 @@ fn keyed(segment: &str, id: &str) -> Option<String> {
 /// object at all, because the v1 parser rejects it.
 ///
 /// What collapses across epochs is the path grammar, not the id inside it. `posts`, `files`
-/// and `blobs`, `follows`, `mutes`, `profile`, `settings` and `last_read` carry the same id
-/// in both spellings of one object, so the two paths key onto one row. `tags`, `bookmarks`
+/// and `blobs`, `follows`, `mutes` and `profile` carry the same id in both spellings of one
+/// object, so the two paths key onto one row. `tags`, `bookmarks`
 /// and `feeds` do not: a v0 tag id hashes a target uri that the migration itself respells
 /// for social targets, a v0 bookmark id is a hash where the v1 leaf is a filename, and a
 /// feed id is re-derived. One migrated tag, bookmark or feed therefore holds two keys, and
@@ -84,7 +77,7 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
         (true, tail)
     } else if namespace == SOCIAL_NAMESPACE {
         let (version, rest) = tail.split_once('/')?;
-        if !is_epoch_segment(version) {
+        if version != epoch_segment() {
             return None;
         }
         (false, rest)
@@ -128,11 +121,15 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
         // the v1 media object, so a blob id keys straight onto it. Ingest never writes a
         // `blobs/` path under a social epoch, the segment rule simply does not ask.
         ("blobs", Some(leaf)) => keyed("files", leaf)?,
-        (seg, Some(leaf)) if ID_SEGMENTS.contains(&seg) || LEAF_SEGMENTS.contains(&seg) => {
+        (seg, Some(leaf))
+            if ID_SEGMENTS.contains(&seg) || (legacy && LEAF_SEGMENTS.contains(&seg)) =>
+        {
             keyed(seg, strip_json(leaf))?
         }
         ("profile.json", None) => "profile".to_string(),
-        (seg, None) if LEAF_SEGMENTS.contains(&strip_json(seg)) => strip_json(seg).to_string(),
+        (seg, None) if legacy && LEAF_SEGMENTS.contains(&strip_json(seg)) => {
+            strip_json(seg).to_string()
+        }
         _ => return None,
     };
     Some(StableId::Key(key))
@@ -205,9 +202,6 @@ mod tests {
         for path in [
             "pub/social/v1/posts/0RDX5H0000000",
             "priv/social/v1/posts/0RDX5H0000000",
-            "pub/social/v7/posts/0RDX5H0000000",
-            "priv/social/v7/posts/0RDX5H0000000",
-            "pub/social/v10/posts/0RDX5H0000000",
             "/pub/social/v1/posts/0RDX5H0000000",
             "pub/pubky.app/posts/0RDX5H0000000",
         ] {
@@ -270,7 +264,6 @@ mod tests {
             ("priv/social/v1/feeds/ABC.json", "feeds/ABC"),
             ("pub/pubky.app/last_read", "last_read"),
             ("pub/pubky.app/settings.json", "settings"),
-            ("pub/social/v1/last_read.json", "last_read"),
         ];
         for (path, expected) in cases {
             assert_eq!(key(path).as_deref(), Some(*expected), "{path}");
@@ -334,6 +327,11 @@ mod tests {
             "pub/social/v/posts/0RDX5H0000000",     // no digits
             "pub/social/v0/posts/0RDX5H0000000",    // epoch 0 spells itself as pubky.app
             "pub/social/v01/posts/0RDX5H0000000",   // a leading zero is not an epoch
+            "pub/social/v2/posts/0RDX5H0000000",    // a later epoch brings its own rules
+            "priv/social/v10/posts/0RDX5H0000000",  // a later epoch brings its own rules
+            "pub/social/v1/last_read.json",         // app-owned in v1
+            "pub/social/v1/settings.json",          // app-owned in v1
+            "pub/social/v1/settings/x.json",        // app-owned in v1
             "pub/social/v1/widgets/ABC",            // unknown segment
             "pub/social/v1/posts/",                 // missing leaf
             "pub/social/v1/tags/",                  // missing leaf

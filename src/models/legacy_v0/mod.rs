@@ -20,6 +20,12 @@
 //! checked in v0 at all, they go through `url::Url`. A consumer that holds one of these as a
 //! real public key, to verify a signature or to fetch from a homeserver, does the curve check
 //! itself; the decode is not one.
+//!
+//! On another axis it is stricter, on purpose. 0.8.0 decoded with `base32::decode`, which
+//! ignores the 4 filler bits of the last character, so a 52-character key ending in anything
+//! but `y` or `o` passed, and on native was rewritten to the standard spelling. [`PubkyId`]
+//! rejects that key as a URI host, a follow or mute id and a collection item host.
+//! Accepting it would give one user several keys, one per spelling.
 
 mod common;
 mod constants;

@@ -16,7 +16,8 @@
 //! tests themselves.
 //!
 //! The two are not the same acceptance set, and
-//! `a_z32_host_that_is_not_a_curve_point_is_accepted_here` pins where they part.
+//! `a_z32_host_that_is_not_a_curve_point_is_accepted_here` and
+//! `a_z32_host_with_nonzero_filler_bits_is_rejected_here` pin where they part.
 
 use pubky_social_specs::legacy_v0::{
     try_parse_pubky_path, ExtendedParsedUri, PubkyAppObject, VALIDATION_LIMITS,
@@ -176,17 +177,19 @@ fn a_v0_path_and_its_v1_counterpart_key_the_same() {
             &format!("priv/social/v1/files/{hash}.png"),
             &format!("files/{hash}"),
         ),
-        (
-            "pub/pubky.app/last_read",
-            "pub/social/v1/last_read.json",
-            "last_read",
-        ),
     ];
     for (legacy, v1, expected) in pairs {
         let want = Some(StableId::Key((*expected).to_string()));
         assert_eq!(stable_id(legacy), want, "{legacy}");
         assert_eq!(stable_id(v1), want, "{v1}");
     }
+
+    // last_read leaves this library in v1, so only the legacy spelling keys, for the migrator.
+    assert_eq!(
+        stable_id("pub/pubky.app/last_read"),
+        Some(StableId::Key("last_read".to_string()))
+    );
+    assert_eq!(stable_id("pub/social/v1/last_read.json"), None);
 }
 
 /// `tags`, `bookmarks` and `feeds` re-derive their id in the migration, so a v0 path and
@@ -257,6 +260,33 @@ fn a_z32_host_that_is_not_a_curve_point_is_accepted_here() {
     let object = PubkyAppObject::from_uri(&uri, br#"{"created_at":1627849723}"#)
         .expect("accepted as a Follow id");
     assert!(matches!(object, PubkyAppObject::Follow(_)));
+}
+
+/// The one place this module is stricter than 0.8.0. That release decoded the host ignoring
+/// the 4 filler bits of the last character, so every spelling of one key passed. Here only
+/// the standard spelling does, or one user would hold several keys.
+#[test]
+fn a_z32_host_with_nonzero_filler_bits_is_rejected_here() {
+    // `t` and `o` share their data bit and differ only in the filler bits, so this decodes
+    // to the same curve point as the real key ending in `o`, which 0.8.0 accepted.
+    let canonical = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    let alias = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdt";
+    assert_eq!(alias.len(), 52);
+
+    let accepted = format!("pubky://{canonical}/pub/pubky.app/follows/{canonical}");
+    assert!(try_parse_pubky_path(&accepted).is_ok());
+
+    for uri in [
+        format!("pubky://{alias}/pub/pubky.app/follows/{canonical}"),
+        format!("pubky://{canonical}/pub/pubky.app/follows/{alias}"),
+        format!("pubky://{canonical}/pub/pubky.app/mutes/{alias}"),
+    ] {
+        assert!(
+            PubkyAppObject::from_uri(&uri, br#"{"created_at":1627849723}"#).is_err(),
+            "{uri}"
+        );
+    }
+    assert!(try_parse_pubky_path(&format!("pubky://{alias}/pub/pubky.app/profile.json")).is_err());
 }
 
 /// Nexus reads these names. A rename here is a downstream break, not a refactor.
