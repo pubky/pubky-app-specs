@@ -1,9 +1,7 @@
 pubky*
-index.js
 index.cjs
-index.d.ts
-index_bg.wasm   
 nodejs*
 node_modules*
 package-lock.json
 validationLimits*
+mimeTypes*

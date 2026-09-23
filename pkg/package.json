@@ -9,29 +9,45 @@
   ],
   "description": "Pubky social data model specifications",
   "devDependencies": {
-    "mocha": "^11.7.5"
+    "mocha": "^11.7.5",
+    "typescript": "^7.0.2"
   },
   "exports": {
     ".": {
+      "types": "./types.d.ts",
       "import": "./index.js",
-      "require": "./index.cjs",
-      "types": "./pubky_social_specs.d.ts"
+      "require": "./index.cjs"
     },
     "./validationLimits": {
+      "types": "./validationLimits.d.ts",
       "import": "./validationLimits.js",
       "require": "./validationLimits.cjs"
     },
-    "./validationLimits.json": "./validationLimits.json"
+    "./validationLimits.json": "./validationLimits.json",
+    "./mimeTypes": {
+      "types": "./mimeTypes.d.ts",
+      "import": "./mimeTypes.js",
+      "require": "./mimeTypes.cjs"
+    },
+    "./mimeTypes.json": "./mimeTypes.json"
   },
   "files": [
-    "pubky_social_specs_bg.wasm",
-    "pubky_social_specs.d.ts",
-    "index.cjs",
     "index.js",
+    "index.cjs",
+    "types.d.ts",
+    "pubky_social_specs.js",
+    "pubky_social_specs.cjs",
+    "pubky_social_specs.d.ts",
+    "pubky_social_specs_bg.wasm",
     "example.js",
     "validationLimits.json",
     "validationLimits.js",
-    "validationLimits.cjs"
+    "validationLimits.cjs",
+    "validationLimits.d.ts",
+    "mimeTypes.json",
+    "mimeTypes.js",
+    "mimeTypes.cjs",
+    "mimeTypes.d.ts"
   ],
   "homepage": "https://pubky.app",
   "keywords": [
@@ -50,10 +66,10 @@
   "scripts": {
     "build": "cargo run --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "mocha test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts && mocha test.js"
   },
   "sideEffects": false,
   "type": "module",
-  "types": "pubky_social_specs.d.ts",
+  "types": "types.d.ts",
   "version": "1.0.0-alpha.3"
 }
