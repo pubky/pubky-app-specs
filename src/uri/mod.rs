@@ -1,6 +1,5 @@
 //! URI parsing and construction for `pubky://` paths.
 //!
-//! - **Build** — `*_uri_builder` functions
 //! - **Build**: the `*_uri_builder` helpers assemble canonical URIs.
 //! - **Parse**: [`ParsedUri`] classifies a path into visibility and resource.
 //! - **Scheme**: [`is_pubky_scheme`] is the one string check shared with callers.

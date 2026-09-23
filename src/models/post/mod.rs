@@ -70,10 +70,10 @@ impl FromStr for PubkySocialPostKind {
 }
 
 impl PubkySocialPostKind {
-    /// Returns `true` for every spec-recognized variant, `false` for `Unknown`.
+    /// Returns `true` for every variant this crate version knows, `false` for `Unknown`.
     ///
     /// `Unknown` is the forwards-compat catch-all variant (via `#[serde(other)]`)
-    /// that captures any post-kind string this version of the spec doesn't
+    /// that captures any post-kind string this crate version doesn't
     /// recognize yet. Most consumers, indexers, stream filters, search ranking,
     /// want to skip such posts, and this helper lets them write
     /// `if kind.is_known() { ... }` rather than

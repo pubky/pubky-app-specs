@@ -103,8 +103,8 @@ impl PubkySocialCollectionItem {
 /// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Collection`.
 ///
 /// A collection post curates an ordered list of items under a `name` and optional
-/// `description`. The envelope is parsed and validated by the spec but never re-serialized as
-/// a top-level homeserver object. Re-exported so SDK consumers can inspect the shape; the
+/// `description`. The envelope is parsed and validated by this crate, never re-serialized by it
+/// as a top-level homeserver object. Re-exported so SDK consumers can inspect the shape; the
 /// authoritative way to produce one is a `PubkySocialPost` with `kind: Collection` whose
 /// `content` JSON-parses into it. No `deny_unknown_fields`: unknown members are preserved.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_unknown_layout_tolerated() {
-        // Forward-compat: a layout variant from a future spec version must not
+        // Forward-compat: a layout variant from a future crate version must not
         // invalidate the whole post; it degrades to Unknown.
         let envelope_json = r#"{"name":"X","layout":"spiral"}"#;
         let post = PubkySocialPost::new(
