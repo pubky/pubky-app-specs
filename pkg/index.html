@@ -2,42 +2,32 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Pubky App Specs Demo</title>
+    <title>Pubky Social Specs Demo</title>
   </head>
   <body>
     <script type="module">
-      // TIP: We can use the following command to test that file: python3 -m http.server 8000
-      import { PubkySpecsBuilder, PubkySocialPostKind } from "./index.js";
+      // Serve this directory after a build, for example: python3 -m http.server 8000
+      import { init, createUser, createPost, createFollow } from "./index.js";
 
-      async function main() {
-        try {
+      const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
+      const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
 
-          // Test various functions like the example.js
-          const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
-          const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
-          
-          const specsBuilder = new PubkySpecsBuilder(OTTO);
-          
-          // Create a user
-          const { user, meta: userMeta } = specsBuilder.createUser("Alice Smith", "Software Developer", null, null, "active");
-          console.log("User created:", userMeta.url);
-          
-          // Create a post
-          const { post, meta: postMeta } = specsBuilder.createPost("Hello from browser!", PubkySocialPostKind.Note);
-          console.log("Post created:", postMeta.url);
-          
-          // Create a follow
-          const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
-          console.log("Follow created:", followMeta.url);
-          
-          console.log("All tests passed!");
-          
-        } catch (err) {
-          console.error("Error:", err);
-        }
+      try {
+        await init();
+
+        const user = createUser(OTTO, { name: "Alice Smith", bio: "Software Developer", status: "active" });
+        console.log("User created:", user.meta.url, user.object);
+
+        const post = createPost(OTTO, { content: "Hello from browser!" });
+        console.log("Post created:", post.meta.url, post.object);
+
+        const follow = createFollow(OTTO, RIO);
+        console.log("Follow created:", follow.meta.url);
+
+        console.log("All tests passed!");
+      } catch (err) {
+        console.error("Error:", err);
       }
-
-      main();
     </script>
   </body>
 </html>
