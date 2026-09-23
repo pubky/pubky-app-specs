@@ -5,9 +5,6 @@ use crate::{limits::VALIDATION_LIMITS, traits::HashId};
 use base32::{encode, Alphabet};
 use blake3::Hasher;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 /// Advisory client hint only; gates nothing. The upload pipeline maps ANY declared type via
 /// mime_to_ext.
 pub const VALID_MIME_TYPES: &[&str] = &[
@@ -43,9 +40,8 @@ pub const VALID_MIME_TYPES: &[&str] = &[
 /// Not a `Validatable`: that trait is the JSON-resource contract (parse, size cap on the
 /// serialized form) and a media object has no JSON form at all, so it carries no serde derives
 /// and no schema. Reading one is `from_bytes`.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Debug, Clone)]
-pub struct PubkySocialFile(#[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))] pub Vec<u8>);
+pub struct PubkySocialFile(pub Vec<u8>);
 
 /// What an upload needs: the object, its id, and the path carrying the extension.
 #[derive(Debug, Clone)]
@@ -82,17 +78,6 @@ impl PubkySocialFile {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialFile {
-    /// Getter for the file bytes as a `Uint8Array`. Media is bytes, so there is no
-    /// `toJson`/`fromJson` pair.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn data(&self) -> js_sys::Uint8Array {
-        js_sys::Uint8Array::from(&self.0[..])
-    }
-}
-
 impl HashId for PubkySocialFile {
     fn get_id_data(&self) -> String {
         // data string id hashing is not needed for PubkySocialFile as we hash the entire file
@@ -117,7 +102,12 @@ impl HashId for PubkySocialFile {
 impl PubkySocialFile {
     /// Reads a stored media object: the bytes as served, checked against the id in its path.
     pub fn from_bytes(bytes: &[u8], id: &str) -> Result<Self, String> {
-        let file = Self(bytes.to_vec());
+        Self::from_vec(bytes.to_vec(), id)
+    }
+
+    /// [`Self::from_bytes`] over bytes the caller already owns, with no copy.
+    pub fn from_vec(bytes: Vec<u8>, id: &str) -> Result<Self, String> {
+        let file = Self(bytes);
         file.validate(Some(id))?;
         Ok(file)
     }

@@ -7,11 +7,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -22,14 +17,12 @@ use utoipa::ToSchema;
 ///
 /// `/priv/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy`
 ///
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialMute {
     pub created_at: i64,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[serde(flatten)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -42,23 +35,6 @@ impl PubkySocialMute {
         }
     }
 }
-
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialMute {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialMute {}
 
 impl Validatable for PubkySocialMute {
     fn validate_fields(

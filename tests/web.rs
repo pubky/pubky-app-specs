@@ -1,223 +1,84 @@
 #![cfg(target_arch = "wasm32")]
 
 extern crate wasm_bindgen_test;
-use js_sys::Array;
-use pubky_social_specs::traits::{HasIdPath, HasPath};
-use pubky_social_specs::{
-    follow_uri_builder, parse_uri, post_uri_builder, user_uri_builder, PubkySocialFollow,
-    PubkySocialPost, PubkySocialPostKind, PubkySocialUser, PubkySocialUserLink, PubkySpecsBuilder,
+use js_sys::{Reflect, JSON};
+use pubky_social_specs::traits::HasIdPath;
+use pubky_social_specs::wasm::{
+    create_follow, create_mute, create_tag, create_user, parse_uri, read_object, validate,
 };
-use serde_wasm_bindgen::to_value;
+use pubky_social_specs::{follow_uri_builder, post_uri_builder, PubkySocialFollow};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
-#[wasm_bindgen_test]
-fn test_create_mute_under_the_private_root() {
-    let specs =
-        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-            .expect("Valid pubky ID");
-    let result = specs
-        .create_mute("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-        .expect("create_mute should not fail");
-    let url = result.meta().url();
-    assert!(url.contains("/priv/social/v1/mutes/"), "{url}");
+const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+
+fn get(value: &JsValue, path: &str) -> JsValue {
+    path.split('.').fold(value.clone(), |v, key| {
+        Reflect::get(&v, &JsValue::from_str(key)).unwrap()
+    })
+}
+
+fn string(value: &JsValue, path: &str) -> String {
+    get(value, path).as_string().unwrap()
 }
 
 #[wasm_bindgen_test]
-fn test_create_follow() {
-    let specs =
-        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-            .expect("Valid pubky ID");
-
-    let result = specs
-        .create_follow("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-        .expect("create_follow should not fail");
-    let meta = result.meta();
-    let follow = result.follow();
-
-    // Now we can call the Rust getter methods directly:
+fn follow_meta_names_the_followee() {
+    let made = create_follow(PK, PK).unwrap();
+    assert_eq!(string(&made, "meta.id"), PK);
     assert_eq!(
-        meta.path(),
-        PubkySocialFollow::create_path(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into()
-        )
+        string(&made, "meta.path"),
+        PubkySocialFollow::create_path(PK)
     );
     assert_eq!(
-        meta.url(),
-        follow_uri_builder(
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-            "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into()
-        )
+        string(&made, "meta.url"),
+        follow_uri_builder(PK.into(), PK.into())
     );
-    assert_eq!(
-        meta.id(),
-        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo"
-    );
-    assert!(follow.created_at > 0);
+    assert!(get(&made, "object.created_at").as_f64().unwrap() > 0.0);
 }
 
 #[wasm_bindgen_test]
-fn test_create_user_rust_api() {
-    let specs =
-        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-            .expect("Valid pubky ID");
-
-    // Prepare links as a JS-compatible array
-    let links = Array::new();
-    links.push(
-        &to_value(&PubkySocialUserLink {
-            title: "GitHub".to_string(),
-            url: "https://github.com/alice".to_string(),
-            extra: Default::default(),
-        })
-        .unwrap(),
-    );
-    links.push(
-        &to_value(&PubkySocialUserLink {
-            title: "Website".to_string(),
-            url: "https://alice.dev".to_string(),
-            extra: Default::default(),
-        })
-        .unwrap(),
-    );
-
-    // Call `create_user` with test data
-    let result = specs
-        .create_user(
-            "Alice".to_string(),
-            Some("Maximalist".to_string()),
-            Some("https://example.com/image.png".to_string()),
-            JsValue::from(links),
-            Some("Exploring the decentralized web.".to_string()),
-        )
-        .expect("create_user should not fail");
-
-    // Extract meta and user objects
-    let meta = result.meta();
-    let user = result.user();
-
-    // Validate the meta object
-    assert_eq!(meta.path(), PubkySocialUser::create_path());
-    assert_eq!(
-        meta.url(),
-        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
-    );
-    assert_eq!(meta.id(), "");
-
-    // Validate the user object
-    assert_eq!(user.name(), "Alice");
-    assert_eq!(user.bio().as_deref(), Some("Maximalist"));
-    assert_eq!(
-        user.image().as_deref(),
-        Some("https://example.com/image.png")
-    );
-    assert_eq!(
-        user.status().as_deref(),
-        Some("Exploring the decentralized web.")
-    );
-
-    // Validate user links
-    let user_links = user.links().expect("User should have links");
-    assert_eq!(user_links.len(), 2);
-
-    let first_link = user_links.get(0).expect("First link should exist");
-    assert_eq!(first_link.title, "GitHub");
-    assert_eq!(first_link.url, "https://github.com/alice");
-
-    let second_link = user_links.get(1).expect("Second link should exist");
-    assert_eq!(second_link.title, "Website");
-    assert_eq!(second_link.url, "https://alice.dev");
+fn mute_lives_under_the_private_root() {
+    let made = create_mute(PK, PK).unwrap();
+    assert!(string(&made, "meta.url").contains("/priv/social/v1/mutes/"));
 }
 
 #[wasm_bindgen_test]
-fn test_create_user_with_minimal_data() {
-    let specs =
-        PubkySpecsBuilder::new("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string())
-            .expect("Invalid specsBuilder");
-
-    // Call `create_user` with minimal data
-    let result = specs
-        .create_user(
-            "Bob".to_string(),
-            None,
-            None,
-            JsValue::NULL, // No links
-            None,
-        )
-        .expect("create_user should not fail");
-
-    // Extract meta and user objects
-    let meta = result.meta();
-    let user = result.user();
-
-    // Validate the meta object
-    assert_eq!(meta.path(), PubkySocialUser::create_path());
-    assert_eq!(
-        meta.url(),
-        user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into())
-    );
-    assert_eq!(meta.id(), "");
-
-    // Validate the user object
-    assert_eq!(user.name(), "Bob");
-    assert_eq!(user.bio(), None);
-    assert_eq!(user.image(), None);
-    assert!(user.links().is_none());
-    assert_eq!(user.status(), None);
+fn user_input_is_a_plain_object() {
+    let input =
+        JSON::parse(r#"{"name":"  Alice  ","links":[{"title":"x","url":"https://a.dev"}]}"#)
+            .unwrap();
+    let made = create_user(PK, input).unwrap();
+    assert_eq!(string(&made, "object.name"), "Alice");
+    assert_eq!(string(&made, "meta.id"), "");
+    assert_eq!(string(&made, "meta.path"), "/pub/social/v1/profile.json");
+    // An unknown input member is a typo, not an extension
+    let typo = JSON::parse(r#"{"name":"Alice","bios":"x"}"#).unwrap();
+    assert!(create_user(PK, typo).is_err());
 }
 
 #[wasm_bindgen_test]
-fn test_post_from_json() {
-    // A JSON string representing a post.
-    let post_json = r#"
-    {
-        "content": "Hello from JSON!",
-        "kind": "note",
-        "parent": null,
-        "embed": null
-    }
-    "#;
-    // Convert the JSON string into a JsValue.
-    let js_value = js_sys::JSON::parse(post_json).expect("Failed to parse JSON string");
-    // Use the new factory method to create a WASM PubkySocialPost.
-    let post = PubkySocialPost::from_json(&js_value).expect("Post should deserialize successfully");
-
-    assert_eq!(post.content, "Hello from JSON!");
-    assert_eq!(post.kind, PubkySocialPostKind::Note);
-    assert_eq!(post.embed, None);
-    assert!(post.attachments.is_empty());
+fn parse_uri_tags_the_resource() {
+    let parsed = parse_uri(&post_uri_builder(PK.into(), "0032SSN7Q4EVG".into())).unwrap();
+    assert_eq!(string(&parsed, "userId"), PK);
+    assert_eq!(string(&parsed, "visibility"), "public");
+    assert_eq!(string(&parsed, "resource.kind"), "post");
+    assert_eq!(string(&parsed, "resource.id"), "0032SSN7Q4EVG");
+    assert_eq!(
+        string(&parsed, "path"),
+        "/pub/social/v1/posts/0032SSN7Q4EVG"
+    );
 }
 
 #[wasm_bindgen_test]
-fn test_parse_uri() {
-    // A valid URI for a post resource.
-    let uri = post_uri_builder(
-        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into(),
-        "0032SSN7Q4EVG".into(),
-    );
-
-    // Call the wasm-exposed parse_uri function.
-    let parsed = parse_uri(&uri).expect("Expected valid URI parsing");
-
-    // Verify the user ID is correctly parsed.
-    assert_eq!(
-        parsed.user_id(),
-        "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
-        "The user ID should match the host in the URI"
-    );
-
-    // Verify that the resource string indicates a post resource.
-    assert!(
-        parsed.resource().contains("posts"),
-        "The resource field should indicate a posts resource"
-    );
-
-    // Verify that the resource ID is correctly extracted.
-    assert_eq!(
-        parsed.resource_id().unwrap(),
-        "0032SSN7Q4EVG",
-        "The resource_id should match the post id provided in the URI"
-    );
+fn a_built_object_reads_back_and_validates() {
+    let uri = format!("pubky://{PK}/pub/social/v1/profile.json");
+    let made = create_tag(PK, uri, "x".into()).unwrap();
+    let url = string(&made, "meta.url");
+    let stored = String::from(JSON::stringify(&get(&made, "object")).unwrap());
+    let read = read_object(&url, stored.into_bytes()).unwrap();
+    assert_eq!(string(&read, "kind"), "tag");
+    validate(&url, get(&read, "object")).unwrap();
 }

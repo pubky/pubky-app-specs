@@ -72,9 +72,6 @@ pub use uri::{
     tag_uri_builder, user_uri_builder, ParsedUri, Resource, Visibility,
 };
 
-// Our WASM module
+// The JS surface; its functions share names with the Rust ones they wrap, so it stays a module
 #[cfg(target_arch = "wasm32")]
-mod wasm;
-// Re-export the Wasm functions so they're available to wasm-pack
-#[cfg(target_arch = "wasm32")]
-pub use wasm::*;
+pub mod wasm;

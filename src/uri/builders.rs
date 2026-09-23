@@ -6,12 +6,8 @@ use crate::{
     PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 /// The public v1 LIST prefix, "pubky://<user_id>/pub/social/v1/". NOT a URI: the trailing
 /// slash is deliberate and the parser rejects it; use it only as a LIST or capability prefix.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = listPrefixBuilder))]
 pub fn list_prefix_builder(user_id: String) -> String {
     let prefix = social_path(Root::Pub, "");
     [PROTOCOL, &user_id, &prefix].concat()
@@ -19,14 +15,12 @@ pub fn list_prefix_builder(user_id: String) -> String {
 
 /// The private v1 LIST prefix, "pubky://<user_id>/priv/social/v1/", where mutes live. A
 /// capability scoped to the public prefix alone cannot read or write them.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = privateListPrefixBuilder))]
 pub fn private_list_prefix_builder(user_id: String) -> String {
     let prefix = social_path(Root::Priv, "");
     [PROTOCOL, &user_id, &prefix].concat()
 }
 
 /// Builds an User URI of the form "pubky://<user_pubky_id>/pub/social/v1/profile.json"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = userUriBuilder))]
 pub fn user_uri_builder(user_id: String) -> String {
     let user_path = PubkySocialUser::create_path();
     [PROTOCOL, &user_id, &user_path].concat()
@@ -35,7 +29,6 @@ pub fn user_uri_builder(user_id: String) -> String {
 /// Builds the versionless post REFERENCE, "pubky://<author_id>/pub/social/v1/posts/<post_id>":
 /// the spelling every reference field uses. The storage path of a version comes from
 /// `PubkySocialPost::create_path`.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = postUriBuilder))]
 pub fn post_uri_builder(author_id: String, post_id: String) -> String {
     let leaf = format!("{}{post_id}", PubkySocialPost::PATH_SEGMENT);
     let post_path = social_path(Root::Pub, &leaf);
@@ -43,14 +36,12 @@ pub fn post_uri_builder(author_id: String, post_id: String) -> String {
 }
 
 /// Builds a Follow URI of the form "pubky://<author_id>/pub/social/v1/follows/<follow_id>.json\"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = followUriBuilder))]
 pub fn follow_uri_builder(author_id: String, follow_id: String) -> String {
     let follow_path = PubkySocialFollow::create_path(&follow_id);
     [PROTOCOL, &author_id, &follow_path].concat()
 }
 
 /// Builds a Mute URI of the form "pubky://<author_id>/priv/social/v1/mutes/<mute_id>.json\"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = muteUriBuilder))]
 pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
     let mute_path = PubkySocialMute::create_path(&mute_id);
     [PROTOCOL, &author_id, &mute_path].concat()
@@ -58,14 +49,12 @@ pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
 
 /// Builds a Bookmark URI of the form "pubky://<author_id>/priv/social/v1/bookmarks/<filename>.json".
 /// The leaf is the filename the target derives, never a hash of the object.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = bookmarkUriBuilder))]
 pub fn bookmark_uri_builder(author_id: String, filename: String) -> String {
     let bookmark_path = PubkySocialBookmark::create_path(&filename);
     [PROTOCOL, &author_id, &bookmark_path].concat()
 }
 
 /// Builds a Tag URI of the form "pubky://<author_id>/pub/social/v1/tags/<tag_id>.json\"
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = tagUriBuilder))]
 pub fn tag_uri_builder(author_id: String, tag_id: String) -> String {
     let tag_path = PubkySocialTag::create_path(&tag_id);
     [PROTOCOL, &author_id, &tag_path].concat()
@@ -73,7 +62,6 @@ pub fn tag_uri_builder(author_id: String, tag_id: String) -> String {
 
 /// Builds a media URI of the form "pubky://<author_id>/pub/social/v1/files/<hash>.<ext>".
 /// Takes the full filename: an extension cannot be derived from an id.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fileUriBuilder))]
 pub fn file_uri_builder(author_id: String, filename: String) -> String {
     let file_path = PubkySocialFile::create_path(&filename);
     [PROTOCOL, &author_id, &file_path].concat()
@@ -82,7 +70,6 @@ pub fn file_uri_builder(author_id: String, filename: String) -> String {
 /// Builds a Feed URI of the form "pubky://<author_id>/priv/social/v1/feeds/<feed_id>.json\".
 /// Feeds are private by default; the published copy is the same file under `/pub/`, see
 /// `feed_paths`.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = feedUriBuilder))]
 pub fn feed_uri_builder(author_id: String, feed_id: String) -> String {
     let feed_path = PubkySocialFeed::create_path(&feed_id);
     [PROTOCOL, &author_id, &feed_path].concat()

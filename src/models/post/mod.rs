@@ -9,6 +9,8 @@ use crate::types::PubkyId;
 use crate::uri::is_valid_label;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 pub mod content;
 pub mod lifecycle;
@@ -18,18 +20,13 @@ pub use content::{
     PubkySocialCollectionLayout,
 };
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[non_exhaustive]
@@ -64,7 +61,7 @@ impl FromStr for PubkySocialPostKind {
             "link" => Ok(PubkySocialPostKind::Link),
             "file" => Ok(PubkySocialPostKind::File),
             "collection" => Ok(PubkySocialPostKind::Collection),
-            _ => Err(format!("Invalid content kind: {}", s)),
+            _ => Err(format!("Validation Error: Invalid content kind: {}", s)),
         }
     }
 }
@@ -96,48 +93,27 @@ impl PubkySocialPostKind {
             PubkySocialPostKind::Unknown => "unknown",
         }
     }
-
-    #[cfg(target_arch = "wasm32")]
-    fn wasm_name(&self) -> &'static str {
-        match self {
-            PubkySocialPostKind::Note => "Note",
-            PubkySocialPostKind::Article => "Article",
-            PubkySocialPostKind::Image => "Image",
-            PubkySocialPostKind::Video => "Video",
-            PubkySocialPostKind::Link => "Link",
-            PubkySocialPostKind::File => "File",
-            PubkySocialPostKind::Collection => "Collection",
-            PubkySocialPostKind::Unknown => "Unknown",
-        }
-    }
 }
 
 /// One attached media reference. An object rather than a string so per-item metadata can
 /// grow without a break. `name` is per reference: two posts may attach the same bytes under
 /// different names.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialAttachment {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alt: Option<String>,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialAttachment {
     /// The builder trims `name`; the uri passes through verbatim. Ingest never rewrites
     /// either, so a stored name is counted and rejected as it was written.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(uri: String, alt: Option<String>, name: Option<String>) -> Self {
         PubkySocialAttachment {
             uri,
@@ -148,25 +124,6 @@ impl PubkySocialAttachment {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl PubkySocialAttachment {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn uri(&self) -> String {
-        self.uri.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn alt(&self) -> Option<String> {
-        self.alt.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn name(&self) -> Option<String> {
-        self.name.clone()
-    }
-}
-
 /// Represents raw post in homeserver with content and kind
 /// URI: /pub/social/v1/posts/:post_id/:edit_id.json
 /// Where both ids are CrockfordBase32 encodings of a timestamp
@@ -174,88 +131,31 @@ impl PubkySocialAttachment {
 /// Example URI:
 ///
 /// `/pub/social/v1/posts/00321FCW75ZFY/00321FCW75ZFY.json`
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialPost {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub kind: PubkySocialPostKind,
     /// If a reply, the URI of the parent post. Pubky only: a reply is a thread edge.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub parent: Option<String>,
     /// A quoted resource, pubky or web. The kind is derivable from the target.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub embed: Option<String>,
     /// Always present on the wire, `[]` when empty. An absent field reads as `[]`; an
     /// explicit `null` is invalid.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default)]
     pub attachments: Vec<PubkySocialAttachment>,
     /// The lock file URI, a foreign-app pubky reference. Presence means "locked content"
     /// whatever the kind; the teaser envelope inside `content` is the client's.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialPost {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn content(&self) -> String {
-        self.content.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn kind(&self) -> String {
-        self.kind.wasm_name().to_string()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn parent(&self) -> Option<String> {
-        self.parent.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn embed(&self) -> Option<String> {
-        self.embed.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn attachments(&self) -> Vec<PubkySocialAttachment> {
-        self.attachments.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn lock(&self) -> Option<String> {
-        self.lock.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialPost {}
-
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialPost {
     /// Trims `content`; references pass through verbatim. Infallible; callers validate
     /// before writing.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         content: String,
         kind: PubkySocialPostKind,
@@ -298,7 +198,8 @@ impl HasIdPath for PubkySocialPost {
 }
 
 /// Where one version of a post is stored. A call result, not a wire type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MintedVersion {
     pub id: String,
     pub edit_id: String,
@@ -914,17 +815,6 @@ mod tests {
         let post: PubkySocialPost = serde_json::from_str(post_json).unwrap();
         assert_eq!(post.kind, PubkySocialPostKind::Unknown);
         assert!(err(&post).contains("post kind is unknown"));
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    #[wasm_bindgen_test::wasm_bindgen_test]
-    fn test_kind_wasm_getter() {
-        let mut post = note("x");
-        assert_eq!(post.kind(), "Note");
-        post.kind = PubkySocialPostKind::Article;
-        assert_eq!(post.kind(), "Article");
-        post.kind = PubkySocialPostKind::Unknown;
-        assert_eq!(post.kind(), "Unknown");
     }
 
     // ---- references ----

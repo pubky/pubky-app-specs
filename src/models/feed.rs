@@ -13,18 +13,15 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::str::FromStr;
-
 #[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use tsify_next::Tsify;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Enum representing the reach of the feed.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[non_exhaustive]
@@ -61,8 +58,8 @@ impl PubkySocialFeedReach {
 }
 
 /// Enum representing the layout of the feed.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[non_exhaustive]
@@ -94,8 +91,8 @@ impl PubkySocialFeedLayout {
 }
 
 /// Enum representing the sort order of the feed.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[non_exhaustive]
@@ -124,30 +121,22 @@ impl PubkySocialFeedSort {
 
 /// Configuration object for the feed. The whole of a feed's identity: two feeds with the
 /// same config are the same feed, whatever they are named.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialFeedConfig {
     /// Canonical as stored: folded labels, deduplicated, sorted by code point, never empty.
     /// `None` is "no tag filter".
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub tags: Option<Vec<String>>,
     /// A domain filter, same rules as `tags`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub domain_tags: Option<Vec<String>>,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub reach: PubkySocialFeedReach,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub layout: PubkySocialFeedLayout,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub sort: PubkySocialFeedSort,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub content: Option<PubkySocialPostKind>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     /// Outside the id input, which reads named fields only.
     #[serde(flatten)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -176,56 +165,6 @@ impl PubkySocialFeedConfig {
             content,
             extra: Default::default(),
         })
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialFeedConfig {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-
-    /// Getter for `tags`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn tags(&self) -> Option<Vec<String>> {
-        self.tags.clone()
-    }
-
-    /// Getter for `domain_tags`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn domain_tags(&self) -> Option<Vec<String>> {
-        self.domain_tags.clone()
-    }
-
-    /// Getter for `name`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn reach(&self) -> PubkySocialFeedReach {
-        self.reach.clone()
-    }
-
-    /// Getter for `layout`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn layout(&self) -> PubkySocialFeedLayout {
-        self.layout.clone()
-    }
-
-    /// Getter for `sort`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn sort(&self) -> PubkySocialFeedSort {
-        self.sort.clone()
-    }
-
-    /// Getter for `content`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn content(&self) -> Option<PubkySocialPostKind> {
-        self.content.clone()
     }
 }
 
@@ -360,29 +299,21 @@ impl Validatable for PubkySocialFeedConfig {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialFeedConfig {}
-
 /// Represents a feed configuration.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialFeed {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub feed: PubkySocialFeedConfig,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub name: String,
     /// Lucide icon name, e.g. `"bitcoin"`. Required on new feeds, but optional
     /// on the wire: feeds created before this field existed have none, and
     /// clients render their default icon for those. Not part of the `feed_id`,
     /// so the icon can change without recreating the feed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub icon: Option<String>,
     pub created_at: i64,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[serde(flatten)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -429,6 +360,7 @@ impl PubkySocialFeed {
 /// publishing is a plain byte copy, and because the id is derived from the config alone the
 /// two copies can never disagree about what the feed filters.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 pub struct FeedPaths {
     /// Where the builder writes.
     pub private: String,
@@ -496,42 +428,6 @@ pub fn plan_feed_delete(id: &str) -> Result<FeedDeletePlan, String> {
         deletes: vec![paths.public, paths.private],
     })
 }
-
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialFeed {
-    /// Serialize to JSON for WASM.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-
-    /// Getter for `feed`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn feed(&self) -> PubkySocialFeedConfig {
-        self.feed.clone()
-    }
-
-    /// Getter for `name`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    /// Getter for `icon`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn icon(&self) -> Option<String> {
-        self.icon.clone()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialFeed {}
 
 impl HashId for PubkySocialFeed {
     /// "{reach}:{layout}:{sort}:{content or ''}:{tags or ''}:{domain_tags or ''}", frozen wire
@@ -617,7 +513,7 @@ impl FromStr for PubkySocialFeedReach {
             "all" => Ok(PubkySocialFeedReach::All),
             "wot" => Ok(PubkySocialFeedReach::Wot),
             "me" => Ok(PubkySocialFeedReach::Me),
-            _ => Err(format!("Invalid feed reach: {}", s)),
+            _ => Err(format!("Validation Error: Invalid feed reach: {}", s)),
         }
     }
 }
@@ -631,7 +527,7 @@ impl FromStr for PubkySocialFeedLayout {
             "wide" => Ok(PubkySocialFeedLayout::Wide),
             "visual" => Ok(PubkySocialFeedLayout::Visual),
             "list" => Ok(PubkySocialFeedLayout::List),
-            _ => Err(format!("Invalid feed layout: {}", s)),
+            _ => Err(format!("Validation Error: Invalid feed layout: {}", s)),
         }
     }
 }
@@ -643,7 +539,7 @@ impl FromStr for PubkySocialFeedSort {
         match s {
             "recent" => Ok(PubkySocialFeedSort::Recent),
             "popularity" => Ok(PubkySocialFeedSort::Popularity),
-            _ => Err(format!("Invalid feed sort: {}", s)),
+            _ => Err(format!("Validation Error: Invalid feed sort: {}", s)),
         }
     }
 }

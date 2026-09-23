@@ -12,11 +12,15 @@ use crate::models::file::PubkySocialFile;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx};
 use crate::types::PubkyId;
 use crate::uri::parse_version_leaf;
+use serde::Serialize;
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 /// Publish: media copies first, then the post PUT. Skip-if-exists on a copy is the caller's,
 /// since existence proves completion. The public leaf carries no slug: the slug is private
 /// decoration on a draft, and the public spelling is the plain `{editId}.json`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PublishPlan {
     /// `(private path, public path)` pairs, in reference order, deduplicated.
     pub media_copies: Vec<(String, String)>,
@@ -28,7 +32,9 @@ pub struct PublishPlan {
 
 /// Unpublish: copy-backs first, then deletes, each list in order. Public media is deliberately
 /// absent: removing it needs a whole-tree referencer check only the caller can run.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
+#[serde(rename_all = "camelCase")]
 pub struct UnpublishPlan {
     /// `(public path, private path)` pairs, oldest first.
     pub copy_backs: Vec<(String, String)>,
@@ -39,7 +45,9 @@ pub struct UnpublishPlan {
 /// Delete: legacy first, then every version oldest first with `pub` before `priv`, so the
 /// post keeps resolving to its newest surviving version until the last DELETE. Media GC runs
 /// only after that, and expanding each candidate to its every-epoch spelling is the caller's.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
+#[serde(rename_all = "camelCase")]
 pub struct DeletePlan {
     pub deletes: Vec<String>,
     /// Same-owner media referenced by any parsed version, under both roots, sorted.
@@ -232,10 +240,12 @@ fn edit_id_of(post_id: &str, root: Root, path: &str) -> Result<String, String> {
     let leaf = path
         .strip_prefix(&dir)
         .filter(|leaf| !leaf.contains('/'))
-        .ok_or_else(|| format!("not a version path of post {post_id} under {dir}: {path}"))?;
+        .ok_or_else(|| {
+            format!("Validation Error: not a version path of post {post_id} under {dir}: {path}")
+        })?;
     parse_version_leaf(leaf)
         .map(|(v, _)| v)
-        .ok_or_else(|| format!("not a post version path: {path}"))
+        .ok_or_else(|| format!("Validation Error: not a post version path: {path}"))
 }
 
 /// The one legacy (pre-epoch) path of this post, `/pub/pubky.app/posts/{id}`: ids are stable
@@ -243,7 +253,9 @@ fn edit_id_of(post_id: &str, root: Root, path: &str) -> Result<String, String> {
 fn check_legacy_paths(post_id: &str, paths: &[String]) -> Result<(), String> {
     let legacy = format!("/pub/pubky.app/{}{post_id}", PubkySocialPost::PATH_SEGMENT);
     match paths.iter().find(|p| **p != legacy) {
-        Some(p) => Err(format!("not a legacy path of post {post_id}: {p}")),
+        Some(p) => Err(format!(
+            "Validation Error: not a legacy path of post {post_id}: {p}"
+        )),
         None => Ok(()),
     }
 }
@@ -675,7 +687,11 @@ mod tests {
     fn legacy_paths_and_the_post_id_are_checked_too() {
         let sibling = format!("/pub/pubky.app/posts/{E2}");
         assert!(plan_unpublish(TS, &[pub_v(TS)], std::slice::from_ref(&sibling), None).is_err());
-        assert!(plan_delete(TS, &[sibling], &[], &[], &owner()).is_err());
+        let err = plan_delete(TS, &[sibling], &[], &[], &owner()).unwrap_err();
+        assert!(
+            err.starts_with("Validation Error: not a legacy path"),
+            "{err}"
+        );
         let mine = format!("/pub/pubky.app/posts/{TS}");
         assert!(plan_delete(TS, &[mine], &[], &[], &owner()).is_ok());
         for near in [
@@ -701,7 +717,11 @@ mod tests {
     #[test]
     fn version_paths_must_belong_to_the_post_and_root() {
         let other_post = format!("/pub/social/v1/posts/{E2}/{E2}.json");
-        assert!(plan_unpublish(TS, &[other_post], &[], None).is_err());
+        let err = plan_unpublish(TS, &[other_post], &[], None).unwrap_err();
+        assert!(
+            err.starts_with("Validation Error: not a version path"),
+            "{err}"
+        );
         let wrong_root = vec![(Root::Priv, pub_v(TS))];
         assert!(plan_delete(TS, &[], &wrong_root, &[], &owner()).is_err());
         let nested = format!("/pub/social/v1/posts/{TS}/x/{TS}.json");
