@@ -1786,6 +1786,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "base32",
+ "base64",
  "blake3",
  "js-sys",
  "pubky",
@@ -1794,7 +1795,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tsify-next",
- "url",
  "utoipa",
  "wasm-bindgen",
  "wasm-bindgen-test",

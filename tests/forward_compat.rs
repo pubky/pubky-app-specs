@@ -217,8 +217,9 @@ fn every_json_wire_type_ignores_unknown_fields() {
     reads_with_unknown_field::<PubkySocialTag>(&format!(
         r#"{{"uri":"{post_uri}","label":"rust","created_at":1727740800000000}}"#
     ));
+    reads_with_unknown_field::<PubkySocialBookmark>(r#"{"created_at":1727740800000000}"#);
     reads_with_unknown_field::<PubkySocialBookmark>(&format!(
-        r#"{{"uri":"{post_uri}","created_at":1727740800000000}}"#
+        r#"{{"created_at":1727740800000000,"target":"{post_uri}"}}"#
     ));
     reads_with_unknown_field::<PubkySocialFollow>(r#"{"created_at":1727740800000000}"#);
     reads_with_unknown_field::<PubkySocialMute>(r#"{"created_at":1727740800000000}"#);

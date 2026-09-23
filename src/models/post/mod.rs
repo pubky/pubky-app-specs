@@ -133,24 +133,15 @@ pub struct PubkySocialAttachment {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialAttachment {
+    /// The builder trims `name`; the uri passes through verbatim. Ingest never rewrites
+    /// either, so a stored name is counted and rejected as it was written.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(uri: String, alt: Option<String>, name: Option<String>) -> Self {
         PubkySocialAttachment {
             uri,
             alt,
-            name,
+            name: name.map(|n| frozen_trim(&n).to_string()),
             extra: Default::default(),
-        }
-        .sanitize()
-    }
-}
-
-impl PubkySocialAttachment {
-    /// Trim is the only documented canonicalization; the uri passes through verbatim
-    fn sanitize(self) -> Self {
-        PubkySocialAttachment {
-            name: self.name.map(|n| frozen_trim(&n).to_string()),
-            ..self
         }
     }
 }
@@ -463,11 +454,6 @@ impl Validatable for PubkySocialPost {
         // Trim is the only documented canonicalization here; references pass through verbatim
         PubkySocialPost {
             content: frozen_trim(&self.content).to_string(),
-            attachments: self
-                .attachments
-                .into_iter()
-                .map(PubkySocialAttachment::sanitize)
-                .collect(),
             ..self
         }
     }
@@ -513,11 +499,10 @@ impl Validatable for PubkySocialPost {
                 }
             }
             if let Some(name) = &attachment.name {
-                let len = code_point_len(name);
-                if len == 0 || len > VALIDATION_LIMITS.attachment_name_max_length {
+                let max = VALIDATION_LIMITS.attachment_name_max_length;
+                if frozen_trim(name).is_empty() || code_point_len(name) > max {
                     return Err(format!(
-                        "Validation Error: attachments[{index}].name must be 1..={} code points",
-                        VALIDATION_LIMITS.attachment_name_max_length
+                        "Validation Error: attachments[{index}].name must be 1..={max} code points and not blank"
                     ));
                 }
             }
@@ -712,6 +697,23 @@ mod tests {
         assert_eq!(post.attachments[0].uri, format!("  {}  ", file_uri()));
         assert_eq!(post.attachments[0].name.as_deref(), Some("cat.jpg"));
         assert!(err(&post).contains("parent"));
+    }
+
+    #[test]
+    fn attachment_name_is_trimmed_by_the_builder_and_never_on_read() {
+        let json = format!(
+            r#"{{"content":"x","kind":"note","parent":null,"embed":null,"attachments":[{{"uri":"{}","name":"  cat.jpg  "}}]}}"#,
+            file_uri()
+        );
+        let id = note("x").create_id();
+        let post =
+            <PubkySocialPost as Validatable>::try_from(json.as_bytes(), &id, &PUB_CTX).unwrap();
+        assert_eq!(post.attachments[0].name.as_deref(), Some("  cat.jpg  "));
+        // Blank is rejected where a rewrite used to blank it silently
+        let blank = json.replace(r#""  cat.jpg  ""#, r#""  ""#);
+        let e = <PubkySocialPost as Validatable>::try_from(blank.as_bytes(), &id, &PUB_CTX)
+            .expect_err("a blank name is invalid");
+        assert!(e.contains("not blank"), "{e}");
     }
 
     #[test]

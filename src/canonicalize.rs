@@ -1,8 +1,8 @@
-//! The engine-free URI canonicalizers. Every stored reference validates through
-//! [`validate_reference`] as the fixed point of its canonical form; the bookmark target is the
-//! one field still on `url::Url` until the private tier lands. No `url::Url` here or in the
-//! parser: an engine parser repairs junk into acceptance (userinfo stripped, `..` collapsed,
-//! query and fragment ignored) and its behavior cannot be pinned across versions.
+//! The engine-free URI canonicalizers. Every stored reference, the bookmark target included,
+//! validates through [`validate_reference`] as the fixed point of its canonical form. No
+//! `url::Url` here or in the parser: an engine parser repairs junk into acceptance (userinfo
+//! stripped, `..` collapsed, query and fragment ignored) and its behavior cannot be pinned
+//! across versions.
 
 use crate::common::{ascii_fold, code_point_len, frozen_trim, is_frozen_whitespace};
 use crate::limits::VALIDATION_LIMITS;
@@ -70,25 +70,6 @@ pub fn canonicalize_web_uri(raw: &str) -> Result<String, ()> {
     }
 }
 
-/// Bookmark-target dispatch: pubky URIs (either form) through the pubky canonicalizer,
-/// `http`/`https` through the web gate. Inspects the raw string untrimmed, so a pasted
-/// leading space defeats dispatch on purpose; UIs pre-trim. Caps the canonical output at
-/// `reference_uri_max_length` code points.
-#[allow(clippy::result_unit_err)]
-pub fn canonicalize_target(raw: &str) -> Result<String, ()> {
-    let canonical = if raw.starts_with("pubky") {
-        canonicalize_pubky_uri(raw)?
-    } else if raw.starts_with("http://") || raw.starts_with("https://") {
-        canonicalize_web_uri(raw)?
-    } else {
-        return Err(());
-    };
-    if code_point_len(&canonical) > VALIDATION_LIMITS.reference_uri_max_length {
-        return Err(());
-    }
-    Ok(canonical)
-}
-
 /// The universal tier's third arm: any scheme-shaped URI that is not pubky, http or https
 /// (nostr, geo, ipfs, magnet, did). The scheme folds to lowercase; the rest is opaque, an
 /// identifier rather than a location this crate resolves.
@@ -121,7 +102,9 @@ pub fn canonicalize_external_uri(raw: &str) -> Result<String, ()> {
 }
 
 /// Universal dispatch: pubky (either form) and web through their own gates, everything else
-/// through the external arm. Capped like `canonicalize_target`.
+/// through the external arm. Inspects the raw string untrimmed, so a pasted leading space
+/// defeats dispatch on purpose; UIs pre-trim. Caps the canonical output at
+/// `reference_uri_max_length` code points.
 #[allow(clippy::result_unit_err)]
 pub fn canonicalize_universal(raw: &str) -> Result<String, ()> {
     let canonical = if raw.starts_with("pubky") {
@@ -354,21 +337,6 @@ mod tests {
     }
 
     #[test]
-    fn target_dispatch() {
-        // Untrimmed on purpose: a leading space defeats dispatch.
-        assert!(canonicalize_target(" https://x.com").is_err());
-        assert_eq!(canonicalize_target(&format!("pubky{HOST}")), Ok(p("")));
-        // Any other scheme rejects at this stage; the universal third arm comes with the
-        // reference-tier validators and flips this assert.
-        assert!(canonicalize_target("ipfs://x").is_err());
-        assert!(canonicalize_target("nostr:abc").is_err());
-        // Over the reference cap in code points.
-        let long = p(&format!("/pub/{}", "a".repeat(1100)));
-        assert!(canonicalize_pubky_uri(&long).is_ok());
-        assert!(canonicalize_target(&long).is_err());
-    }
-
-    #[test]
     fn test_canonicalize_external_uri() {
         for (raw, want) in [
             ("nostr:nevent1abc", "nostr:nevent1abc"),
@@ -414,10 +382,17 @@ mod tests {
         // A pubky-prefixed value never falls through to the external arm
         assert!(canonicalize_universal("pubkyjunk:abc").is_err());
         assert!(canonicalize_universal("https://?q").is_err());
+        // Untrimmed on purpose: a leading space defeats web dispatch, and the external arm
+        // refuses to claim an http(s) value.
+        assert!(canonicalize_universal(" https://x.com").is_err());
         let long = format!(
             "nostr:{}",
             "a".repeat(VALIDATION_LIMITS.reference_uri_max_length)
         );
+        assert!(canonicalize_universal(&long).is_err());
+        // The cap applies to every arm, on the canonical output.
+        let long = p(&format!("/pub/{}", "a".repeat(1100)));
+        assert!(canonicalize_pubky_uri(&long).is_ok());
         assert!(canonicalize_universal(&long).is_err());
     }
 

@@ -56,10 +56,11 @@ pub fn mute_uri_builder(author_id: String, mute_id: String) -> String {
     [PROTOCOL, &author_id, &mute_path].concat()
 }
 
-/// Builds a Bookmark URI of the form "pubky://<author_id>/pub/social/v1/bookmarks/<bookmark_id>.json\"
+/// Builds a Bookmark URI of the form "pubky://<author_id>/priv/social/v1/bookmarks/<filename>.json".
+/// The leaf is the filename the target derives, never a hash of the object.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = bookmarkUriBuilder))]
-pub fn bookmark_uri_builder(author_id: String, bookmark_id: String) -> String {
-    let bookmark_path = PubkySocialBookmark::create_path(&bookmark_id);
+pub fn bookmark_uri_builder(author_id: String, filename: String) -> String {
+    let bookmark_path = PubkySocialBookmark::create_path(&filename);
     [PROTOCOL, &author_id, &bookmark_path].concat()
 }
 

@@ -42,6 +42,7 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 - **Validation consistency:** same validation rules as Pubky indexers, and the same canonical forms on the wire.
 - **Auto IDs and paths:** generates IDs, paths, and URLs according to Pubky standards.
 - **Single source of truth:** the Rust models drive native consumers and the WASM bindings.
+- **No silent rewrites:** builders canonicalize (an attachment name is trimmed there), and after that a value is stored as written and counted as written, so reading never repairs what a writer stored.
 
 ## Features
 
@@ -64,7 +65,7 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | `PubkySocialFile`      | Media bytes                              |
 | `PubkySocialPost`      | Posts, replies, embeds, and collections  |
 | `PubkySocialTag`       | Tags applied to Pubky URIs               |
-| `PubkySocialBookmark`  | Bookmarks for Pubky URIs                 |
+| `PubkySocialBookmark`  | Private bookmarks, target in the filename |
 | `PubkySocialFollow`    | Follow relationships                     |
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |

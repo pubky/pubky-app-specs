@@ -65,7 +65,12 @@ impl ParsedUri {
                 }
                 format!("mutes/{pk}.json")
             }
-            Resource::Bookmark(id) => format!("bookmarks/{id}.json"),
+            Resource::Bookmark(filename) => {
+                if root == Root::Pub {
+                    return Err("bookmarks live under the private root".to_string());
+                }
+                format!("bookmarks/{filename}.json")
+            }
             Resource::Tag(id) => format!("tags/{id}.json"),
             Resource::File(filename) => format!("files/{filename}"),
             Resource::Feed(id) => format!("feeds/{id}.json"),
@@ -142,6 +147,32 @@ pub(crate) fn strip_media_ext(filename: &str) -> &str {
     media_stem(filename).unwrap_or(filename)
 }
 
+/// Unpadded base64url of the longest target the primary form carries: 187 bytes become 250
+/// characters, which with `.json` is the 255-character segment maximum.
+const BOOKMARK_FILENAME_MAX: usize =
+    (VALIDATION_LIMITS.bookmark_target_uri_max_bytes * 4).div_ceil(3);
+
+/// The FORM of a bookmark filename: `~` plus a canonical HashId for the overflow form, an
+/// unpadded base64url string of a length base64 can actually produce for the primary one
+/// (4n+1 characters never encode anything). A leading `_` is reserved across every leaf, and
+/// it happens to be a base64url character, so the primary arm refuses it there and accepts it
+/// anywhere else in the name. Only the form: the decode round trip that recovers the target
+/// runs when the object is read.
+fn is_bookmark_filename(name: &str) -> bool {
+    match name.strip_prefix('~') {
+        Some(hash) => validate_hash_id_format(hash).is_ok(),
+        None => {
+            !name.is_empty()
+                && !name.starts_with('_')
+                && name.len() <= BOOKMARK_FILENAME_MAX
+                && name.len() % 4 != 1
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        }
+    }
+}
+
 /// Time bounds never run here: parser verdicts must not depend on the wall clock. The
 /// object validator bounds the post id when the object is read.
 ///
@@ -198,9 +229,8 @@ fn dispatch(root: Root, rest: &[&str]) -> Resource {
             },
             _ => Resource::Unknown,
         },
-        // The bookmark id is still the v0 HashId form here; the private move re-keys it.
-        (Root::Pub, ["bookmarks", leaf]) => match leaf.strip_suffix(".json") {
-            Some(id) if validate_hash_id_format(id).is_ok() => Resource::Bookmark(id.into()),
+        (Root::Priv, ["bookmarks", leaf]) => match leaf.strip_suffix(".json") {
+            Some(name) if is_bookmark_filename(name) => Resource::Bookmark(name.into()),
             _ => Resource::Unknown,
         },
         // Wrong root, missing or extra segments, `_`-prefixed leaves, unrecognized names.
@@ -295,6 +325,8 @@ mod tests {
     const TS: &str = "0032SSN7Q4EVG";
     const TS2: &str = "0034A0X7NJ52G";
     const H26: &str = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+    /// base64url of a canonical pubky post reference: the primary bookmark form.
+    const B64: &str = "cHVia3k6Ly9vcGVycnI4d3NicHIzdWU5ZDRxajQxZ2Uxa2NjNnI3ZmRpeTZvM3VnanJyaGk0eTc3cmRvL3B1Yi9zb2NpYWwvdjEvcG9zdHMvMDAzMlNTTjdRNEVWRw";
 
     fn p(path: &str) -> String {
         format!("pubky://{HOST}{path}")
@@ -350,7 +382,19 @@ mod tests {
             (p(&format!("/pub/social/v1/follows/{HOST}.json")), Some((Public, Resource::Follow(pk())))),
             (p(&format!("/pub/social/v1/follows/{}.json", HOST.to_uppercase())), Some((Public, Resource::Unknown))),
             (p(&format!("/priv/social/v1/mutes/{HOST}.json")), Some((Private, Resource::Mute(pk())))),
-            (p(&format!("/pub/social/v1/bookmarks/{H26}.json")), Some((Public, Resource::Bookmark(H26.into())))),
+            (p(&format!("/priv/social/v1/bookmarks/{B64}.json")), Some((Private, Resource::Bookmark(B64.into())))),
+            (p(&format!("/priv/social/v1/bookmarks/~{H26}.json")), Some((Private, Resource::Bookmark(format!("~{H26}"))))),
+            (p(&format!("/priv/social/v1/bookmarks/~{H26}")), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/bookmarks/~{}.json", &H26[..25])), Some((Private, Resource::Unknown))),
+            (p(&format!("/priv/social/v1/bookmarks/{B64}=.json")), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/cHVia3k+.json"), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/.json"), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/a.json"), Some((Private, Resource::Unknown))),
+            (p("/priv/social/v1/bookmarks/_a.json"), Some((Private, Resource::Unknown))),
+            // base64url of "https://example.com/?q=1": a `_` anywhere but the front is a byte
+            (p("/priv/social/v1/bookmarks/aHR0cHM6Ly9leGFtcGxlLmNvbS8_cT0x.json"), Some((Private, Resource::Bookmark("aHR0cHM6Ly9leGFtcGxlLmNvbS8_cT0x".into())))),
+            (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(250))), Some((Private, Resource::Bookmark("a".repeat(250))))),
+            (p(&format!("/priv/social/v1/bookmarks/{}.json", "a".repeat(251))), Some((Private, Resource::Unknown))),
             // Media: the hash carries a path-only extension, dual-root
             (p(&format!("/pub/social/v1/files/{H26}.svg")), Some((Public, Resource::File(format!("{H26}.svg"))))),
             (p(&format!("/priv/social/v1/files/{H26}.svg")), Some((Private, Resource::File(format!("{H26}.svg"))))),
@@ -408,7 +452,7 @@ mod tests {
             (p("/priv/social/v1/profile.json"), Some((Private, Resource::Unknown))),
             (p(&format!("/priv/social/v1/follows/{HOST}.json")), Some((Private, Resource::Unknown))),
             (p(&format!("/pub/social/v1/mutes/{HOST}.json")), Some((Public, Resource::Unknown))),
-            (p(&format!("/priv/social/v1/bookmarks/{H26}.json")), Some((Private, Resource::Unknown))),
+            (p(&format!("/pub/social/v1/bookmarks/{B64}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/blobs/{H26}.json")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/feeds/{H26}")), Some((Public, Resource::Unknown))),
             (p(&format!("/pub/social/v1/posts/{TS}/{TS2}.json.json")), Some((Public, Resource::Unknown))),
@@ -527,7 +571,7 @@ mod tests {
             (Visibility::Private, post(TS, Some(TS2), Some("hello"))),
             (Visibility::Public, Resource::Follow(pk())),
             (Visibility::Private, Resource::Mute(pk())),
-            (Visibility::Public, Resource::Bookmark(H26.into())),
+            (Visibility::Private, Resource::Bookmark(B64.into())),
             (Visibility::Public, Resource::Tag(H26.into())),
             (Visibility::Private, Resource::File(format!("{H26}.svg"))),
             (Visibility::Private, Resource::Feed(H26.into())),
@@ -557,6 +601,8 @@ mod tests {
         let cases = [
             (Visibility::Private, Resource::User),
             (Visibility::Public, Resource::Mute(pk())),
+            (Visibility::Public, Resource::Bookmark(B64.into())),
+            (Visibility::Private, Resource::Bookmark("a=b".into())),
             (Visibility::Private, Resource::Tag(H26.into())),
             (Visibility::Public, Resource::Tag("bad".into())),
             (Visibility::Public, post(TS, None, Some("orphan"))),
