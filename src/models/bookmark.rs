@@ -436,7 +436,7 @@ mod tests {
         for (bad, why) in [
             (
                 format!("pubky://{PK}/priv/social/v1/posts/0032SSN7Q4EVG"),
-                "cannot reference a private one",
+                "must not reference a private object: ",
             ),
             (
                 format!("pubky://{PK}/pub/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52G.json"),

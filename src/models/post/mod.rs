@@ -997,7 +997,9 @@ mod tests {
             );
             let e = p.validate(Some(&id), &PUB_CTX).unwrap_err();
             assert!(
-                e.contains(name) && e.contains("public object"),
+                e.contains(&format!(
+                    "Validation Error: {name} must not reference a private object: "
+                )),
                 "{name}: {e}"
             );
         }
@@ -1177,10 +1179,15 @@ mod tests {
         let e = draft
             .create_version(Root::Priv, &owner(), None)
             .unwrap_err();
-        assert!(e.contains("parent") && e.contains("another user"), "{e}");
+        assert!(
+            e.contains(
+                "Validation Error: parent must not reference a private object of another user: "
+            ),
+            "{e}"
+        );
         // A public destination is refused by the root rule before ownership is considered
         let e = draft.create_version(Root::Pub, &owner(), None).unwrap_err();
-        assert!(e.contains("public object"), "{e}");
+        assert!(e.contains("must not reference a private object: "), "{e}");
     }
 
     #[test]
@@ -1200,7 +1207,7 @@ mod tests {
             .create_version(Root::Priv, &owner(), None)
             .unwrap_err();
         assert!(
-            e.contains("cover_image") && e.contains("another user"),
+            e.contains("Validation Error: cover_image must not reference a private object of another user: "),
             "{e}"
         );
     }
@@ -1224,7 +1231,12 @@ mod tests {
         let resource = crate::ParsedUri::try_from(uri.as_str()).unwrap().resource;
         assert!(crate::PubkySocialObject::from_resource(&resource, &blob, &ctx).is_ok());
         let e = crate::PubkySocialObject::from_uri(&uri, &blob).unwrap_err();
-        assert!(e.contains("parent") && e.contains("another user"), "{e}");
+        assert!(
+            e.contains(
+                "Validation Error: parent must not reference a private object of another user: "
+            ),
+            "{e}"
+        );
         // the author's own private reference ingests
         let mine = p("/priv/social/v1/posts/0032SSN7Q4EVG");
         let mut draft = post(PubkySocialPostKind::Note, Some(&mine), None, vec![]);
@@ -1245,7 +1257,7 @@ mod tests {
             .is_ok());
         let e = collection.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(
-            e.contains("cover_image") && e.contains("public object"),
+            e.contains("Validation Error: cover_image must not reference a private object: "),
             "{e}"
         );
         let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
@@ -1257,7 +1269,7 @@ mod tests {
             .create_version(Root::Priv, &owner(), None)
             .unwrap_err();
         assert!(
-            e.contains("cover_image") && e.contains("another user"),
+            e.contains("Validation Error: cover_image must not reference a private object of another user: "),
             "{e}"
         );
     }

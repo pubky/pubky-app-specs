@@ -679,7 +679,7 @@ mod tests {
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(
-            err.contains("items[0].uri") && err.contains("public object"),
+            err.contains("Validation Error: items[0].uri must not reference a private object: "),
             "got: {err}"
         );
         let priv_ctx = crate::traits::ValidationCtx {

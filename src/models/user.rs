@@ -900,7 +900,10 @@ mod tests {
         ))
         .validate(None, &PUB_CTX)
         .unwrap_err();
-        assert!(e.contains("image") && e.contains("public object"), "{e}");
+        assert!(
+            e.contains("Validation Error: image must not reference a private object: "),
+            "{e}"
+        );
     }
 
     #[test]
@@ -915,7 +918,10 @@ mod tests {
             root: crate::traits::Root::Priv,
         };
         let e = <PubkySocialUser as Validatable>::try_from(&blob, "", &priv_ctx).unwrap_err();
-        assert!(e.contains("image") && e.contains("public object"), "{e}");
+        assert!(
+            e.contains("Validation Error: image must not reference a private object: "),
+            "{e}"
+        );
     }
 
     #[test]
