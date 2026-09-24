@@ -891,7 +891,7 @@ mod tests {
         let e = f
             .validate(Some("8Z8CWH8NVYQY39ZEBFGKQWWEKG"), &PRIV_CTX)
             .unwrap_err();
-        assert!(e.contains("Invalid ID"), "{e}");
+        assert!(e.contains("Validation Error: Invalid ID"), "{e}");
     }
 
     #[test]

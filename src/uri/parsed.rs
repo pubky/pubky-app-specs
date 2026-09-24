@@ -245,8 +245,8 @@ impl TryFrom<&str> for ParsedUri {
     type Error = String;
 
     fn try_from(uri: &str) -> Result<Self, Self::Error> {
-        let canonical =
-            canonicalize_pubky_uri(uri).map_err(|_| format!("Not a canonical pubky URI: {uri}"))?;
+        let canonical = canonicalize_pubky_uri(uri)
+            .map_err(|_| format!("Validation Error: Not a canonical pubky URI: {uri}"))?;
         // Offsets are safe: the prefix is ASCII and the host was validated as a PubkyId.
         let rest = &canonical["pubky://".len()..];
         let (host, path) = match rest.find('/') {
@@ -265,7 +265,7 @@ impl TryFrom<&str> for ParsedUri {
         let visibility = match segments.first() {
             Some(&s) if s == PUBLIC_ROOT => Visibility::Public,
             Some(&s) if s == PRIVATE_ROOT => Visibility::Private,
-            _ => return Err(format!("Unknown root in URI: {uri}")),
+            _ => return Err(format!("Validation Error: Unknown root in URI: {uri}")),
         };
         let resource = match segments.get(1) {
             None => Resource::Unknown,
