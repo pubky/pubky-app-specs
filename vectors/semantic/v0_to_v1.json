@@ -1,0 +1,1099 @@
+{
+  "owner": "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
+  "files": [
+    {
+      "tsid": "0033000000002",
+      "body": {
+        "name": "same bytes, other type",
+        "created_at": 1727740800000000,
+        "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
+        "content_type": "image/jpeg",
+        "size": 20
+      }
+    },
+    {
+      "tsid": "0033000000000",
+      "body": {
+        "name": "photo.png",
+        "created_at": 1727740800000000,
+        "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
+        "content_type": "image/png",
+        "size": 20
+      }
+    },
+    {
+      "tsid": "0033000000004",
+      "body": {
+        "name": "  report.pdf  ",
+        "created_at": 1727740800000000,
+        "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/94DQ3E6D2D3QYMXJR8S3D0P130",
+        "content_type": "application/pdf; charset=binary",
+        "size": 19
+      }
+    },
+    {
+      "tsid": "0033000000006",
+      "body": {
+        "name": "theirs.png",
+        "created_at": 1727740800000000,
+        "src": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/blobs/AAZSS1C2RMWWZRJMQG9V6PP788",
+        "content_type": "image/png",
+        "size": 20
+      }
+    }
+  ],
+  "vectors": [
+    {
+      "name": "short post: kind renamed to note, content trimmed, parent and embed rewritten, embed kind dropped, lock verbatim, null attachments to []",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52C",
+        "body": {
+          "content": "  Hello World!  ",
+          "kind": "short",
+          "parent": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+          "embed": {
+            "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/posts/0034A0X7NJ52A",
+            "kind": "short"
+          },
+          "attachments": null,
+          "lock": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/locks.app/locks/0034A0X7NJ52A"
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52C/0034A0X7NJ52C.json",
+            "body": {
+              "content": "Hello World!",
+              "kind": "note",
+              "parent": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG",
+              "embed": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/social/v1/posts/0034A0X7NJ52A",
+              "attachments": [],
+              "lock": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/locks.app/locks/0034A0X7NJ52A"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "link post: an http embed is not rewritten, a null embed stays null",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52E",
+        "body": {
+          "content": "see this",
+          "kind": "link",
+          "parent": null,
+          "embed": {
+            "uri": "https://example.com/a",
+            "kind": "link"
+          },
+          "attachments": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52E/0034A0X7NJ52E.json",
+            "body": {
+              "content": "see this",
+              "kind": "link",
+              "embed": "https://example.com/a",
+              "attachments": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "reply without embed: embed null stays null, absent attachments to []",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52G",
+        "body": {
+          "content": "a reply",
+          "kind": "short",
+          "parent": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/posts/0034A0X7NJ52A",
+          "embed": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52G/0034A0X7NJ52G.json",
+            "body": {
+              "content": "a reply",
+              "kind": "note",
+              "parent": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/social/v1/posts/0034A0X7NJ52A",
+              "embed": null,
+              "attachments": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "image post: attachments become objects, media dereferenced through the File with its trimmed name, the rest verbatim",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52J",
+        "body": {
+          "content": "",
+          "kind": "image",
+          "parent": null,
+          "embed": null,
+          "attachments": [
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000",
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000004",
+            "https://example.com/x.png",
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG",
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000006",
+            "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/files/0033000000006"
+          ]
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52J/0034A0X7NJ52J.json",
+            "body": {
+              "content": "",
+              "kind": "image",
+              "attachments": [
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+                  "name": "photo.png"
+                },
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/94DQ3E6D2D3QYMXJR8S3D0P130.pdf",
+                  "name": "report.pdf"
+                },
+                {
+                  "uri": "https://example.com/x.png"
+                },
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+                },
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000006"
+                },
+                {
+                  "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/files/0033000000006"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post: plain text becomes an article, title from the first line, body the whole content",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52M",
+        "body": {
+          "content": "My first article\nIt has a body.\n\nAnd a second paragraph.",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52M/0034A0X7NJ52M.json",
+            "body": {
+              "kind": "article",
+              "content": {
+                "title": "My first article",
+                "body": "My first article\nIt has a body.\n\nAnd a second paragraph."
+              },
+              "attachments": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post: the title is the first line with text, trimmed, truncated to 100 code points, trimmed again",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52P",
+        "body": {
+          "content": "\n  \naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  bcdef\nthe body",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52P/0034A0X7NJ52P.json",
+            "body": {
+              "kind": "article",
+              "content": {
+                "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "body": "\n  \naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  bcdef\nthe body"
+              },
+              "attachments": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post: a JSON title and body are used, the first attachment becomes the cover without its name, the rest stay",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52R",
+        "body": {
+          "content": "{\"title\": \"  JSON title \", \"body\": \"# Heading\\n\\ntext\"}",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": [
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000",
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000004",
+            "https://example.com/y.png"
+          ]
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ52R/0034A0X7NJ52R.json",
+            "body": {
+              "kind": "article",
+              "content": {
+                "title": "JSON title",
+                "body": "# Heading\n\ntext",
+                "cover_image": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png"
+              },
+              "attachments": [
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/94DQ3E6D2D3QYMXJR8S3D0P130.pdf",
+                  "name": "report.pdf"
+                },
+                {
+                  "uri": "https://example.com/y.png"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post without a title: no line with text",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52T",
+        "body": {
+          "content": "  \n\t\n  ",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "skip": "empty_title"
+      }
+    },
+    {
+      "name": "long post without a title: a blank JSON title",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52W",
+        "body": {
+          "content": "{\"title\": \"   \", \"body\": \"text\"}",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "skip": "empty_title"
+      }
+    },
+    {
+      "name": "unknown post kind",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ52Y",
+        "body": {
+          "content": "x",
+          "kind": "podcast",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "skip": "unknown_post_kind"
+      }
+    },
+    {
+      "name": "collection: items wrapped and rewritten, name trimmed, a whitespace description absent, cover dereferenced, layout copied",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ530",
+        "body": {
+          "kind": "collection",
+          "parent": null,
+          "embed": null,
+          "attachments": null,
+          "content": "{\"name\": \"  Reading list  \", \"description\": \"   \", \"items\": [\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\", \"pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/posts/0034A0X7NJ52A\"], \"cover_image\": \"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000\", \"layout\": \"grid\"}"
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ530/0034A0X7NJ530.json",
+            "body": {
+              "kind": "collection",
+              "attachments": [],
+              "content": {
+                "name": "Reading list",
+                "items": [
+                  {
+                    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG"
+                  },
+                  {
+                    "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/social/v1/posts/0034A0X7NJ52A"
+                  }
+                ],
+                "cover_image": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+                "layout": "grid"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "collection: a legacy empty description reads back clean as absent",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ532",
+        "body": {
+          "kind": "collection",
+          "parent": null,
+          "embed": null,
+          "attachments": null,
+          "content": "{\"name\": \"Legacy\", \"description\": \"\", \"items\": [\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\"]}"
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ532/0034A0X7NJ532.json",
+            "body": {
+              "kind": "collection",
+              "attachments": [],
+              "content": {
+                "name": "Legacy",
+                "items": [
+                  {
+                    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "bookmark: the rewritten target in the filename, the private root, created_at kept",
+      "kind": "bookmark",
+      "input": {
+        "path": "pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+          "created_at": 1727740800000123
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/bookmarks/cHVia3k6Ly9vcGVycnI4d3NicHIzdWU5ZDRxajQxZ2Uxa2NjNnI3ZmRpeTZvM3VnanJyaGk0eTc3cmRvL3B1Yi9zb2NpYWwvdjEvcG9zdHMvMDAzMlNTTjdRNEVWRw.json",
+            "body": {
+              "created_at": 1727740800000123
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "bookmark: a target over 187 bytes takes the overflow form and rides in the content",
+      "kind": "bookmark",
+      "input": {
+        "path": "pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        "body": {
+          "uri": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/bookmarks/~37BP77VM6ASXMVCNMD0BRPGXPM.json",
+            "body": {
+              "created_at": 1727740800000000,
+              "target": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "blob: same bytes at files/{hash}.{ext}, the extension from the lowest File id naming it",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
+        "raw": "png-bytes-of-a-photo"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+            "raw": "png-bytes-of-a-photo"
+          }
+        ]
+      }
+    },
+    {
+      "name": "blob: the extension comes from the essence of the declared type",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/94DQ3E6D2D3QYMXJR8S3D0P130",
+        "raw": "%PDF-1.4 a document"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/files/94DQ3E6D2D3QYMXJR8S3D0P130.pdf",
+            "raw": "%PDF-1.4 a document"
+          }
+        ]
+      }
+    },
+    {
+      "name": "blob: an orphan no File names is still copied, as bin",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78",
+        "raw": "orphan bytes"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/files/VJAHM32NETJ12EWAAM11BQVX78.bin",
+            "raw": "orphan bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "file: a v0 File object is read into the run and writes nothing",
+      "kind": "file",
+      "input": {
+        "path": "pub/pubky.app/files/0033000000000",
+        "body": {
+          "name": "photo.png",
+          "created_at": 1727740800000000,
+          "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
+          "content_type": "image/png",
+          "size": 20
+        }
+      },
+      "expected": {
+        "writes": []
+      }
+    },
+    {
+      "name": "profile: display text trimmed, a blank status absent, a media image dereferenced",
+      "kind": "user",
+      "input": {
+        "path": "pub/pubky.app/profile.json",
+        "body": {
+          "name": "  Alice  ",
+          "bio": "  hi  ",
+          "image": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000",
+          "links": [
+            {
+              "title": "  Home ",
+              "url": "https://alice.example"
+            }
+          ],
+          "status": ""
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/profile.json",
+            "body": {
+              "name": "Alice",
+              "bio": "hi",
+              "image": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+              "links": [
+                {
+                  "title": "Home",
+                  "url": "https://alice.example"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "profile: an image and a link the v1 gates refuse are dropped and reported, the profile survives",
+      "kind": "user",
+      "input": {
+        "path": "pub/pubky.app/profile.json",
+        "body": {
+          "name": "Dana",
+          "bio": null,
+          "image": "data:image/png;base64,AAAA",
+          "links": [
+            {
+              "title": "FTP",
+              "url": "ftp://files.example"
+            },
+            {
+              "title": "Web",
+              "url": "https://web.example"
+            }
+          ],
+          "status": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/profile.json",
+            "body": {
+              "name": "Dana",
+              "links": [
+                {
+                  "title": "Web",
+                  "url": "https://web.example"
+                }
+              ]
+            }
+          }
+        ],
+        "dropped": [
+          "profile_image",
+          "profile_link[0]"
+        ]
+      }
+    },
+    {
+      "name": "feed: private, id re-derived, tags folded deduplicated and sorted, a blank label and an empty list dropped as v0 read them, short renamed, name and icon carried",
+      "kind": "feed",
+      "input": {
+        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "body": {
+          "feed": {
+            "tags": [
+              "Rust",
+              "bitcoin",
+              "rust",
+              " "
+            ],
+            "domain_tags": [],
+            "reach": "following",
+            "layout": "columns",
+            "sort": "recent",
+            "content": "short"
+          },
+          "name": "  Rust Bitcoiners ",
+          "icon": " Bitcoin ",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/feeds/YMQMBMW7P2PSF95JMBAD9SCVHW.json",
+            "body": {
+              "feed": {
+                "tags": [
+                  "bitcoin",
+                  "rust"
+                ],
+                "reach": "following",
+                "layout": "columns",
+                "sort": "recent",
+                "content": "note"
+              },
+              "name": "Rust Bitcoiners",
+              "icon": "bitcoin",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "feed: a legacy feed with no icon and no filters, a wot reach and a domain filter",
+      "kind": "feed",
+      "input": {
+        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "body": {
+          "feed": {
+            "tags": null,
+            "domain_tags": [
+              "Example.com"
+            ],
+            "reach": "wot",
+            "layout": "list",
+            "sort": "popularity",
+            "content": null
+          },
+          "name": "Everything",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/feeds/6JGNKZDVJZYYEKJBCNC5PV8860.json",
+            "body": {
+              "feed": {
+                "tags": null,
+                "domain_tags": [
+                  "example.com"
+                ],
+                "reach": "wot",
+                "layout": "list",
+                "sort": "popularity",
+                "content": null
+              },
+              "name": "Everything",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "feed with unknown content: no derivable id",
+      "kind": "feed",
+      "input": {
+        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "body": {
+          "feed": {
+            "tags": null,
+            "reach": "all",
+            "layout": "columns",
+            "sort": "recent",
+            "content": "podcast"
+          },
+          "name": "Pods",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "skip": "unknown_feed_content"
+      }
+    },
+    {
+      "name": "follow: field shape unchanged",
+      "kind": "follow",
+      "input": {
+        "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "body": {
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy.json",
+            "body": {
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "mute: now under the private root",
+      "kind": "mute",
+      "input": {
+        "path": "pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "body": {
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy.json",
+            "body": {
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: target rewritten, label folded, id re-derived",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "body": {
+          "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/posts/0034A0X7NJ52A",
+          "label": "  Rust ",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/AYH2KJ6CPY4EH040DZS4YS036W.json",
+            "body": {
+              "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/social/v1/posts/0034A0X7NJ52A",
+              "label": "rust",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: a web target is not rewritten",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "body": {
+          "uri": "https://example.com/page",
+          "label": "web",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/QKP95D1SNK2RB1YG19EQXB8G00.json",
+            "body": {
+              "uri": "https://example.com/page",
+              "label": "web",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: a media target is dereferenced",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000",
+          "label": "pic",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/RWAN47EWPX7RW7SKWT6YX11BP8.json",
+            "body": {
+              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+              "label": "pic",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a duplicate key keeps its last value",
+      "kind": "follow",
+      "input": {
+        "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "raw": "{\"created_at\":1,\"created_at\":1727740800000000}"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy.json",
+            "body": {
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an integer past 2^53-1 skips",
+      "kind": "follow",
+      "input": {
+        "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "raw": "{\"created_at\":9007199254740992}"
+      },
+      "expected": {
+        "skip": "unsafe_integer"
+      }
+    },
+    {
+      "name": "bytes that are not a JSON object skip",
+      "kind": "follow",
+      "input": {
+        "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "raw": "not json"
+      },
+      "expected": {
+        "skip": "malformed"
+      }
+    },
+    {
+      "name": "last_read has no v1 counterpart",
+      "kind": "last_read",
+      "input": {
+        "path": "pub/pubky.app/last_read",
+        "body": {
+          "timestamp": 1727740800000000
+        }
+      },
+      "expected": {
+        "skip": "not_migrated"
+      }
+    },
+    {
+      "name": "tombstone post: a [DELETED] content is the v0 deletion marker and never becomes a live object",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ530",
+        "body": {
+          "content": "[DELETED]",
+          "kind": "short",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "skip": "tombstone"
+      }
+    },
+    {
+      "name": "tombstone profile: a [DELETED] name is the v0 deletion marker",
+      "kind": "user",
+      "input": {
+        "path": "pub/pubky.app/profile.json",
+        "body": {
+          "name": "[DELETED]",
+          "bio": null,
+          "image": null,
+          "links": null,
+          "status": null
+        }
+      },
+      "expected": {
+        "skip": "tombstone"
+      }
+    },
+    {
+      "name": "long post: an attachment that is not an image is not promoted to the cover, it stays an attachment with its name",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ532",
+        "body": {
+          "content": "Quarterly report\n\nsee attached",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": [
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000004"
+          ]
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ532/0034A0X7NJ532.json",
+            "body": {
+              "kind": "article",
+              "content": {
+                "title": "Quarterly report",
+                "body": "Quarterly report\n\nsee attached"
+              },
+              "attachments": [
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/94DQ3E6D2D3QYMXJR8S3D0P130.pdf",
+                  "name": "report.pdf"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post: an envelope cover_image wins over the first attachment, which stays an attachment",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ534",
+        "body": {
+          "content": "{\"title\": \"With cover\", \"body\": \"text\", \"cover_image\": \"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000\"}",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": [
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000002",
+            "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000004"
+          ]
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/posts/0034A0X7NJ534/0034A0X7NJ534.json",
+            "body": {
+              "kind": "article",
+              "content": {
+                "title": "With cover",
+                "body": "text",
+                "cover_image": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png"
+              },
+              "attachments": [
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+                  "name": "same bytes, other type"
+                },
+                {
+                  "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/94DQ3E6D2D3QYMXJR8S3D0P130.pdf",
+                  "name": "report.pdf"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: the owner's blob reference takes the media spelling",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/0034A0X7NJ536",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
+          "label": "pic",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/RWAN47EWPX7RW7SKWT6YX11BP8.json",
+            "body": {
+              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
+              "label": "pic",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: a legacy path the v0 parser calls unknown stays as written",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/0034A0X7NJ538",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/widgets/0032SSN7Q4EVG",
+          "label": "odd",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/H9P421FAS5BFF4S9HPFGNRZRRC.json",
+            "body": {
+              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/widgets/0032SSN7Q4EVG",
+              "label": "odd",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: the short pubky spelling canonicalizes to the full form before the rewrite",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/0034A0X7NJ53A",
+        "body": {
+          "uri": "pubkyoperrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+          "label": "short",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/X4ZWJ5Z8WBVJYMRSNHEYV356ER.json",
+            "body": {
+              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG",
+              "label": "short",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tag: a pubky reference nothing can canonicalize stays as written and the reader refuses it",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/0034A0X7NJ53C",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG?x=1",
+          "label": "bad",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "skip": "invalid"
+      }
+    },
+    {
+      "name": "tag: a target that is the owner's v0 feed keeps the legacy spelling, since feeds migrate private under a new id",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/0034A0X7NJ53E",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/0032SSN7Q4EVG",
+          "label": "fav",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/tags/AY9PVJ6P7SN10CC4YQNDTFCM1C.json",
+            "body": {
+              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/0032SSN7Q4EVG",
+              "label": "fav",
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
