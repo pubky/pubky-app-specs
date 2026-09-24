@@ -70,6 +70,15 @@ pubky-social-specs = { version = "1.0.0-alpha.4", features = ["openapi"] }
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |
 
+`PubkySocialPost` is `PostEnvelope<PubkySocialPostKind>`. The envelope carries what every post
+shares (parent, embed, attachments, lock, the preserved `extra` map, the byte cap, the id mint
+and the versioned `posts/{id}/{editId}.json` layout under a namespace); the `PostKind` type
+parameter carries one namespace's kind vocabulary and its per-kind content rules. An app that
+needs its own kinds instantiates the same envelope under its own namespace, with the same wire
+shape, and never touches the social kind set. Every message the npm package throws and every
+`Validatable` rejection starts with `Validation Error: `; a `PostKind::validate_content` returns
+its messages with that prefix already, the envelope hands them through unchanged.
+
 ## Reading 0.x data
 
 `legacy_v0` is the 0.x reader, frozen at the 0.8.0 pin. It carries that release's parser, read models and validation copied unchanged, so an object 0.x accepted or rejected keeps the same answer forever, and none of it is edited to match the 1.x rules. Hand its object enum a stored URI and the bytes and it answers what 0.8.0 answered.
