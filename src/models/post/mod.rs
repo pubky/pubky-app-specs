@@ -1,12 +1,13 @@
-use crate::canonicalize::{checked, AllowedSchemes};
+use crate::canonicalize::{checked, is_canonical_segment, AllowedSchemes};
 use crate::common::{
     check_extra, code_point_len, frozen_trim, trimmed_or_none, validate_timestamp_id_format,
 };
-use crate::constants::social_path;
+use crate::constants::{namespace_path, SOCIAL_NAMESPACE};
 use crate::limits::VALIDATION_LIMITS;
 use crate::traits::{HasIdPath, Root, TimestampId, Validatable, ValidationCtx, ValidationError};
 use crate::types::PubkyId;
 use crate::uri::is_valid_label;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 #[cfg(target_arch = "wasm32")]
@@ -22,6 +23,9 @@ pub use content::{
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
+
+/// The `posts/` directory under a namespace, the same for every specialization.
+const POSTS_SEGMENT: &str = "posts/";
 
 /// Represents the type of pubky-app posted data
 /// Used primarily to best display the content in UI
@@ -124,18 +128,76 @@ impl PubkySocialAttachment {
     }
 }
 
-/// Represents raw post in homeserver with content and kind
-/// URI: /pub/social/v1/posts/:post_id/:edit_id.json
-/// Where both ids are CrockfordBase32 encodings of a timestamp
+/// A reference position inside a post's `content`, as a kind reports it to the envelope's
+/// reference gate: the field name the error message carries, the uri as stored, and the gate
+/// it takes.
+#[derive(Debug, Clone)]
+pub struct ContentReference {
+    pub field: String,
+    pub uri: String,
+    pub schemes: AllowedSchemes,
+    pub max_code_points: usize,
+}
+
+/// The kind vocabulary of one post specialization: what `PostEnvelope::kind` holds.
 ///
-/// Example URI:
+/// A specialization owns its content semantics and nothing else: which kinds exist, what
+/// each kind's `content` must look like, and which positions inside that content are
+/// references. The envelope owns everything shared (the parent, embed, attachments and lock
+/// positions, the reference gate, the preserved `extra` map, the byte cap, the versioned
+/// storage layout and the id mint), so a namespace can ship its own kind set on the same
+/// envelope without touching this crate's post code. The wire shape of every specialization
+/// is the same object with a different `kind` string.
+///
+/// `Default` is the kind a bare builder produces; `is_known` is false for the forwards-compat
+/// catch-all every kind enum carries, which reads but never validates.
+pub trait PostKind: Serialize + DeserializeOwned + Clone + Default {
+    /// `false` for the catch-all variant that captures a kind string this version does not
+    /// know. Such a post reads, and fails validation.
+    fn is_known(&self) -> bool;
+
+    /// The per-kind rules on `content` and on how the envelope positions combine with it,
+    /// after the envelope's own rules (the id, `extra`, `is_known`, the reference gate over
+    /// every position and the attachment caps) have passed. An error message starts with
+    /// `Validation Error: `; the envelope hands it through unchanged.
+    fn validate_content(
+        &self,
+        post: &PostEnvelope<Self>,
+        ctx: &ValidationCtx,
+    ) -> Result<(), String>;
+
+    /// The reference positions inside `content`, so the envelope's gate can run over them
+    /// with the author in scope where validation alone has none (the builders and ingest by
+    /// URI pass the author; plain `validate` cannot). Content that carries no references
+    /// keeps the default. An unparsable content is the kind's validation error, not this
+    /// method's: it reports what it can read.
+    fn content_references(&self, _post: &PostEnvelope<Self>) -> Vec<ContentReference> {
+        Vec::new()
+    }
+}
+
+/// The post object every specialization shares, `{root}/{namespace}/v1/posts/{id}/{editId}.json`.
+///
+/// The type parameter is the specialization's kind vocabulary ([`PostKind`]). Everything on
+/// this struct is envelope authority and identical for every `K`: the reference positions and
+/// the gate they pass, the attachment caps, the preserved `extra` map, the total byte cap, the
+/// timestamp id mint and the versioned layout. `K` decides what `content` means for each of
+/// its kinds through [`PostKind::validate_content`]. [`PubkySocialPost`] is the first
+/// specialization, under the `social` namespace; an app that needs its own kinds instantiates
+/// the same envelope under its own namespace and inherits the mechanics, and a social reader
+/// classifies those paths as foreign without reading them.
+///
+/// Both ids are CrockfordBase32 encodings of a timestamp. Example path:
 ///
 /// `/pub/social/v1/posts/00321FCW75ZFY/00321FCW75ZFY.json`
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+// The trait already carries DeserializeOwned; without this the derive adds its own
+// Deserialize<'de> bound next to it and the two are ambiguous
+#[serde(bound = "K: PostKind")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub struct PubkySocialPost {
+pub struct PostEnvelope<K: PostKind> {
     pub content: String,
-    pub kind: PubkySocialPostKind,
+    pub kind: K,
     /// If a reply, the URI of the parent post. Pubky only: a reply is a thread edge.
     pub parent: Option<String>,
     /// A quoted resource, pubky or web. The kind is derivable from the target.
@@ -153,12 +215,15 @@ pub struct PubkySocialPost {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-impl PubkySocialPost {
+/// The social post: the envelope with the closed social kind set, stored under `social`.
+pub type PubkySocialPost = PostEnvelope<PubkySocialPostKind>;
+
+impl<K: PostKind> PostEnvelope<K> {
     /// Trims `content`; references pass through verbatim. Infallible; callers validate
     /// before writing.
     pub fn new(
         content: String,
-        kind: PubkySocialPostKind,
+        kind: K,
         parent: Option<String>,
         embed: Option<String>,
         attachments: Vec<PubkySocialAttachment>,
@@ -168,13 +233,13 @@ impl PubkySocialPost {
 
     pub fn new_with_lock(
         content: String,
-        kind: PubkySocialPostKind,
+        kind: K,
         parent: Option<String>,
         embed: Option<String>,
         attachments: Vec<PubkySocialAttachment>,
         lock: Option<String>,
     ) -> Self {
-        PubkySocialPost {
+        PostEnvelope {
             content: frozen_trim(&content).to_string(),
             kind,
             parent,
@@ -186,11 +251,11 @@ impl PubkySocialPost {
     }
 }
 
-impl TimestampId for PubkySocialPost {}
+impl<K: PostKind> TimestampId for PostEnvelope<K> {}
 
 impl HasIdPath for PubkySocialPost {
     const ROOT: Root = Root::Pub;
-    const PATH_SEGMENT: &'static str = "posts/";
+    const PATH_SEGMENT: &'static str = POSTS_SEGMENT;
 
     fn create_path(id: &str) -> String {
         Self::create_path_in(Self::ROOT, id, id, None)
@@ -206,37 +271,46 @@ pub struct MintedVersion {
     pub path: String,
 }
 
-impl PubkySocialPost {
-    /// "/{root}/social/v1/posts/{id}/{editId}[-{slug}].json". Creation writes `editId == id`,
-    /// deterministic so migration never invents a value. The slug is readable decoration on
-    /// the file name, never part of the identity; the builders validate it, this assembles.
-    pub fn create_path_in(root: Root, id: &str, edit_id: &str, slug: Option<&str>) -> String {
+impl<K: PostKind> PostEnvelope<K> {
+    /// "/{root}/{namespace}/v1/posts/{id}/{editId}[-{slug}].json". Creation writes
+    /// `editId == id`, deterministic so migration never invents a value. The slug is readable
+    /// decoration on the file name, never part of the identity; the builders validate it,
+    /// this assembles.
+    pub fn version_path(
+        namespace: &str,
+        root: Root,
+        id: &str,
+        edit_id: &str,
+        slug: Option<&str>,
+    ) -> String {
         let leaf = match slug {
-            Some(slug) => format!("{}{id}/{edit_id}-{slug}.json", Self::PATH_SEGMENT),
-            None => format!("{}{id}/{edit_id}.json", Self::PATH_SEGMENT),
+            Some(slug) => format!("{POSTS_SEGMENT}{id}/{edit_id}-{slug}.json"),
+            None => format!("{POSTS_SEGMENT}{id}/{edit_id}.json"),
         };
-        social_path(root, &leaf)
+        namespace_path(root, namespace, &leaf)
     }
 
-    /// Creation: mints the post id, validates against the destination root with the author
-    /// in scope, returns `posts/{id}/{id}.json`.
-    pub fn create_version(
+    /// Creation under a namespace: mints the post id, validates against the destination
+    /// root with the author in scope, returns `posts/{id}/{id}.json`.
+    pub fn create_version_under(
         &self,
+        namespace: &str,
         root: Root,
         owner: &PubkyId,
         slug: Option<&str>,
     ) -> Result<MintedVersion, String> {
         let id = self.create_id();
-        self.mint(id.clone(), id, root, owner, slug)
+        self.mint(namespace, id.clone(), id, root, owner, slug)
     }
 
-    /// Edit: keeps `id`, mints an editId strictly above `head`, the current newest version
-    /// (the id itself for a never-edited post). The newest version is the bytewise greatest,
-    /// so an editId below the head would hide the edit; a head created by a faster clock is a
-    /// floor, and a head already at the validity bound makes the edit an error rather than an
-    /// id no reader accepts.
-    pub fn edit_version(
+    /// Edit under a namespace: keeps `id`, mints an editId strictly above `head`, the
+    /// current newest version (the id itself for a never-edited post). The newest version is
+    /// the bytewise greatest, so an editId below the head would hide the edit; a head created
+    /// by a faster clock is a floor, and a head already at the validity bound makes the edit
+    /// an error rather than an id no reader accepts.
+    pub fn edit_version_under(
         &self,
+        namespace: &str,
         id: &str,
         head: &str,
         root: Root,
@@ -257,11 +331,12 @@ impl PubkySocialPost {
             u64::from_le_bytes(hasher.finalize().as_bytes()[..8].try_into().unwrap())
         };
         let edit_id = self.create_id_above(head, salt)?;
-        self.mint(id.to_string(), edit_id, root, owner, slug)
+        self.mint(namespace, id.to_string(), edit_id, root, owner, slug)
     }
 
     fn mint(
         &self,
+        namespace: &str,
         id: String,
         edit_id: String,
         root: Root,
@@ -276,20 +351,28 @@ impl PubkySocialPost {
                 ));
             }
         }
+        if !is_canonical_segment(namespace) {
+            return Err(format!(
+                "Validation Error: namespace must be one path segment: {namespace}"
+            ));
+        }
         let ctx = ValidationCtx { root };
         self.validate(Some(&id), &ctx)?;
         // The editId is a TimestampId too, so the validity bound applies to it
         self.validate_id(&edit_id)?;
         // The ownership rule, which plain validate has no author for
         self.check_references(&ctx, Some(owner))?;
-        let path = Self::create_path_in(root, &id, &edit_id, slug);
+        let path = Self::version_path(namespace, root, &id, &edit_id, slug);
         Ok(MintedVersion { id, edit_id, path })
     }
 
     /// Every reference position through the one gate: `parent` and `embed` universal, `lock`
-    /// pubky, attachments and the article cover pubky or web. `owner` enables the ownership
-    /// rule; validation passes `None`, the builders pass the author.
-    pub(crate) fn check_references(
+    /// pubky, attachments pubky or web, then whatever positions the kind reports inside
+    /// `content`. `owner` enables the ownership rule (a private object of another user
+    /// resolves for nobody): `validate` has no author and passes `None`, the builders pass
+    /// it, and ingest by URI must call this with the author the URI names, as
+    /// `PubkySocialObject::from_uri` does.
+    pub fn check_references(
         &self,
         ctx: &ValidationCtx,
         owner: Option<&PubkyId>,
@@ -309,22 +392,39 @@ impl PubkySocialPost {
             let field = format!("attachments[{index}].uri");
             checked(&field, &attachment.uri, PubkyHttpHttps, max, ctx, owner)?;
         }
-        // Either envelope's cover; an unparsable envelope is that validator's error
-        if let Some(cover) = self.envelope_cover() {
-            let max = VALIDATION_LIMITS.image_url_max_length;
-            checked("cover_image", &cover, PubkyHttpHttps, max, ctx, owner)?;
-        }
-        for (index, uri) in self.collection_item_uris().into_iter().enumerate() {
-            checked(
-                &format!("items[{index}].uri"),
-                &uri,
-                Universal,
-                max,
-                ctx,
-                owner,
-            )?;
+        for r in self.kind.content_references(self) {
+            checked(&r.field, &r.uri, r.schemes, r.max_code_points, ctx, owner)?;
         }
         Ok(())
+    }
+}
+
+impl PubkySocialPost {
+    /// "/{root}/social/v1/posts/{id}/{editId}[-{slug}].json", see [`PostEnvelope::version_path`].
+    pub fn create_path_in(root: Root, id: &str, edit_id: &str, slug: Option<&str>) -> String {
+        Self::version_path(SOCIAL_NAMESPACE, root, id, edit_id, slug)
+    }
+
+    /// Creation under `social`, see [`PostEnvelope::create_version_under`].
+    pub fn create_version(
+        &self,
+        root: Root,
+        owner: &PubkyId,
+        slug: Option<&str>,
+    ) -> Result<MintedVersion, String> {
+        self.create_version_under(SOCIAL_NAMESPACE, root, owner, slug)
+    }
+
+    /// Edit under `social`, see [`PostEnvelope::edit_version_under`].
+    pub fn edit_version(
+        &self,
+        id: &str,
+        head: &str,
+        root: Root,
+        owner: &PubkyId,
+        slug: Option<&str>,
+    ) -> Result<MintedVersion, String> {
+        self.edit_version_under(SOCIAL_NAMESPACE, id, head, root, owner, slug)
     }
 
     /// The item uris of the collection envelope, when the kind and the content say so.
@@ -350,7 +450,62 @@ impl PubkySocialPost {
     }
 }
 
-impl Validatable for PubkySocialPost {
+impl PostKind for PubkySocialPostKind {
+    fn is_known(&self) -> bool {
+        PubkySocialPostKind::is_known(self)
+    }
+
+    fn validate_content(&self, post: &PubkySocialPost, ctx: &ValidationCtx) -> Result<(), String> {
+        match self {
+            PubkySocialPostKind::Collection => content::collection::validate_collection_post(post),
+            PubkySocialPostKind::Article => content::article::validate_article_post(post, ctx),
+            // Note, Image, Video, Link, File: untyped content. The envelope refused Unknown
+            // before dispatching, so the wildcard never sees it.
+            _ => {
+                if frozen_trim(&post.content).is_empty()
+                    && post.embed.is_none()
+                    && post.attachments.is_empty()
+                {
+                    return Err(
+                        "Validation Error: Post must have content, an embed, or attachments".into(),
+                    );
+                }
+                let max = VALIDATION_LIMITS.post_note_content_max_length;
+                if code_point_len(&post.content) > max {
+                    return Err(format!(
+                        "Validation Error: content must be at most {max} code points for kind {self}"
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Either envelope's cover, then the collection items; an unparsable envelope is that
+    /// validator's error.
+    fn content_references(&self, post: &PubkySocialPost) -> Vec<ContentReference> {
+        let mut refs = Vec::new();
+        if let Some(cover) = post.envelope_cover() {
+            refs.push(ContentReference {
+                field: "cover_image".to_string(),
+                uri: cover,
+                schemes: AllowedSchemes::PubkyHttpHttps,
+                max_code_points: VALIDATION_LIMITS.image_url_max_length,
+            });
+        }
+        for (index, uri) in post.collection_item_uris().into_iter().enumerate() {
+            refs.push(ContentReference {
+                field: format!("items[{index}].uri"),
+                uri,
+                schemes: AllowedSchemes::Universal,
+                max_code_points: VALIDATION_LIMITS.reference_uri_max_length,
+            });
+        }
+        refs
+    }
+}
+
+impl<K: PostKind> Validatable for PostEnvelope<K> {
     const MAX_BYTES: usize = VALIDATION_LIMITS.post_max_bytes;
 
     fn validate_fields(
@@ -372,10 +527,6 @@ impl Validatable for PubkySocialPost {
         }
 
         self.check_references(ctx, None)?;
-
-        if matches!(self.kind, PubkySocialPostKind::Collection) {
-            return content::collection::validate_collection_post(self);
-        }
 
         if self.attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
             return Err(format!(
@@ -403,27 +554,7 @@ impl Validatable for PubkySocialPost {
             }
         }
 
-        if matches!(self.kind, PubkySocialPostKind::Article) {
-            return content::article::validate_article_post(self, ctx);
-        }
-
-        // Note, Image, Video, Link, File: untyped content
-        if frozen_trim(&self.content).is_empty()
-            && self.embed.is_none()
-            && self.attachments.is_empty()
-        {
-            return Err(
-                "Validation Error: Post must have content, an embed, or attachments".into(),
-            );
-        }
-        let max = VALIDATION_LIMITS.post_note_content_max_length;
-        if code_point_len(&self.content) > max {
-            return Err(format!(
-                "Validation Error: content must be at most {max} code points for kind {}",
-                self.kind
-            ));
-        }
-        Ok(())
+        self.kind.validate_content(self, ctx)
     }
 }
 
@@ -487,6 +618,7 @@ mod tests {
     use crate::traits::PUB_CTX;
 
     const PK: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    const TS: &str = "0032SSN7Q4EVG";
 
     fn p(path: &str) -> String {
         format!("pubky://{PK}{path}")
@@ -1367,5 +1499,105 @@ mod tests {
             vec![att(&file_uri())],
         );
         assert!(validate(&attachment_only).is_ok());
+    }
+
+    #[test]
+    fn test_namespace_must_be_one_canonical_segment() {
+        let post = note("hi");
+        for bad in ["", ".", "foo/bar"] {
+            let e = post
+                .create_version_under(bad, Root::Pub, &owner(), None)
+                .unwrap_err();
+            assert_eq!(
+                e,
+                format!("Validation Error: namespace must be one path segment: {bad}")
+            );
+            let e = post
+                .edit_version_under(bad, TS, TS, Root::Pub, &owner(), None)
+                .unwrap_err();
+            assert_eq!(
+                e,
+                format!("Validation Error: namespace must be one path segment: {bad}")
+            );
+        }
+        let minted = post
+            .create_version_under("mapky", Root::Pub, &owner(), None)
+            .unwrap();
+        assert_eq!(
+            minted.path,
+            format!("/pub/mapky/v1/posts/{}/{}.json", minted.id, minted.id)
+        );
+    }
+
+    /// A kind set outside this crate: the envelope mechanics, the reference gate and the
+    /// ownership rule included, come for free.
+    #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    enum ReviewKind {
+        #[default]
+        Review,
+        #[serde(other)]
+        Unknown,
+    }
+
+    impl PostKind for ReviewKind {
+        fn is_known(&self) -> bool {
+            !matches!(self, ReviewKind::Unknown)
+        }
+
+        fn validate_content(
+            &self,
+            post: &PostEnvelope<Self>,
+            _ctx: &ValidationCtx,
+        ) -> Result<(), String> {
+            if post.content.is_empty() {
+                return Err("Validation Error: a review needs text".into());
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_a_foreign_kind_rides_the_envelope() {
+        let other = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+        let mut review: PostEnvelope<ReviewKind> = PostEnvelope::new(
+            "five stars".into(),
+            ReviewKind::Review,
+            Some(format!("pubky://{other}/priv/social/v1/posts/{TS}")),
+            None,
+            vec![],
+        );
+        let priv_ctx = ValidationCtx { root: Root::Priv };
+        // Plain validation has no author, so the private parent passes under the private root
+        assert!(review.validate(None, &priv_ctx).is_ok());
+        // With the author in scope the ownership rule refuses another user's private object
+        let e = review
+            .check_references(&priv_ctx, Some(&owner()))
+            .unwrap_err();
+        assert!(
+            e.contains(
+                "Validation Error: parent must not reference a private object of another user: "
+            ),
+            "{e}"
+        );
+        let e = review
+            .create_version_under("reviews", Root::Priv, &owner(), None)
+            .unwrap_err();
+        assert!(e.contains("of another user"), "{e}");
+        review.parent = None;
+        let minted = review
+            .create_version_under("reviews", Root::Priv, &owner(), None)
+            .unwrap();
+        assert!(minted.path.starts_with("/priv/reviews/v1/posts/"));
+        review.content.clear();
+        assert_eq!(
+            review.validate(None, &priv_ctx).unwrap_err(),
+            "Validation Error: a review needs text"
+        );
+        // The wire shape is the envelope's, whatever the kind
+        let parsed: PostEnvelope<ReviewKind> =
+            serde_json::from_str(r#"{"content":"x","kind":"rant","attachments":[]}"#).unwrap();
+        assert_eq!(parsed.kind, ReviewKind::Unknown);
+        assert!(parsed.validate(None, &PUB_CTX).is_err());
     }
 }
