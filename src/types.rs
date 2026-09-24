@@ -7,8 +7,6 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "openapi")]
 use utoipa::{PartialSchema, ToSchema};
 
-use crate::{ParsedUri, Resource};
-
 /// Represents user data with name, bio, image, links, and status.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -49,14 +47,6 @@ impl PubkyId {
     pub fn try_from(s: &str) -> Result<Self, String> {
         Self::validate(s)?;
         Ok(Self { z32: s.to_string() })
-    }
-
-    pub fn to_uri(&self) -> ParsedUri {
-        ParsedUri {
-            user_id: self.clone(),
-            visibility: crate::Visibility::Public,
-            resource: Resource::User,
-        }
     }
 
     /// Converts to a public key on demand. A format-valid id need not be a

@@ -1,0 +1,252 @@
+[
+  {
+    "blob": "{\"name\":\"Alice\",\"bio\":\"Hello, I am Alice\",\"image\":\"https://example.com/alice.png\",\"links\":[{\"title\":\"Home\",\"url\":\"https://example.com\"}],\"status\":\"active\"}",
+    "note": "user, every field populated",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"   Alice   \",\"bio\":\"  padded  \",\"image\":null,\"links\":null,\"status\":\"  busy  \"}",
+    "note": "user, padded strings the v0 sanitize trims",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"[DELETED]\",\"bio\":null,\"image\":null,\"links\":null,\"status\":null}",
+    "note": "user, the [DELETED] name v0 substitutes for anonymous",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"Dana\",\"bio\":null,\"image\":\"data:image/png;base64,AAAA\",\"links\":null,\"status\":null}",
+    "note": "user, a data: image v0 accepts through Url::parse",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"name\":\"Al\",\"bio\":null,\"image\":null,\"links\":null,\"status\":null}",
+    "note": "user, name shorter than the v0 minimum",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"content\":\"Hello World!\",\"kind\":\"short\",\"parent\":null,\"embed\":{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\",\"kind\":\"short\"},\"attachments\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG\"]}",
+    "note": "post, short with an embed and an attachment",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"A longer body.\",\"kind\":\"long\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, long",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A"
+  },
+  {
+    "blob": "{\"content\":\"   Hello World!   \",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, padded content the v0 sanitize trims",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"reply\",\"kind\":\"short\",\"parent\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"embed\":null,\"attachments\":null,\"lock\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/locks.app/locks/0034A0X7NJ52A\"}",
+    "note": "post, a reply carrying a lock",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"[DELETED]\",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, the reserved [DELETED] content",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"x\",\"kind\":\"hologram\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, a kind this version of v0 does not know",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"{\\\"name\\\":\\\"My favorites\\\",\\\"description\\\":\\\"Best things\\\",\\\"items\\\":[\\\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\\\"],\\\"cover_image\\\":\\\"https://example.com/cover.png\\\",\\\"layout\\\":\\\"list\\\"}\",\"kind\":\"collection\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, collection with a cover image and a layout",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"{\\\"name\\\":\\\"My favorites\\\",\\\"items\\\":[]}\",\"kind\":\"collection\",\"parent\":null,\"embed\":null,\"attachments\":[\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0034A0X7NJ52A\"]}",
+    "note": "post, collection putting its items in post.attachments",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"content\":\"x\",\"kind\":\"short\",\"parent\":null,\"embed\":null,\"attachments\":null}",
+    "note": "post, the leaf carrying a .json suffix v0 never writes",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG.json"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"cool\",\"created_at\":1627849726}",
+    "note": "tag, canonical",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"COOL\",\"created_at\":1627849726}",
+    "note": "tag, an uppercase label the v0 sanitize folds",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"label\":\"co ol\",\"created_at\":1627849726}",
+    "note": "tag, a label with a space",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/SC3NY2QXZYM9PSWX4ED9RCH148"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/profile.json\",\"label\":\"friend\",\"created_at\":1627849726}",
+    "note": "tag, on a user rather than a post",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/tags/ECMWAR9XRWZG2YDJWKBG5TFMWG"
+  },
+  {
+    "blob": "{\"uri\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG\",\"created_at\":1627849725}",
+    "note": "bookmark, canonical",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG"
+  },
+  {
+    "blob": "{\"uri\":\"invalid_uri\",\"created_at\":1627849725}",
+    "note": "bookmark, a target that is not a URI",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/bookmarks/4QTBWDN4CWYB36T9YDS6VGFSYM"
+  },
+  {
+    "blob": "{\"created_at\":1627849723}",
+    "note": "follow",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
+  },
+  {
+    "blob": "{\"created_at\":1627849724}",
+    "note": "mute",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
+  },
+  {
+    "blob": "{\"created_at\":1627849723}",
+    "note": "follow, an uppercase public key in the path",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/follows/PXNU33X7JTPX9AR1YTSI4YXBP6A5O36GWHFFS8ZOXMBUPTICI1JY"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR\",\"content_type\":\"image/png\",\"size\":1024}",
+    "note": "file, pointing at its blob",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"https://example.com/example.png\",\"content_type\":\"image/png\",\"size\":1024}",
+    "note": "file, an https src v0 accepts",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.png\",\"created_at\":1627849727,\"src\":\"not a url\",\"content_type\":\"image/png\",\"size\":10}",
+    "note": "file, an src that is not a URL",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "{\"name\":\"example.bin\",\"created_at\":1627849727,\"src\":\"pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR\",\"content_type\":\"application/x-weird\",\"size\":10}",
+    "note": "file, a content type outside the v0 allowlist",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0032SSN7Q4EVG"
+  },
+  {
+    "blob": "\u0001\u0002",
+    "note": "blob, two bytes",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR"
+  },
+  {
+    "blob": "",
+    "note": "blob, empty",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/NW9MKEFNZ6GTD8209QN3DQ6994"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[\"bitcoin\"],\"domain_tags\":[\"news\"],\"reach\":\"wot\",\"layout\":\"columns\",\"sort\":\"recent\",\"content\":\"short\"},\"name\":\"My Feed\",\"icon\":\"bitcoin\",\"created_at\":1627849728}",
+    "note": "feed, with an icon and domain tags",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5628Q6WHCK4EM1Z7862K7GH2QW"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[],\"reach\":\"following\",\"layout\":\"columns\",\"sort\":\"recent\",\"content\":null},\"name\":\"My Feed\",\"created_at\":1627849728}",
+    "note": "feed, the legacy shape with neither icon nor domain tags",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[],\"reach\":\"me\",\"layout\":\"list\",\"sort\":\"popularity\",\"content\":null},\"name\":\"Mine\",\"icon\":\"user\",\"created_at\":1627849728}",
+    "note": "feed, reach me",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/1VK3YAJSZBCHT8J1BJK1K34FVG"
+  },
+  {
+    "blob": "{\"feed\":{\"tags\":[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\"],\"reach\":\"all\",\"layout\":\"wide\",\"sort\":\"recent\",\"content\":null},\"name\":\"Too many\",\"created_at\":1627849728}",
+    "note": "feed, more tags than v0 allows",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/FXJWEFF6VHZDNPSC1V2XMGBSJR"
+  },
+  {
+    "blob": "{\"timestamp\":1627849729}",
+    "note": "last_read",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read"
+  },
+  {
+    "blob": "{\"timestamp\":-1}",
+    "note": "last_read, a non-positive timestamp",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/last_read"
+  },
+  {
+    "blob": "{}",
+    "note": "an unknown resource segment",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/unknown/xyz"
+  },
+  {
+    "blob": "{}",
+    "note": "no resource segment at all",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/"
+  },
+  {
+    "blob": "{}",
+    "note": "a posts segment with an empty id",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/"
+  },
+  {
+    "blob": "{}",
+    "note": "a foreign app namespace",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/other.app/tags/ABC123"
+  },
+  {
+    "blob": "{}",
+    "note": "a public path that is not pub",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/private/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "an https scheme",
+    "uri": "https://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "a string that is not a URL",
+    "uri": "not a url"
+  },
+  {
+    "blob": "{}",
+    "note": "a uri with no host",
+    "uri": "pubky:///pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "host of 51 characters",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rd/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "host of 53 characters",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdoy/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "host in uppercase",
+    "uri": "pubky://OPERRR8WSBPR3UE9D4QJ41GE1KCC6R7FDIY6O3UGJRRHI4Y77RDO/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "host whose last character leaves dangling bits",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdb/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{}",
+    "note": "host outside the z-base32 alphabet",
+    "uri": "pubky://0perrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/profile.json"
+  },
+  {
+    "blob": "{\"created_at\":1627849724}",
+    "note": "mute, a muted id that is not a public key",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/notapubkyid"
+  },
+  {
+    "blob": "",
+    "note": "mute, an empty body",
+    "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy"
+  }
+]

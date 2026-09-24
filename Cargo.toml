@@ -1,6 +1,6 @@
 [package]
 name = "pubky-social-specs"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.3"
 edition = "2021"
 rust-version = "1.89"
 description = "Pubky social data models with validation, sanitization, and URI helpers"
@@ -26,6 +26,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+# url and mime are quarantined: the frozen v0 reader is their only consumer, the v1
+# surface parses paths itself.
+url = "2.5.8"
+mime = "0.3"
 base32 = "0.5.1"
 base64 = "0.22.1"
 blake3 = "1.8.6"

@@ -1,0 +1,63 @@
+//! The 0.x reader, frozen at the 0.8.0 pin so a v0 ingest verdict never moves.
+//!
+//! Every file under this module is the 0.8.0 source, copied unchanged except for import
+//! paths and the stripped JS bindings. Its `url::Url` parsing, its `mime` gate, its
+//! `.trim()`/`to_lowercase()` and its error messages ARE the verdict real v0 data was
+//! accepted or rejected under, so they are deliberately outside the v1 rules and are never
+//! edited, improved or aligned. Indexers read un-migrated data through it forever and the
+//! migration transforms read v0 objects through it.
+//!
+//! One thing is shared rather than copied: [`PubkyId`] is the crate's id type. Two id types
+//! would fork every signature a consumer writes, so there is one, and it checks the format,
+//! a 52-character z-base32 string.
+//!
+//! That is a real widening on one axis. 0.8.0 compiled to native also required the decoded
+//! bytes to be an Ed25519 curve point; compiled to wasm32 it did not, and this module does
+//! not. So a 52-character z-base32 string that decodes cleanly but is not a curve point is
+//! accepted here and by v0 on wasm32, and was rejected by v0 on native. It reaches URI hosts
+//! through [`try_parse_pubky_path`], the ids of [`PubkyAppFollow`] and [`PubkyAppMute`], and
+//! the item hosts of a collection post. Tag and bookmark `uri` fields were never curve
+//! checked in v0 at all, they go through `url::Url`. A consumer that holds one of these as a
+//! real public key, to verify a signature or to fetch from a homeserver, does the curve check
+//! itself; the decode is not one.
+//!
+//! On another axis it is stricter, on purpose. 0.8.0 decoded with `base32::decode`, which
+//! ignores the 4 filler bits of the last character, so a 52-character key ending in anything
+//! but `y` or `o` passed, and on native was rewritten to the standard spelling. [`PubkyId`]
+//! rejects that key as a URI host, a follow or mute id and a collection item host.
+//! Accepting it would give one user several keys, one per spelling.
+
+mod common;
+mod constants;
+mod limits;
+mod models;
+// `traits` stays a module path: it is the only way in, not a second one.
+pub mod traits;
+mod uri;
+
+pub use crate::types::PubkyId;
+pub use common::validate_crockford_id;
+pub use constants::{APP_PATH, PROTOCOL, PUBLIC_PATH};
+pub use limits::{ValidationLimits, VALIDATION_LIMITS};
+pub use models::blob::PubkyAppBlob;
+pub use models::bookmark::PubkyAppBookmark;
+pub use models::feed::{
+    PubkyAppFeed, PubkyAppFeedConfig, PubkyAppFeedLayout, PubkyAppFeedReach, PubkyAppFeedSort,
+};
+pub use models::file::{PubkyAppFile, VALID_MIME_TYPES};
+pub use models::follow::PubkyAppFollow;
+pub use models::last_read::PubkyAppLastRead;
+pub use models::mute::PubkyAppMute;
+pub use models::post::{
+    PubkyAppCollectionContent, PubkyAppCollectionLayout, PubkyAppPost, PubkyAppPostEmbed,
+    PubkyAppPostKind,
+};
+pub use models::tag::PubkyAppTag;
+pub use models::user::{PubkyAppUser, PubkyAppUserLink};
+pub use models::PubkyAppObject;
+pub use uri::{
+    base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
+    follow_uri_builder, is_pubky_scheme, last_read_uri_builder, mute_uri_builder, post_uri_builder,
+    tag_uri_builder, try_parse_pubky_path, user_uri_builder, ExtendedParsedUri, ParsedUri,
+    PubkyPath, Resource,
+};

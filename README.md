@@ -51,7 +51,7 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 | `openapi` | OpenAPI schemas via `utoipa`   |
 
 ```toml
-pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
+pubky-social-specs = { version = "1.0.0-alpha.3", features = ["openapi"] }
 ```
 
 - **MSRV:** 1.89 (see `rust-version` in `Cargo.toml`)
@@ -69,6 +69,21 @@ pubky-social-specs = { version = "1.0.0-alpha.1", features = ["openapi"] }
 | `PubkySocialFollow`    | Follow relationships                     |
 | `PubkySocialFeed`      | Feed configurations                      |
 | `PubkySocialMute`      | Muted users                              |
+
+## Reading 0.x data
+
+`legacy_v0` is the 0.x reader, frozen at the 0.8.0 pin. It carries that release's parser, read models and validation copied unchanged, so an object 0.x accepted or rejected keeps the same answer forever, and none of it is edited to match the 1.x rules. Hand its object enum a stored URI and the bytes and it answers what 0.8.0 answered.
+
+`stable_id` keys a stored path the same under either epoch, so a migrated object indexes in place rather than twice:
+
+```rust
+use pubky_social_specs::stable_id;
+
+assert_eq!(
+    stable_id("pub/pubky.app/posts/0RDX5H0000000"),
+    stable_id("pub/social/v1/posts/0RDX5H0000000/0RDX5J0000002.json"),
+);
+```
 
 ## Specification
 

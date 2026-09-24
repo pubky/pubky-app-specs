@@ -1,0 +1,1214 @@
+use crate::models::legacy_v0::{
+    common::sanitize_url,
+    is_pubky_scheme,
+    limits::VALIDATION_LIMITS,
+    traits::{HasIdPath, TimestampId, Validatable},
+    APP_PATH, PROTOCOL, PUBLIC_PATH,
+};
+
+pub mod content;
+
+pub use content::{PubkyAppCollectionContent, PubkyAppCollectionLayout};
+use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
+use url::Url;
+
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
+// Reserved keyword used by the system to mark deleted posts with relationships
+const RESERVED_CONTENT_DELETED: &str = "[DELETED]";
+
+/// Represents the type of pubky-app posted data
+/// Used primarily to best display the content in UI
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum PubkyAppPostKind {
+    #[default]
+    Short,
+    Long,
+    Image,
+    Video,
+    Link,
+    File,
+    Collection,
+    #[serde(other)]
+    Unknown,
+}
+
+impl fmt::Display for PubkyAppPostKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string_repr = serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_default();
+        write!(f, "{}", string_repr)
+    }
+}
+
+impl FromStr for PubkyAppPostKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "short" => Ok(PubkyAppPostKind::Short),
+            "long" => Ok(PubkyAppPostKind::Long),
+            "image" => Ok(PubkyAppPostKind::Image),
+            "video" => Ok(PubkyAppPostKind::Video),
+            "link" => Ok(PubkyAppPostKind::Link),
+            "file" => Ok(PubkyAppPostKind::File),
+            "collection" => Ok(PubkyAppPostKind::Collection),
+            _ => Err(format!("Invalid content kind: {}", s)),
+        }
+    }
+}
+
+impl PubkyAppPostKind {
+    /// Returns `true` for every spec-recognized variant, `false` for `Unknown`.
+    ///
+    /// `Unknown` is the forwards-compat catch-all variant (via `#[serde(other)]`)
+    /// that captures any post-kind string this version of the spec doesn't
+    /// recognize yet. Most consumers — indexers, stream filters, search ranking —
+    /// want to skip such posts, and this helper lets them write
+    /// `if kind.is_known() { ... }` rather than
+    /// `if !matches!(kind, PubkyAppPostKind::Unknown) { ... }`.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, PubkyAppPostKind::Unknown)
+    }
+}
+
+/// Represents embedded content within a post
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct PubkyAppPostEmbed {
+    pub kind: PubkyAppPostKind, // Kind of the embedded content
+    pub uri: String,            // URI of the embedded content
+}
+
+/// Represents raw post in homeserver with content and kind
+/// URI: /pub/pubky.app/posts/:post_id
+/// Where post_id is CrockfordBase32 encoding of timestamp
+///
+/// Example URI:
+///
+/// `/pub/pubky.app/posts/00321FCW75ZFY`
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct PubkyAppPost {
+    pub content: String,
+    pub kind: PubkyAppPostKind,
+    pub parent: Option<String>, // If a reply, the URI of the parent post.
+    pub embed: Option<PubkyAppPostEmbed>,
+    pub attachments: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock: Option<String>,
+}
+
+impl PubkyAppPost {
+    /// Creates a new `PubkyAppPost` instance and sanitizes it.
+    pub fn new(
+        content: String,
+        kind: PubkyAppPostKind,
+        parent: Option<String>,
+        embed: Option<PubkyAppPostEmbed>,
+        attachments: Option<Vec<String>>,
+    ) -> Self {
+        Self::new_with_lock(content, kind, parent, embed, attachments, None)
+    }
+
+    /// Creates a new lockable `PubkyAppPost` instance and sanitizes it.
+    pub fn new_with_lock(
+        content: String,
+        kind: PubkyAppPostKind,
+        parent: Option<String>,
+        embed: Option<PubkyAppPostEmbed>,
+        attachments: Option<Vec<String>>,
+        lock: Option<String>,
+    ) -> Self {
+        let post = PubkyAppPost {
+            content,
+            kind,
+            parent,
+            embed,
+            attachments,
+            lock,
+        };
+        post.sanitize()
+    }
+}
+
+impl TimestampId for PubkyAppPost {}
+
+impl HasIdPath for PubkyAppPost {
+    const PATH_SEGMENT: &'static str = "posts/";
+
+    fn create_path(id: &str) -> String {
+        [PUBLIC_PATH, APP_PATH, Self::PATH_SEGMENT, id].concat()
+    }
+}
+
+impl Validatable for PubkyAppPost {
+    fn sanitize(self) -> Self {
+        // Sanitize content: trim whitespace only
+        let content = self.content.trim().to_string();
+
+        // Sanitize parent URI if present
+        let parent = self.parent.map(|uri_str| sanitize_url(&uri_str));
+
+        // Sanitize embed if present
+        let embed = self.embed.map(|e| PubkyAppPostEmbed {
+            kind: e.kind,
+            uri: sanitize_url(&e.uri),
+        });
+
+        // Sanitize attachments
+        let attachments = self.attachments.map(|attachments_vec| {
+            attachments_vec
+                .into_iter()
+                .map(|url_str| sanitize_url(&url_str))
+                .collect()
+        });
+
+        let lock = self.lock.map(|uri_str| sanitize_url(&uri_str));
+
+        PubkyAppPost {
+            content,
+            kind: self.kind,
+            parent,
+            embed,
+            attachments,
+            lock,
+        }
+    }
+
+    fn validate(&self, id: Option<&str>) -> Result<(), String> {
+        // Validate the post ID
+        if let Some(id) = id {
+            self.validate_id(id)?;
+        }
+
+        // Validate that post has meaningful content (at least one of: content, embed, or attachments)
+        if self.content.trim().is_empty() && self.embed.is_none() && self.attachments.is_none() {
+            return Err(
+                "Validation Error: Post must have content, an embed, or attachments".into(),
+            );
+        }
+
+        // We use content keyword `[DELETED]` for deleted posts from a homeserver that still have relationships
+        // placed by other users (replies, tags, etc). This content is exactly matched by the client to apply effects to deleted content.
+        // Placing posts with content `[DELETED]` is not allowed.
+        if self.content == RESERVED_CONTENT_DELETED {
+            return Err(
+                "Validation Error: Content cannot be the reserved keyword '[DELETED]'".into(),
+            );
+        }
+
+        // Reject posts whose kind couldn't be matched against any known variant.
+        // `Unknown` is a serde catch-all for forwards-compat: older binaries can
+        // deserialize events from newer clients without panicking, but such posts
+        // must never pass spec validation. Same reasoning for `embed.kind`.
+        if !self.kind.is_known() {
+            return Err("Validation Error: post kind is unknown".into());
+        }
+        if let Some(ref embed) = self.embed {
+            if !embed.kind.is_known() {
+                return Err("Validation Error: embed kind is unknown".into());
+            }
+        }
+
+        // Validate lock URL if present, for every kind (including collections,
+        // which return early below). Missing or null locks keep posts unlocked.
+        // Lock servers live on the Pubky network, so the URL must be `pubky://`
+        // with a host; the length cap is shared with attachment URLs.
+        if let Some(ref lock_url) = self.lock {
+            if lock_url.trim().is_empty() {
+                return Err("Validation Error: Lock URL cannot be empty".into());
+            }
+            if lock_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+                return Err(format!(
+                    "Validation Error: Lock URL exceeds maximum length (max: {} characters)",
+                    VALIDATION_LIMITS.post_attachment_url_max_length
+                ));
+            }
+            let parsed = Url::parse(lock_url)
+                .map_err(|_| format!("Validation Error: Invalid lock URL format: {lock_url}"))?;
+            if !is_pubky_scheme(parsed.scheme()) {
+                return Err(format!(
+                    "Validation Error: Lock URL must use the {PROTOCOL} scheme: {lock_url}"
+                ));
+            }
+            // Reject opaque URLs like `pubky:lock-id` that carry the scheme but
+            // no authority and so point at no resolvable lock server.
+            if parsed.host().is_none() {
+                return Err(format!(
+                    "Validation Error: Lock URL must include a host: {lock_url}"
+                ));
+            }
+        }
+
+        if matches!(self.kind, PubkyAppPostKind::Collection) {
+            return content::collection::validate_collection_post(self);
+        }
+
+        // Validate content length based on post kind
+        let (max_length, kind_name) = match self.kind {
+            PubkyAppPostKind::Short => (VALIDATION_LIMITS.post_short_content_max_length, "Short"),
+            PubkyAppPostKind::Long => (VALIDATION_LIMITS.post_long_content_max_length, "Long"),
+            PubkyAppPostKind::Image
+            | PubkyAppPostKind::Video
+            | PubkyAppPostKind::Link
+            | PubkyAppPostKind::File => (
+                VALIDATION_LIMITS.post_short_content_max_length,
+                "Image/Video/Link/File",
+            ),
+            PubkyAppPostKind::Collection | PubkyAppPostKind::Unknown => {
+                unreachable!("guarded by early-return above")
+            }
+        };
+
+        if self.content.chars().count() > max_length {
+            return Err(format!(
+                "Validation Error: Post content exceeds maximum length for {} kind (max: {} characters)",
+                kind_name, max_length
+            ));
+        }
+
+        // Validate parent URI format if present
+        if let Some(ref parent_uri) = self.parent {
+            Url::parse(parent_uri).map_err(|_| {
+                format!(
+                    "Validation Error: Invalid parent URI format: {}",
+                    parent_uri
+                )
+            })?;
+        }
+
+        // Validate embed URI format if present
+        if let Some(ref embed) = self.embed {
+            Url::parse(&embed.uri).map_err(|_| {
+                format!("Validation Error: Invalid embed URI format: {}", embed.uri)
+            })?;
+        }
+
+        // Validate attachments
+        if let Some(attachments) = &self.attachments {
+            if attachments.len() > VALIDATION_LIMITS.post_attachments_max_count {
+                return Err(format!(
+                    "Validation Error: Too many attachments (max: {})",
+                    VALIDATION_LIMITS.post_attachments_max_count
+                ));
+            }
+
+            for (index, url) in attachments.iter().enumerate() {
+                if url.trim().is_empty() {
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} cannot be empty",
+                        index
+                    ));
+                }
+                if url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length {
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} exceeds maximum length (max: {} characters)",
+                        index, VALIDATION_LIMITS.post_attachment_url_max_length
+                    ));
+                }
+                // Validate URL format and ensure it uses an allowed protocol
+                let parsed_url = Url::parse(url).map_err(|_| {
+                    format!(
+                        "Validation Error: Invalid attachment URL format at index {}",
+                        index
+                    )
+                })?;
+
+                // Ensure the URL uses an allowed protocol
+                if !VALIDATION_LIMITS
+                    .post_allowed_attachment_protocols
+                    .iter()
+                    .any(|&protocol| parsed_url.scheme().eq_ignore_ascii_case(protocol))
+                {
+                    let allowed_protocols = VALIDATION_LIMITS
+                        .post_allowed_attachment_protocols
+                        .iter()
+                        .map(|p| format!("{}://", p))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(format!(
+                        "Validation Error: Attachment URL at index {} must use one of the allowed protocols: {}",
+                        index, allowed_protocols
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_PUBKY_ID: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    use crate::models::legacy_v0::{traits::Validatable, APP_PATH, PUBLIC_PATH};
+
+    #[test]
+    fn test_create_id() {
+        let post = PubkyAppPost::new(
+            "Hello World!".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let post_id = post.create_id();
+        println!("Generated Post ID: {}", post_id);
+
+        // Assert that the post ID is 13 characters long
+        assert_eq!(post_id.len(), 13);
+    }
+
+    #[test]
+    fn test_new() {
+        let content = "This is a test post".to_string();
+        let kind = PubkyAppPostKind::Short;
+        let post = PubkyAppPost::new(content.clone(), kind.clone(), None, None, None);
+
+        assert_eq!(post.content, content);
+        assert_eq!(post.kind, kind);
+        assert!(post.parent.is_none());
+        assert!(post.embed.is_none());
+        assert!(post.attachments.is_none());
+    }
+
+    #[test]
+    fn test_create_path() {
+        let post = PubkyAppPost::new(
+            "Test post".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let post_id = post.create_id();
+        let path = PubkyAppPost::create_path(&post_id);
+
+        // Check if the path starts with the expected prefix
+        let prefix = format!("{}{}posts/", PUBLIC_PATH, APP_PATH);
+        assert!(path.starts_with(&prefix));
+
+        let expected_path_len = prefix.len() + post_id.len();
+        assert_eq!(path.len(), expected_path_len);
+    }
+
+    #[test]
+    fn test_sanitize() {
+        let content = "  This is a test post with extra whitespace   ".to_string();
+        let post = PubkyAppPost::new(
+            content.clone(),
+            PubkyAppPostKind::Short,
+            Some("  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string()),
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(),
+            }),
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string(), // Should be trimmed
+            ]),
+        );
+
+        let sanitized_post = post.sanitize();
+        assert_eq!(sanitized_post.content, content.trim());
+
+        // Parent URI should be trimmed
+        assert!(sanitized_post.parent.is_some());
+        let parent = sanitized_post.parent.unwrap();
+        assert!(!parent.starts_with("  "));
+        assert!(!parent.ends_with("  "));
+        assert!(parent.starts_with("pubky://"));
+
+        // Embed URI should be trimmed
+        assert!(sanitized_post.embed.is_some());
+        let embed = sanitized_post.embed.unwrap();
+        assert!(!embed.uri.starts_with("  "));
+        assert!(!embed.uri.ends_with("  "));
+        assert!(embed.uri.starts_with("pubky://"));
+
+        // Attachments should be trimmed
+        assert!(sanitized_post.attachments.is_some());
+        let attachments = sanitized_post.attachments.unwrap();
+        assert_eq!(attachments.len(), 2);
+        assert!(attachments[0].starts_with("pubky://"));
+        assert!(attachments[1].starts_with("pubky://"));
+        // Check that whitespace was trimmed
+        assert!(!attachments[1].starts_with("  pubky://"));
+        assert!(!attachments[1].ends_with("  "));
+    }
+
+    #[test]
+    fn test_sanitize_trims_parent_and_embed() {
+        let valid_parent_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/posts/0034A0X7NJ52G  ".to_string();
+        let valid_embed_uri = "  pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7Q3D80  ".to_string();
+
+        let post = PubkyAppPost::new(
+            "Test content".to_string(),
+            PubkyAppPostKind::Short,
+            Some(valid_parent_uri.clone()),
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: valid_embed_uri.clone(),
+            }),
+            None,
+        );
+
+        let sanitized_post = post.sanitize();
+
+        // Check that parent URI was trimmed and normalized
+        assert!(sanitized_post.parent.is_some());
+        let parent = sanitized_post.parent.unwrap();
+        assert!(!parent.starts_with("  "));
+        assert!(!parent.ends_with("  "));
+        assert!(parent.starts_with("pubky://"));
+
+        // Check that embed URI was trimmed and normalized
+        assert!(sanitized_post.embed.is_some());
+        let embed = sanitized_post.embed.unwrap();
+        assert!(!embed.uri.starts_with("  "));
+        assert!(!embed.uri.ends_with("  "));
+        assert!(embed.uri.starts_with("pubky://"));
+    }
+
+    #[test]
+    fn test_validate() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_id() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let invalid_id = "INVALIDID12345";
+        let result = post.validate(Some(invalid_id));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_parent_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            Some("invalid uri".to_string()),
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid parent URI format"));
+    }
+
+    #[test]
+    fn test_validate_invalid_embed_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Link,
+                uri: "invalid uri".to_string(),
+            }),
+            None,
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid embed URI format"));
+    }
+
+    #[test]
+    fn test_validate_invalid_attachment_uri() {
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "invalid uri".to_string(),
+            ]),
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
+    }
+
+    #[test]
+    fn test_validate_pubky_lock_url() {
+        let expected_lock = format!("pubky://{TEST_PUBKY_ID}/pub");
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some(expected_lock.clone()),
+        );
+
+        let id = post.create_id();
+        assert_eq!(post.lock.as_deref(), Some(expected_lock.as_str()));
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_non_pubky_lock_url_rejected() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("https://locks.example.com/session/0034A0X7NJ52G".to_string()),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must use the pubky:// scheme"));
+    }
+
+    #[test]
+    fn test_validate_invalid_lock_url() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("not a url".to_string()),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid lock URL format"));
+    }
+
+    #[test]
+    fn test_missing_lock_deserializes_unlocked() {
+        let post_json = r#"
+        {
+            "content": "Hello World!",
+            "kind": "short",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert!(post.lock.is_none());
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_collection_post_rejects_invalid_lock_url() {
+        let content = r#"{"name":"My collection","items":[]}"#.to_string();
+        let post = PubkyAppPost::new_with_lock(
+            content,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+            Some("not a url".to_string()),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid lock URL format"));
+    }
+
+    #[test]
+    fn test_collection_post_accepts_valid_lock_url() {
+        let content = r#"{"name":"My collection","items":[]}"#.to_string();
+        let lock = format!("pubky://{TEST_PUBKY_ID}/pub");
+        let post = PubkyAppPost::new_with_lock(
+            content,
+            PubkyAppPostKind::Collection,
+            None,
+            None,
+            None,
+            Some(lock.clone()),
+        );
+        let id = post.create_id();
+        assert_eq!(post.lock.as_deref(), Some(lock.as_str()));
+        assert!(post.validate(Some(&id)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_hostless_lock_url_rejected() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("pubky:lock-id".to_string()),
+        );
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must include a host"));
+    }
+
+    #[test]
+    fn test_validate_empty_lock_url_rejected() {
+        let post = PubkyAppPost::new_with_lock(
+            "Visible preview".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+            Some("".to_string()),
+        );
+        let id = post.create_id();
+        assert!(post.validate(Some(&id)).is_err());
+    }
+
+    #[test]
+    fn test_try_from_valid() {
+        let post_json = r#"
+        {
+            "content": "Hello World!",
+            "kind": "short",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let id = PubkyAppPost::new(
+            "Hello World!".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        )
+        .create_id();
+
+        let blob = post_json.as_bytes();
+        let post = <PubkyAppPost as Validatable>::try_from(blob, &id).unwrap();
+
+        assert_eq!(post.content, "Hello World!");
+    }
+
+    #[test]
+    fn test_validate_reserved_keyword() {
+        let post = PubkyAppPost::new(
+            "[DELETED]".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            None,
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_try_from_invalid_content() {
+        let content = "[DELETED]".to_string();
+        let post_json = format!(
+            r#"{{
+                "content": "{}",
+                "kind": "short",
+                "parent": null,
+                "embed": null,
+                "attachments": null
+            }}"#,
+            content
+        );
+
+        let id = PubkyAppPost::new(content.clone(), PubkyAppPostKind::Short, None, None, None)
+            .create_id();
+
+        let blob = post_json.as_bytes();
+        let result = <PubkyAppPost as Validatable>::try_from(blob, &id);
+
+        // Should fail validation because [DELETED] is a reserved keyword
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_validate_attachments_valid_protocols() {
+        // Test allowed protocols (limited to post_attachments_max_count)
+        let protocols = vec![
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+            "https://example.com/file.png".to_string(),
+            "http://example.com/file.jpg".to_string(),
+        ];
+        assert!(
+            protocols.len() <= VALIDATION_LIMITS.post_attachments_max_count,
+            "Test uses more than post_attachments_max_count"
+        );
+
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(protocols),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_attachments_all_allowed_protocols() {
+        // Test each allowed protocol individually to ensure all are accepted
+        let allowed_protocols = vec![
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G",
+            "http://example.com/file.jpg",
+            "https://example.com/file.png",
+        ];
+
+        for protocol_url in allowed_protocols {
+            let post = PubkyAppPost::new(
+                "Valid content".to_string(),
+                PubkyAppPostKind::Image,
+                None,
+                None,
+                Some(vec![protocol_url.to_string()]),
+            );
+
+            let id = post.create_id();
+            let result = post.validate(Some(&id));
+            assert!(result.is_ok(), "Should accept protocol: {}", protocol_url);
+        }
+    }
+
+    #[test]
+    fn test_validate_attachments_too_many() {
+        let mut attachments = Vec::new();
+        for i in 0..VALIDATION_LIMITS.post_attachments_max_count + 1 {
+            attachments.push(format!(
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
+                i
+            ));
+        }
+
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(attachments),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Too many attachments"));
+    }
+
+    #[test]
+    fn test_validate_attachments_invalid_protocol() {
+        // Test that disallowed protocols are rejected
+        let invalid_protocols = vec!["ftp://example.com/file", "file:///path/to/file"];
+
+        for invalid_url in invalid_protocols {
+            let post = PubkyAppPost {
+                content: "Valid content".to_string(),
+                kind: PubkyAppPostKind::Image,
+                parent: None,
+                embed: None,
+                attachments: Some(vec![invalid_url.to_string()]),
+                lock: None,
+            };
+
+            let id = post.create_id();
+            let result = post.validate(Some(&id));
+            assert!(result.is_err(), "Should reject protocol: {}", invalid_url);
+            assert!(result.unwrap_err().contains("protocol"));
+        }
+    }
+
+    #[test]
+    fn test_validate_attachments_invalid_url_format() {
+        // Create post directly without sanitization to test validation logic
+        let post = PubkyAppPost {
+            content: "Valid content".to_string(),
+            kind: PubkyAppPostKind::Image,
+            parent: None,
+            embed: None,
+            attachments: Some(vec!["not a valid url".to_string()]),
+            lock: None,
+        };
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
+    }
+
+    #[test]
+    fn test_validate_attachments_url_too_long() {
+        // Create a URL that exceeds post_attachment_url_max_length (200)
+        // Base URL structure: "pubky://<52-char-user-id>/pub/pubky.app/files/" = ~80 chars
+        // So we need a file ID that makes the total exceed 200
+        let long_file_id = "a".repeat(150); // This will make total > 200
+        let long_url = format!(
+            "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/{}",
+            long_file_id
+        );
+
+        // Verify the URL is actually too long
+        assert!(
+            long_url.chars().count() > VALIDATION_LIMITS.post_attachment_url_max_length,
+            "URL length {} should exceed {}",
+            long_url.chars().count(),
+            VALIDATION_LIMITS.post_attachment_url_max_length
+        );
+
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![long_url]),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn test_validate_attachments_empty_url() {
+        // Create post directly without sanitization to test validation logic
+        let post = PubkyAppPost {
+            content: "Valid content".to_string(),
+            kind: PubkyAppPostKind::Image,
+            parent: None,
+            embed: None,
+            attachments: Some(vec!["   ".to_string()]), // Whitespace only
+            lock: None,
+        };
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_sanitize_attachments_preserves_all() {
+        // Sanitize should preserve all attachments (just trim), validation rejects invalid
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://6mfxozzqmb36rc9rgy3rykoyfghfao74n8igt5tf1boehproahoy/pub/pubky.app/files/0034A0X7NJ52G".to_string(),
+                "https://example.com/file.jpg".to_string(),
+                "  invalid url  ".to_string(), // Should be trimmed but preserved
+            ]),
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        assert!(sanitized.attachments.is_some());
+        let attachments = sanitized.attachments.as_ref().unwrap();
+        assert_eq!(attachments.len(), 3); // All URLs should be preserved
+        assert!(attachments[0].starts_with("pubky://"));
+        assert!(attachments[1].starts_with("https://"));
+        assert_eq!(attachments[2], "invalid url"); // Trimmed but preserved
+
+        // Validation should reject the invalid URL
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
+    }
+
+    #[test]
+    fn test_sanitize_attachments_with_all_invalid_preserved() {
+        // Sanitize should preserve all attachments, validation rejects invalid
+        let post = PubkyAppPost::new(
+            "Valid content".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec!["invalid url".to_string(), "not a url".to_string()]),
+        );
+
+        let id = post.create_id();
+        let sanitized = post.sanitize();
+        assert!(sanitized.attachments.is_some()); // Attachments preserved
+        let attachments = sanitized.attachments.as_ref().unwrap();
+        assert_eq!(attachments.len(), 2);
+
+        // Validation should reject the invalid URLs
+        let result = sanitized.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid attachment URL format"));
+    }
+
+    #[test]
+    fn test_validate_empty_post_rejected() {
+        // Post with empty content, no embed, and no attachments should be rejected
+        let post = PubkyAppPost::new("".to_string(), PubkyAppPostKind::Short, None, None, None);
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("must have content, an embed, or attachments"));
+    }
+
+    #[test]
+    fn test_validate_empty_content_with_embed_accepted() {
+        // Post with empty content but with embed should be valid
+        let post = PubkyAppPost::new(
+            "".to_string(),
+            PubkyAppPostKind::Short,
+            None,
+            Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Short,
+                uri: "pubky://user123/pub/pubky.app/posts/0033SSE3B1FQ0".to_string(),
+            }),
+            None,
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(
+            result.is_ok(),
+            "Post with embed but no content should be valid"
+        );
+    }
+
+    #[test]
+    fn test_validate_empty_content_with_attachments_accepted() {
+        // Post with empty content but with attachments should be valid
+        let post = PubkyAppPost::new(
+            "".to_string(),
+            PubkyAppPostKind::Image,
+            None,
+            None,
+            Some(vec![
+                "pubky://user123/pub/pubky.app/files/0034A0X7NJ52G".to_string()
+            ]),
+        );
+
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(
+            result.is_ok(),
+            "Post with attachments but no content should be valid"
+        );
+    }
+
+    // ----- v0.4.5 forwards-compat shim: PubkyAppPostKind::Unknown -----
+
+    #[test]
+    fn test_postkind_deserializes_unknown_kind_as_unknown() {
+        // A future spec version adds a new kind that this binary doesn't know about.
+        // The serde catch-all `Unknown` variant lets old binaries deserialize without panicking.
+        let post_json = r#"
+        {
+            "content": "Hello",
+            "kind": "totally-new-kind",
+            "parent": null,
+            "embed": null,
+            "attachments": null
+        }
+        "#;
+
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.kind, PubkyAppPostKind::Unknown);
+    }
+
+    #[test]
+    fn test_postkind_existing_variants_unchanged_after_unknown_added() {
+        // Regression guard: adding Unknown with #[serde(other)] must not break round-tripping
+        // any of the six existing lowercase string forms.
+        for (s, expected) in [
+            ("short", PubkyAppPostKind::Short),
+            ("long", PubkyAppPostKind::Long),
+            ("image", PubkyAppPostKind::Image),
+            ("video", PubkyAppPostKind::Video),
+            ("link", PubkyAppPostKind::Link),
+            ("file", PubkyAppPostKind::File),
+        ] {
+            let json = format!(
+                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
+                s
+            );
+            let post: PubkyAppPost = serde_json::from_str(&json).unwrap();
+            assert_eq!(post.kind, expected, "kind={} did not round-trip", s);
+            // re-serialize and ensure the lowercase string survives
+            let re = serde_json::to_value(&post.kind).unwrap();
+            assert_eq!(re.as_str(), Some(s));
+        }
+    }
+
+    #[test]
+    fn test_postkind_unknown_rejected_by_validator() {
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Unknown,
+            parent: None,
+            embed: None,
+            attachments: None,
+            lock: None,
+        };
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_lowercase().contains("unknown"),
+            "validator should mention 'unknown' in the error"
+        );
+    }
+
+    #[test]
+    fn test_postkind_unknown_displays_as_lowercase() {
+        assert_eq!(PubkyAppPostKind::Unknown.to_string(), "unknown");
+    }
+
+    #[test]
+    fn test_postkind_fromstr_rejects_unknown_strings() {
+        // FromStr stays strict: it does NOT produce Unknown for arbitrary input.
+        // Unknown is exclusively a serde catch-all.
+        assert!(PubkyAppPostKind::from_str("foobar").is_err());
+        assert!(PubkyAppPostKind::from_str("totally-new-kind").is_err());
+    }
+
+    #[test]
+    fn test_is_known_returns_true_for_all_recognized_variants() {
+        use PubkyAppPostKind::*;
+        for k in [Short, Long, Image, Video, Link, File, Collection] {
+            assert!(k.is_known(), "{k:?} should be known");
+        }
+    }
+
+    #[test]
+    fn test_is_known_returns_false_for_unknown() {
+        assert!(!PubkyAppPostKind::Unknown.is_known());
+    }
+
+    #[test]
+    fn test_post_deserializes_embed_with_unknown_kind_as_unknown() {
+        // Embed kinds get the same forwards-compat treatment as top-level kinds:
+        // an unrecognized embed.kind deserializes to Unknown rather than failing.
+        let post_json = r#"
+        {
+            "content": "x",
+            "kind": "short",
+            "parent": null,
+            "embed": {"kind": "totally-new-embed-kind", "uri": "pubky://x/pub/pubky.app/posts/01"},
+            "attachments": null
+        }
+        "#;
+        let post: PubkyAppPost = serde_json::from_str(post_json).unwrap();
+        assert_eq!(post.embed.unwrap().kind, PubkyAppPostKind::Unknown);
+    }
+
+    #[test]
+    fn test_postkind_unknown_embed_kind_rejected_by_validator() {
+        // Counterpart to `test_postkind_unknown_rejected_by_validator`:
+        // an Unknown embed.kind also fails validation, so the spec stays as
+        // strict as before for posts that reach validation.
+        let post = PubkyAppPost {
+            content: "x".to_string(),
+            kind: PubkyAppPostKind::Short,
+            parent: None,
+            embed: Some(PubkyAppPostEmbed {
+                kind: PubkyAppPostKind::Unknown,
+                uri: "pubky://x/pub/pubky.app/posts/01".to_string(),
+            }),
+            attachments: None,
+            lock: None,
+        };
+        let id = post.create_id();
+        let result = post.validate(Some(&id));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_lowercase();
+        assert!(
+            err.contains("embed") && err.contains("unknown"),
+            "validator should mention 'embed' and 'unknown' in the error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_postkind_collection_display_lowercase() {
+        assert_eq!(PubkyAppPostKind::Collection.to_string(), "collection");
+    }
+
+    #[test]
+    fn test_postkind_fromstr_collection() {
+        assert_eq!(
+            PubkyAppPostKind::from_str("collection").unwrap(),
+            PubkyAppPostKind::Collection
+        );
+    }
+
+    #[test]
+    fn test_existing_post_kinds_unchanged_with_collection() {
+        // Regression: each of the six legacy lowercase kinds still round-trips after
+        // adding Collection. Catches accidental ordering / serde changes.
+        for s in ["short", "long", "image", "video", "link", "file"] {
+            let json = format!(
+                r#"{{"content":"x","kind":"{}","parent":null,"embed":null,"attachments":null}}"#,
+                s
+            );
+            let post: PubkyAppPost = serde_json::from_str(&json).unwrap();
+            let re = serde_json::to_value(&post.kind).unwrap();
+            assert_eq!(re.as_str(), Some(s), "kind={} did not round-trip", s);
+        }
+    }
+}
