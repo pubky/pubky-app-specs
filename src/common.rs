@@ -44,6 +44,13 @@ pub fn frozen_trim(s: &str) -> &str {
     s.trim_matches(is_frozen_whitespace)
 }
 
+/// Builder trim for optional display text. Whitespace-only means absent, so "no bio" has one
+/// spelling on the wire instead of three.
+pub(crate) fn trimmed_or_none(text: String) -> Option<String> {
+    let trimmed = frozen_trim(&text);
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 /// ASCII-only lowercase fold (tag labels, MIME essences). Full-Unicode
 /// lowercasing changes with Unicode versions, so it stays off this surface.
 pub fn ascii_fold(s: &str) -> String {

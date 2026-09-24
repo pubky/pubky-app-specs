@@ -59,9 +59,9 @@ All validation in `pubky-social-specs` happens **inside the WASM module** (Rust)
 │                    WASM Module (Rust)                    │
 │                                                         │
 │   1. Deserialize JSON                                   │
-│   2. Sanitize (trim whitespace)                         │
-│   3. Validate (using .chars().count())  ◄── Single      │
-│   4. Return Result                           Source     │
+│   2. Validate as stored, never rewritten                │
+│      (lengths via .chars().count())     ◄── Single      │
+│   3. Return Result                           Source     │
 │                                              of Truth   │
 └─────────────────────────────────────────────────────────┘
 ```

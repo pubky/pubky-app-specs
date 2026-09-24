@@ -12,7 +12,7 @@ use super::super::PubkySocialPost;
 
 /// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Article`.
 ///
-/// Parsed and validated by the spec, never stored as a top-level object. Build one through
+/// Parsed and validated by this crate, never stored as a top-level object. Build one through
 /// `PubkySocialPost::create_article_post`; the struct is public so consumers can inspect the
 /// shape. No `deny_unknown_fields`: later minors may add members, and `extra` keeps them.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]

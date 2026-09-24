@@ -10,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 /// Each FFI function:
 /// - Accepts minimal fields in a JavaScript-friendly manner (e.g. strings, JSON).
-/// - Creates the Rust model, sanitizes, and validates it.
+/// - Creates the Rust model through its builder and validates it.
 /// - Generates the ID (if applicable).
 /// - Generates the path (if applicable).
 /// - Returns { json, id, path, url } or a descriptive error.
@@ -365,10 +365,7 @@ impl PubkySpecsBuilder {
     ) -> Result<PostResult, String> {
         // Make a mutable copy so we can change its content.
         let mut post = original_post;
-        post.content = new_content;
-
-        // Re-sanitize the post (this should preserve the original created_at timestamp).
-        post = post.sanitize();
+        post.content = frozen_trim(&new_content).to_string();
         post.validate(Some(&post_id), &PUB_CTX)?;
 
         // Recreate the path and meta using the unchanged ID.
@@ -413,15 +410,17 @@ impl PubkySpecsBuilder {
     /// Creates a `kind = Collection` post, a curated list of items under a name and
     /// optional description.
     ///
-    /// Convenience wrapper around `createPost` that builds the `PubkySocialCollectionContent`
-    /// envelope (`{ name, description?, items: [{uri, note?}], cover_image?, layout? }`) and
-    /// JSON-serializes it into `content`, so JS callers do not stringify it themselves.
-    /// Items are `PubkySocialCollectionItem(uri, note)`, the same shape attachments use.
+    /// Builds the `PubkySocialCollectionContent` envelope
+    /// (`{ name, description?, items: [{uri, note?}], cover_image?, layout? }`) through
+    /// `PubkySocialPost::new_collection`, which trims the name and the description and drops a
+    /// blank description, and JSON-serializes it into `content`, so JS callers do not stringify
+    /// it themselves. Items are `PubkySocialCollectionItem(uri, note)`, the same shape
+    /// attachments use.
     ///
     /// `layout` is one of `"grid" | "list" | "visual"`.
     ///
-    /// `parent` and `embed` are not supported for Collection posts — the
-    /// validator rejects them — so this helper omits those arguments.
+    /// `parent` and `embed` are not supported for Collection posts, the validator rejects
+    /// them, so this helper omits those arguments.
     #[wasm_bindgen(js_name = createCollectionPost)]
     pub fn create_collection_post(
         &self,
@@ -434,19 +433,13 @@ impl PubkySpecsBuilder {
         let layout = layout
             .map(|s| PubkySocialCollectionLayout::from_str(&s))
             .transpose()?;
-        let envelope = PubkySocialCollectionContent {
+        let post = PubkySocialPost::new_collection(
             name,
             description,
-            items: items.unwrap_or_default(),
+            items.unwrap_or_default(),
             cover_image,
             layout,
-            extra: Default::default(),
-        };
-        let content = serde_json::to_string(&envelope)
-            .map_err(|e| format!("Failed to serialize Collection envelope: {e}"))?;
-
-        let post =
-            PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
+        );
         let post_id = post.create_id();
         post.validate(Some(&post_id), &PUB_CTX)?;
 

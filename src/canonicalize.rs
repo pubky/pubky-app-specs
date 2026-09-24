@@ -197,14 +197,12 @@ pub fn validate_reference(
         || path.starts_with(&format!("{}/", crate::constants::PRIVATE_ROOT));
     if priv_rooted {
         if ctx.root == Root::Pub {
-            return Err(format!(
-                "a public object cannot reference a private one: {uri}"
-            ));
+            return Err(format!("must not reference a private object: {uri}"));
         }
         if let Some(owner) = owner {
             if host != owner.as_ref() {
                 return Err(format!(
-                    "references a private object of another user: {uri}"
+                    "must not reference a private object of another user: {uri}"
                 ));
             }
         }
@@ -214,7 +212,7 @@ pub fn validate_reference(
             version: Some(_), ..
         } = parsed.resource
         {
-            return Err(format!("a post reference must be versionless: {uri}"));
+            return Err(format!("must be versionless: {uri}"));
         }
     }
     Ok(canonical)
@@ -476,7 +474,7 @@ mod tests {
                 owner,
             )
             .unwrap_err();
-            assert!(e.contains("public object"), "{e}");
+            assert_eq!(e, format!("must not reference a private object: {private}"));
         }
         let public = p("/pub/social/v1/posts/0032SSN7Q4EVG");
         assert!(validate_reference(
@@ -529,7 +527,13 @@ mod tests {
             PubkyId::try_from("8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo").unwrap();
         let private = p("/priv/social/v1/posts/0032SSN7Q4EVG");
         // The root rule runs first, it needs no owner; ownership is the private-root verdict
-        for (root, reason) in [(Root::Pub, "public object"), (Root::Priv, "another user")] {
+        for (root, reason) in [
+            (Root::Pub, "must not reference a private object: "),
+            (
+                Root::Priv,
+                "must not reference a private object of another user: ",
+            ),
+        ] {
             let e = validate_reference(
                 &private,
                 AllowedSchemes::Universal,
@@ -538,7 +542,7 @@ mod tests {
                 Some(&other),
             )
             .unwrap_err();
-            assert!(e.contains(reason), "{e}");
+            assert_eq!(e, format!("{reason}{private}"));
         }
         assert!(validate_reference(
             &private,
@@ -556,7 +560,7 @@ mod tests {
         let versioned = p("/pub/social/v1/posts/0032SSN7Q4EVG/0032SSN7Q4EVG.json");
         for set in [AllowedSchemes::Universal, AllowedSchemes::PubkyOnly] {
             let e = validate_reference(&versioned, set, max, &ctx(Root::Pub), None).unwrap_err();
-            assert!(e.contains("versionless"), "{e}");
+            assert_eq!(e, format!("must be versionless: {versioned}"));
         }
         assert!(validate_reference(
             &p("/pub/social/v1/posts/0032SSN7Q4EVG"),

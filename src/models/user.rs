@@ -2,7 +2,7 @@ use crate::canonicalize::{checked, AllowedSchemes};
 use crate::constants::social_path;
 use crate::traits::{Root, ValidationCtx, ValidationError};
 use crate::{
-    common::{check_extra, code_point_len, frozen_trim},
+    common::{check_extra, code_point_len, frozen_trim, trimmed_or_none},
     limits::VALIDATION_LIMITS,
     traits::{HasPath, Validatable},
 };
@@ -117,13 +117,6 @@ impl PubkySocialUserLink {
     pub fn url(&self) -> String {
         self.url.clone()
     }
-}
-
-/// Builder trim for optional display text. Whitespace-only means absent, so "no bio" has one
-/// spelling on the wire instead of three.
-fn trimmed_or_none(text: String) -> Option<String> {
-    let trimmed = frozen_trim(&text);
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -907,7 +900,10 @@ mod tests {
         ))
         .validate(None, &PUB_CTX)
         .unwrap_err();
-        assert!(e.contains("image") && e.contains("public object"), "{e}");
+        assert!(
+            e.contains("Validation Error: image must not reference a private object: "),
+            "{e}"
+        );
     }
 
     #[test]
@@ -922,7 +918,10 @@ mod tests {
             root: crate::traits::Root::Priv,
         };
         let e = <PubkySocialUser as Validatable>::try_from(&blob, "", &priv_ctx).unwrap_err();
-        assert!(e.contains("image") && e.contains("public object"), "{e}");
+        assert!(
+            e.contains("Validation Error: image must not reference a private object: "),
+            "{e}"
+        );
     }
 
     #[test]

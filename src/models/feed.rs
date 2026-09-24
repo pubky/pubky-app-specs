@@ -333,9 +333,6 @@ fn validate_tag_list(tags: &Option<Vec<String>>, field_name: &str) -> Result<(),
 }
 
 impl Validatable for PubkySocialFeedConfig {
-    // No sanitize: a stored tag list is canonical as written. Folding it here would rewrite
-    // the very bytes the id is derived from, and the reader would disagree with the writer.
-
     fn validate_fields(
         &self,
         _id: Option<&str>,
@@ -572,9 +569,6 @@ impl HasIdPath for PubkySocialFeed {
 }
 
 impl Validatable for PubkySocialFeed {
-    // No sanitize: the builder trims the name and folds the icon, and ingest carries both
-    // back as written, so reading and rewriting a feed never changes its bytes.
-
     fn validate_fields(
         &self,
         id: Option<&str>,

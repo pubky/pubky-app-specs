@@ -294,6 +294,20 @@ describe("PubkySpecs Example Objects Tests", () => {
       assert.strictEqual(post.attachments[0].alt, "a cat", "getter should return attachment instances");
     });
 
+    it("trims content in the builder and reads a stored post back as written", () => {
+      const { post } = specsBuilder.createPost("  hello  ", PubkySocialPostKind.Note, null, null, null);
+      assert.strictEqual(post.toJson().content, "hello", "Content should be trimmed");
+
+      const stored = PubkySocialPost.fromJson({
+        content: "  hello  ",
+        kind: "note",
+        parent: null,
+        embed: null,
+        attachments: [],
+      });
+      assert.strictEqual(stored.toJson().content, "  hello  ", "Content should keep its padding");
+    });
+
     it("toJson returns a plain object and keeps unknown members", () => {
       const post = PubkySocialPost.fromJson({
         content: "x",
@@ -529,6 +543,29 @@ describe("PubkySpecs Example Objects Tests", () => {
           "Collection items are objects with an optional note"
         );
         assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
+      });
+
+      it("trims name, description and item notes in the builder", () => {
+        const { post } = specsBuilder.createCollectionPost(
+          "  Favorite posts  ",
+          "  the good ones  ",
+          [new PubkySocialCollectionItem(collectionItemUri, "  worth it  ")],
+          null
+        );
+        const envelope = JSON.parse(post.toJson().content);
+        assert.strictEqual(envelope.name, "Favorite posts", "Name should be trimmed");
+        assert.strictEqual(envelope.description, "the good ones", "Description should be trimmed");
+        assert.strictEqual(envelope.items[0].note, "worth it", "Item note should be trimmed");
+      });
+
+      it("drops a blank description or item note instead of storing an empty one", () => {
+        const item = new PubkySocialCollectionItem(collectionItemUri, "   ");
+        assert.strictEqual(item.note, undefined, "Blank note should be absent");
+
+        const { post } = specsBuilder.createCollectionPost("Favorite posts", "   ", [item], null);
+        const envelope = JSON.parse(post.toJson().content);
+        assert.ok(!("description" in envelope), `Blank description should be absent, got: ${post.toJson().content}`);
+        assert.deepStrictEqual(envelope.items, [{ uri: collectionItemUri }]);
       });
 
       it("cannot create collection post with too many items", () => {

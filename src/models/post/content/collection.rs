@@ -1,4 +1,4 @@
-use crate::common::{check_extra, code_point_len, frozen_trim};
+use crate::common::{check_extra, code_point_len, frozen_trim, trimmed_or_none};
 use crate::limits::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -75,11 +75,12 @@ pub struct PubkySocialCollectionItem {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialCollectionItem {
     /// An item over a canonical `uri` with an optional curator `note`; no unknown members.
+    /// Trims the note, a blank one becoming absent; the uri passes through verbatim.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(uri: String, note: Option<String>) -> Self {
         Self {
             uri,
-            note,
+            note: note.and_then(trimmed_or_none),
             extra: Default::default(),
         }
     }
@@ -102,8 +103,8 @@ impl PubkySocialCollectionItem {
 /// Typed JSON envelope stored in `PubkySocialPost::content` when `kind == Collection`.
 ///
 /// A collection post curates an ordered list of items under a `name` and optional
-/// `description`. The envelope is parsed and validated by the spec but never re-serialized as
-/// a top-level homeserver object. Re-exported so SDK consumers can inspect the shape; the
+/// `description`. The envelope is parsed and validated by this crate, never re-serialized by it
+/// as a top-level homeserver object. Re-exported so SDK consumers can inspect the shape; the
 /// authoritative way to produce one is a `PubkySocialPost` with `kind: Collection` whose
 /// `content` JSON-parses into it. No `deny_unknown_fields`: unknown members are preserved.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
@@ -112,7 +113,8 @@ impl PubkySocialCollectionItem {
 pub struct PubkySocialCollectionContent {
     /// Display name; `collection_name_{min,max}_length` code points, not whitespace-only.
     pub name: String,
-    /// Optional description, at most `collection_description_max_length` code points.
+    /// Optional description, at most `collection_description_max_length` code points and not
+    /// whitespace-only: a blank description is an absent one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Ordered curated items, at most `collection_items_max_count`.
@@ -179,6 +181,10 @@ fn validate_collection_envelope(envelope: &PubkySocialCollectionContent) -> Resu
         ));
     }
     if let Some(desc) = &envelope.description {
+        // Absent is the one spelling of no description
+        if frozen_trim(desc).is_empty() {
+            return Err("Validation Error: Collection description must not be blank".into());
+        }
         if code_point_len(desc) > VALIDATION_LIMITS.collection_description_max_length {
             return Err(format!(
                 "Validation Error: Collection description exceeds {} characters",
@@ -413,12 +419,54 @@ mod tests {
     }
 
     #[test]
-    fn test_collection_post_accepts_empty_description() {
-        // Explicit empty-string description is valid (the field is optional and
-        // 0..=500 chars allowed).
-        let post = make_collection_post("X", Some(""), None);
-        let id = post.create_id();
-        assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
+    fn test_collection_post_rejects_blank_description() {
+        for blank in ["", " ", "\u{3000}\t"] {
+            let post = make_collection_post("X", Some(blank), None);
+            let id = post.create_id();
+            let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
+            assert!(
+                err.contains("description must not be blank"),
+                "{blank:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_item_builder_trims_the_note_and_maps_blank_to_none() {
+        let uri = "https://example.com/i".to_string();
+        let item = PubkySocialCollectionItem::new(uri.clone(), Some("  worth it\u{3000}".into()));
+        assert_eq!(item.note.as_deref(), Some("worth it"));
+        let item = PubkySocialCollectionItem::new(uri.clone(), Some(" \t ".into()));
+        assert_eq!(item.note, None);
+        assert_eq!(item.uri, uri);
+    }
+
+    #[test]
+    fn test_collection_builder_trims_and_maps_blank_description_to_none() {
+        let envelope_of = |post: &PubkySocialPost| -> PubkySocialCollectionContent {
+            serde_json::from_str(&post.content).unwrap()
+        };
+        let post = PubkySocialPost::new_collection(
+            "  Picks  ".into(),
+            Some(" \u{3000} ".into()),
+            vec![],
+            None,
+            None,
+        );
+        let envelope = envelope_of(&post);
+        assert_eq!(envelope.name, "Picks");
+        assert_eq!(envelope.description, None);
+        assert!(!post.content.contains("description"));
+        assert!(post.validate(Some(&post.create_id()), &PUB_CTX).is_ok());
+
+        let post = PubkySocialPost::new_collection(
+            "Picks".into(),
+            Some("  the best  ".into()),
+            vec![],
+            None,
+            None,
+        );
+        assert_eq!(envelope_of(&post).description.as_deref(), Some("the best"));
     }
 
     #[test]
@@ -539,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_collection_post_unknown_layout_tolerated() {
-        // Forward-compat: a layout variant from a future spec version must not
+        // Forward-compat: a layout variant from a future crate version must not
         // invalidate the whole post; it degrades to Unknown.
         let envelope_json = r#"{"name":"X","layout":"spiral"}"#;
         let post = PubkySocialPost::new(
@@ -631,7 +679,7 @@ mod tests {
         let id = post.create_id();
         let err = post.validate(Some(&id), &PUB_CTX).unwrap_err();
         assert!(
-            err.contains("items[0].uri") && err.contains("public object"),
+            err.contains("Validation Error: items[0].uri must not reference a private object: "),
             "got: {err}"
         );
         let priv_ctx = crate::traits::ValidationCtx {

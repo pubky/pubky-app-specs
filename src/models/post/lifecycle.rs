@@ -124,10 +124,10 @@ pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec
             &priv_ctx,
             Some(owner),
         )
-        .map_err(|e| format!("cannot publish: media reference {e}"))?;
+        .map_err(|e| format!("cannot publish: media uri {e}"))?;
         if canonical != uri {
             return Err(format!(
-                "cannot publish: media reference must be spelled in canonical form: {uri}"
+                "cannot publish: media uri must be spelled in canonical form: {uri}"
             ));
         }
         if uri.starts_with(&own_private) {
@@ -486,7 +486,12 @@ mod tests {
         // The Err twins, through the exported enumerator
         draft.attachments[0].uri = format!("pubky://{OTHER}/priv/social/v1/files/{leaf}");
         let e = crate::private_media_refs(&draft, &owner).unwrap_err();
-        assert!(e.contains("another user"), "{e}");
+        assert!(
+            e.contains(
+                "cannot publish: media uri must not reference a private object of another user: "
+            ),
+            "{e}"
+        );
         draft.attachments[0].uri = uri;
         draft.parent = Some(format!("pubky://{PK}/priv/social/v1/posts/{TS}"));
         let e = crate::private_media_refs(&draft, &owner).unwrap_err();
@@ -548,7 +553,12 @@ mod tests {
             "pubky://{OTHER}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"
         ))]);
         let e = plan_publish(&id, &id, &foreign, &owner()).unwrap_err();
-        assert!(e.contains("another user"), "{e}");
+        assert!(
+            e.contains(
+                "cannot publish: media uri must not reference a private object of another user: "
+            ),
+            "{e}"
+        );
         // the owner's own private post in a media position is not media
         let not_media = image(vec![att(&format!(
             "pubky://{PK}/priv/social/v1/posts/{TS}"
@@ -645,7 +655,10 @@ mod tests {
             "PUBKY://{PK}/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"
         ))]);
         let e = plan_publish(&id, &id, &shouting, &owner()).unwrap_err();
-        assert!(e.contains("media reference"), "{e}");
+        assert!(
+            e.contains("cannot publish: media uri must be a canonical pubky or web URI"),
+            "{e}"
+        );
     }
 
     #[test]

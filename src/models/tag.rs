@@ -156,9 +156,6 @@ pub fn validate_tag_label(tag: &str) -> Result<(), String> {
 }
 
 impl Validatable for PubkySocialTag {
-    // No sanitize: both fields are stored as written and validation requires the canonical
-    // form, so the bytes on the homeserver and the object in memory never disagree
-
     fn validate_fields(
         &self,
         id: Option<&str>,
