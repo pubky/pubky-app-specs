@@ -10,6 +10,8 @@ mod canonicalize;
 mod common;
 mod constants;
 pub mod limits;
+#[cfg(feature = "migrator")]
+pub mod migrate;
 mod mime;
 mod models;
 mod normalize;
