@@ -42,7 +42,7 @@ Every builder takes the writing user first and returns `{object, meta}`:
 - `object` is the stored object exactly as it is written: `JSON.stringify(object)` is the body to PUT. Media is `{bytes: Uint8Array}`.
 - `meta` is `{id, path, url}`: the generated id (`""` for the profile), the owner-relative `path`, and the full `pubky://` `url`.
 
-Every rejection is a thrown `Error` carrying the crate's own message, `Validation Error: ...` for a value the rules refuse. Ill-formed UTF-16 (a lone surrogate) is refused: a string argument before it reaches the wasm, with `Validation Error: text must be well-formed UTF-16`, and a string inside an object by the JSON parser, since objects cross as `JSON.stringify` text.
+Every rejection is a thrown `Error` whose message starts with `Validation Error: `, the crate's own text for the value the rules refuse, whatever the entry point. Ill-formed UTF-16 (a lone surrogate) is refused: a string argument before it reaches the wasm, with `Validation Error: text must be well-formed UTF-16`, and a string inside an object by the JSON parser, since objects cross as `JSON.stringify` text.
 
 ## Builders
 
