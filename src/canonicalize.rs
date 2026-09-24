@@ -155,7 +155,8 @@ impl AllowedSchemes {
 /// is invalid in any object) and the versionless rule (a social post reference names the
 /// logical post, never a stored version). `owner: None` skips only the ownership rule: plain
 /// `validate(id, ctx)` has no author in scope, so builders and ingest pass `Some`. Returns the
-/// canonical form.
+/// canonical form. An error is the fragment after the field name ("must be versionless: ...");
+/// every caller prefixes it with the position and `Validation Error: `, as [`checked`] does.
 pub fn validate_reference(
     uri: &str,
     schemes: AllowedSchemes,

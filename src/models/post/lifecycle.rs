@@ -132,10 +132,10 @@ pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec
             &priv_ctx,
             Some(owner),
         )
-        .map_err(|e| format!("cannot publish: media uri {e}"))?;
+        .map_err(|e| format!("Validation Error: cannot publish: media uri {e}"))?;
         if canonical != uri {
             return Err(format!(
-                "cannot publish: media uri must be spelled in canonical form: {uri}"
+                "Validation Error: cannot publish: media uri must be spelled in canonical form: {uri}"
             ));
         }
         if uri.starts_with(&own_private) {
@@ -143,7 +143,7 @@ pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec
             // path no reader recognizes
             if !is_media_object(&uri) {
                 return Err(format!(
-                    "cannot publish: a private reference in a media position is not a media object: {uri}"
+                    "Validation Error: cannot publish: a private reference in a media position is not a media object: {uri}"
                 ));
             }
             if !media.contains(&uri) {
@@ -151,13 +151,13 @@ pub fn private_media_refs(post: &PubkySocialPost, owner: &PubkyId) -> Result<Vec
             }
         } else if is_priv_rooted(&uri) {
             return Err(format!(
-                "cannot publish: a private reference in a media position is not media: {uri}"
+                "Validation Error: cannot publish: a private reference in a media position is not media: {uri}"
             ));
         }
     }
     if let Some(uri) = other_refs(post).into_iter().find(|u| is_priv_rooted(u)) {
         return Err(format!(
-            "cannot publish: a public post cannot reference a private object: {uri}"
+            "Validation Error: cannot publish: a public post cannot reference a private object: {uri}"
         ));
     }
     Ok(media)
@@ -211,11 +211,15 @@ pub fn plan_publish(
     if let Some(cover) = cover_of(&post) {
         let public = to_public(&cover, owner);
         if public != cover {
-            let mut envelope = envelope_of(&post).ok_or("unreachable: the cover parsed")?;
+            let mut envelope = envelope_of(&post)
+                .ok_or("Validation Error: cannot publish: the cover did not parse")?;
             // Until every envelope validates its unknown members, the planner refuses to
             // re-emit an integer a JSON engine cannot carry back
             crate::common::check_safe_numbers(&serde_json::Value::Object(envelope.clone()))
-                .map_err(|e| format!("cannot publish: {e}"))?;
+                .map_err(|e| {
+                    let e = e.strip_prefix("Validation Error: ").unwrap_or(&e);
+                    format!("Validation Error: cannot publish: {e}")
+                })?;
             envelope.insert("cover_image".into(), serde_json::Value::String(public));
             post.content = serde_json::Value::Object(envelope).to_string();
         }
@@ -315,7 +319,9 @@ pub fn plan_unpublish(
         .map(|p| edit_id_of(post_id, Root::Priv, p))
         .transpose()?;
     if public.is_empty() && head.is_none() {
-        return Err(format!("nothing to unpublish for post {post_id}"));
+        return Err(format!(
+            "Validation Error: nothing to unpublish for post {post_id}"
+        ));
     }
     let copy_backs = match &head {
         Some(head) => public
@@ -510,7 +516,7 @@ mod tests {
         let e = crate::private_media_refs(&draft, &owner).unwrap_err();
         assert!(
             e.contains(
-                "cannot publish: media uri must not reference a private object of another user: "
+                "Validation Error: cannot publish: media uri must not reference a private object of another user: "
             ),
             "{e}"
         );
@@ -577,7 +583,7 @@ mod tests {
         let e = plan_publish(&id, &id, &foreign, &owner()).unwrap_err();
         assert!(
             e.contains(
-                "cannot publish: media uri must not reference a private object of another user: "
+                "Validation Error: cannot publish: media uri must not reference a private object of another user: "
             ),
             "{e}"
         );
@@ -631,6 +637,11 @@ mod tests {
             PubkySocialPost::new(content, PubkySocialPostKind::Collection, None, None, vec![]);
         let e = plan_publish(&id, &id, &collection, &owner()).unwrap_err();
         assert!(e.contains("JSON-safe"), "{e}");
+        assert!(
+            e.starts_with("Validation Error: cannot publish: integer"),
+            "{e}"
+        );
+        assert_eq!(e.matches("Validation Error").count(), 1, "{e}");
     }
 
     #[test]
@@ -678,7 +689,9 @@ mod tests {
         ))]);
         let e = plan_publish(&id, &id, &shouting, &owner()).unwrap_err();
         assert!(
-            e.contains("cannot publish: media uri must be a canonical pubky or web URI"),
+            e.contains(
+                "Validation Error: cannot publish: media uri must be a canonical pubky or web URI"
+            ),
             "{e}"
         );
     }
