@@ -56,8 +56,9 @@ pub use models::post::lifecycle::{
     UnpublishPlan,
 };
 pub use models::post::{
-    MintedVersion, PubkySocialArticleContent, PubkySocialAttachment, PubkySocialCollectionContent,
-    PubkySocialCollectionItem, PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
+    ContentReference, MintedVersion, PostEnvelope, PostKind, PubkySocialArticleContent,
+    PubkySocialAttachment, PubkySocialCollectionContent, PubkySocialCollectionItem,
+    PubkySocialCollectionLayout, PubkySocialPost, PubkySocialPostKind,
 };
 pub use models::tag::{sanitize_tag_label, validate_tag_label, PubkySocialTag};
 pub use models::user::{PubkySocialUser, PubkySocialUserLink};

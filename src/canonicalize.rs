@@ -36,17 +36,21 @@ pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
     // Segments: no empty segment (kills `//`, leading and trailing slashes), no `.` or `..`,
     // and nowhere a `%`, `?`, `#`, an ASCII control, or a frozen-whitespace code point.
     // Everything else, including non-ASCII, passes: foreign apps may use it.
-    if path.split('/').any(|seg| {
-        seg.is_empty()
-            || seg == "."
-            || seg == ".."
-            || seg.chars().any(|c| {
-                matches!(c, '%' | '?' | '#') || c.is_ascii_control() || is_frozen_whitespace(c)
-            })
-    }) {
+    if !path.split('/').all(is_canonical_segment) {
         return Err(());
     }
     Ok(["pubky://", host, "/", path].concat())
+}
+
+/// One path segment as the pubky canonicalizer accepts it, so a namespace handed to a path
+/// builder obeys the same rule the parser applies to the stored path.
+pub(crate) fn is_canonical_segment(seg: &str) -> bool {
+    !seg.is_empty()
+        && seg != "."
+        && seg != ".."
+        && !seg.chars().any(|c| {
+            matches!(c, '/' | '%' | '?' | '#') || c.is_ascii_control() || is_frozen_whitespace(c)
+        })
 }
 
 /// The web gate: the stored and hashed form of an `http`/`https` reference is the trimmed raw
