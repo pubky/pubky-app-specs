@@ -8,11 +8,13 @@
 
 use super::post::lifecycle::delete_order;
 use super::ObjectKind;
+use crate::canonicalize::{canonicalize_pubky_uri, canonicalize_universal};
 use crate::common::{validate_hash_id_format, validate_timestamp_id_format};
-use crate::constants::social_path;
+use crate::constants::{social_path, PROTOCOL};
+use crate::mime::mime_to_ext;
 use crate::models::legacy_v0;
-use crate::normalize::resolve_deref;
-use crate::traits::{HasIdPath, HasPath, Root};
+use crate::normalize::{resolve_deref, stable_id, StableId};
+use crate::traits::{HasIdPath, HasPath, HashId, Root};
 use crate::types::PubkyId;
 use crate::uri::{is_bookmark_filename, media_stem};
 use crate::{
@@ -47,7 +49,9 @@ pub struct V0FileListing {
     pub src: String,
 }
 
-/// A v0 tag at `path` and its stored `uri` and `label`, which its id hashes.
+/// A v0 tag at `path` and its stored `uri` and `label`, which its id hashes. A tag on a v0
+/// File object also carries that object's stored `src` and `content_type`, which together
+/// name the v1 media file the tag targets.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(deny_unknown_fields)]
@@ -55,6 +59,12 @@ pub struct V0TagListing {
     pub path: String,
     pub uri: String,
     pub label: String,
+    #[serde(default)]
+    #[cfg_attr(target_arch = "wasm32", tsify(optional))]
+    pub src: Option<String>,
+    #[serde(default, rename = "contentType")]
+    #[cfg_attr(target_arch = "wasm32", tsify(optional))]
+    pub content_type: Option<String>,
 }
 
 impl Listing {
@@ -78,7 +88,9 @@ impl Listing {
 ///   hash. The result is those v0 objects, the legacy `blobs/{hash}` bytes, then every listed
 ///   filename under `pub` and under `priv`;
 /// - a tag: each v0 tag as [`Listing::V0Tag`], whose path must be the 0.x id of its stored
-///   `uri` and `label` (it differs from the v1 id), then the v1 path;
+///   `uri` and `label` (it differs from the v1 id) and whose target and label, respelled as
+///   v1 writes them, must derive this v1 id; a tag on a v0 File object also carries that
+///   object's `src` and `content_type`, which spell the v1 media target; then the v1 path;
 /// - the profile and a follow take no listings: their legacy path is known, so it comes first;
 /// - a feed takes none and is its two v1 copies, public first; a mute and a bookmark take none
 ///   and are their one private path.
@@ -163,15 +175,74 @@ fn post_paths(id: &str, listings: &[Listing]) -> Result<Vec<String>, String> {
     delete_order(id, &legacy, &copies)
 }
 
+/// The v1 spelling of a v0 tag target: a social object under its v1 path, or a web uri
+/// through the same gate the v1 builder uses. A tag on a v0 File object targets the media
+/// file, whose hash only that object's `src` names and whose extension its `content_type`.
+fn v1_tag_target(
+    uri: &str,
+    src: Option<&str>,
+    content_type: Option<&str>,
+) -> Result<String, String> {
+    if uri.starts_with("pubky") {
+        let canonical = canonicalize_pubky_uri(uri)
+            .map_err(|_| format!("Validation Error: not a pubky uri: {uri}"))?;
+        let (owner, path) = canonical[PROTOCOL.len()..]
+            .split_once('/')
+            .ok_or_else(|| format!("Validation Error: not a stored object: {uri}"))?;
+        let key = match stable_id(path) {
+            Some(StableId::Key(key)) => key,
+            Some(StableId::NeedsDeref { tsid }) => {
+                let (Some(src), Some(content_type)) = (src, content_type) else {
+                    return Err(
+                        "Validation Error: a legacy tag on a file needs its File src and content_type"
+                            .to_string(),
+                    );
+                };
+                let key = resolve_deref(&tsid, src)
+                    .ok_or_else(|| format!("Validation Error: not a legacy blob src: {src}"))?;
+                format!("{key}.{}", mime_to_ext(content_type))
+            }
+            None => return Err(format!("Validation Error: not a stored object: {uri}")),
+        };
+        let leaf = match key.as_str() {
+            "profile" => PubkySocialUser::PATH_SEGMENT.to_string(),
+            k if k.starts_with("posts/") || k.starts_with("files/") => key,
+            _ => format!("{key}.json"),
+        };
+        return Ok([PROTOCOL, owner, &social_path(Root::Pub, &leaf)].concat());
+    }
+    if uri.starts_with("http://") || uri.starts_with("https://") {
+        return canonicalize_universal(uri)
+            .map_err(|_| format!("Validation Error: not a canonical web uri: {uri}"));
+    }
+    Err(format!(
+        "Validation Error: not a tag target v1 spells: {uri}"
+    ))
+}
+
 fn tag_paths(id: &str, listings: &[Listing]) -> Result<Vec<String>, String> {
     validate_hash_id_format(id)?;
     let mut deletes = Vec::new();
     for listing in listings {
-        let Listing::V0Tag(V0TagListing { path, uri, label }) = listing else {
+        let Listing::V0Tag(V0TagListing {
+            path,
+            uri,
+            label,
+            src,
+            content_type,
+        }) = listing
+        else {
             return Err(not_a_copy("tag", id, listing.path()));
         };
         if *path != format!("{LEGACY_PREFIX}tags/{}", legacy_v0::tag_id(uri, label)) {
             return Err(not_a_copy("tag", id, path));
+        }
+        // The 0.x id proves the entry is a tag; only the v1 id proves it is this one
+        let target = v1_tag_target(uri, src.as_deref(), content_type.as_deref())?;
+        if PubkySocialTag::new(target, label.clone()).create_id() != id {
+            return Err(format!(
+                "Validation Error: legacy tag {path} is not a copy of tag {id}"
+            ));
         }
         deletes.push(path.clone());
     }
@@ -414,44 +485,153 @@ mod tests {
         );
     }
 
+    fn v0_tag(uri: &str, label: &str, file: Option<(&str, &str)>) -> Listing {
+        Listing::V0Tag(V0TagListing {
+            path: format!("/pub/pubky.app/tags/{}", legacy_v0::tag_id(uri, label)),
+            uri: uri.into(),
+            label: label.into(),
+            src: file.map(|(src, _)| src.to_string()),
+            content_type: file.map(|(_, ct)| ct.to_string()),
+        })
+    }
+
+    fn v1_tag_id(uri: &str, label: &str) -> String {
+        PubkySocialTag::new(uri.into(), label.into()).create_id()
+    }
+
     #[test]
     fn a_tag_takes_its_listed_v0_copies_then_the_v1_path() {
-        let uri = format!("pubky://{PK}/pub/pubky.app/profile.json");
-        // The v1 hash of the same input is the oracle: both epochs hash `{uri}:{label}` alike
-        let v0_id = crate::traits::hash_id_of(&format!("{uri}:friend"));
-        let legacy = format!("/pub/pubky.app/tags/{v0_id}");
-        let entry = Listing::V0Tag(V0TagListing {
-            path: legacy.clone(),
-            uri: uri.clone(),
-            label: "friend".into(),
-        });
+        let entry = v0_tag(
+            &format!("pubky://{PK}/pub/pubky.app/profile.json"),
+            "friend",
+            None,
+        );
+        let id = v1_tag_id(&crate::user_uri_builder(PK.into()), "friend");
         assert_eq!(
-            deletion_paths(ObjectKind::Tag, H26, &[entry.clone(), entry.clone()]).unwrap(),
-            vec![legacy.clone(), format!("/pub/social/v1/tags/{H26}.json")]
+            deletion_paths(ObjectKind::Tag, &id, &[entry.clone(), entry.clone()]).unwrap(),
+            vec![
+                entry.path().to_string(),
+                format!("/pub/social/v1/tags/{id}.json")
+            ]
         );
         assert_eq!(
             deletion_paths(ObjectKind::Tag, H26, &[]).unwrap(),
             vec![format!("/pub/social/v1/tags/{H26}.json")]
         );
         // A path the stored uri and label do not hash to, or a bare path, is refused
+        let Listing::V0Tag(good) = entry.clone() else {
+            unreachable!()
+        };
         let strays = [
             Listing::V0Tag(V0TagListing {
-                path: legacy.clone(),
-                uri,
                 label: "foe".into(),
+                ..good.clone()
             }),
             Listing::V0Tag(V0TagListing {
-                path: format!("{legacy}/"),
-                uri: format!("pubky://{PK}/pub/pubky.app/profile.json"),
-                label: "friend".into(),
+                path: format!("{}/", good.path),
+                ..good
             }),
-            Listing::Path(legacy),
+            Listing::Path(entry.path().to_string()),
         ];
         for stray in strays {
             let err =
-                deletion_paths(ObjectKind::Tag, H26, std::slice::from_ref(&stray)).unwrap_err();
+                deletion_paths(ObjectKind::Tag, &id, std::slice::from_ref(&stray)).unwrap_err();
             assert!(err.contains(stray.path()), "{err}");
         }
+    }
+
+    #[test]
+    fn a_tag_refuses_a_v0_tag_of_another_label_or_target() {
+        let v0_post = format!("pubky://{PK}/pub/pubky.app/posts/{TS}");
+        let v1_post = crate::post_uri_builder(PK.into(), TS.into());
+        let id = v1_tag_id(&v1_post, "cool");
+        assert!(deletion_paths(ObjectKind::Tag, &id, &[v0_tag(&v0_post, "cool", None)]).is_ok());
+        // The builder folds the label, so the check does too
+        assert!(deletion_paths(ObjectKind::Tag, &id, &[v0_tag(&v0_post, "CoOl", None)]).is_ok());
+        let other_label = v0_tag(&v0_post, "hot", None);
+        let other_target = v0_tag(
+            &format!("pubky://{PK}/pub/pubky.app/posts/0034A0X7NJ52G"),
+            "cool",
+            None,
+        );
+        for stray in [other_label, other_target] {
+            let err =
+                deletion_paths(ObjectKind::Tag, &id, std::slice::from_ref(&stray)).unwrap_err();
+            assert!(
+                err == format!(
+                    "Validation Error: legacy tag {} is not a copy of tag {id}",
+                    stray.path()
+                ),
+                "{err}"
+            );
+        }
+        // A target v1 never spells cannot be a copy of any v1 tag
+        for uri in [
+            format!("pubky://{PK}/pub/other.app/posts/{TS}"),
+            format!("pubky://{PK}"),
+            "ftp://example.com/x".to_string(),
+        ] {
+            assert!(
+                deletion_paths(ObjectKind::Tag, &id, &[v0_tag(&uri, "cool", None)]).is_err(),
+                "{uri}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_tag_on_a_v0_file_needs_the_file_src_and_content_type() {
+        let v0_file = format!("pubky://{PK}/pub/pubky.app/files/{TS}");
+        let src = format!("pubky://{PK}/pub/pubky.app/blobs/{H26}");
+        let id = v1_tag_id(
+            &format!("pubky://{PK}/pub/social/v1/files/{H26}.png"),
+            "pic",
+        );
+        let entry = v0_tag(&v0_file, "pic", Some((&src, "image/png")));
+        assert_eq!(
+            deletion_paths(ObjectKind::Tag, &id, std::slice::from_ref(&entry)).unwrap(),
+            vec![
+                entry.path().to_string(),
+                format!("/pub/social/v1/tags/{id}.json")
+            ]
+        );
+        let Listing::V0Tag(full) = entry else {
+            unreachable!()
+        };
+        for missing in [
+            V0TagListing {
+                src: None,
+                ..full.clone()
+            },
+            V0TagListing {
+                content_type: None,
+                ..full.clone()
+            },
+        ] {
+            let err = deletion_paths(ObjectKind::Tag, &id, &[Listing::V0Tag(missing)]).unwrap_err();
+            assert!(err.contains("needs its File src and content_type"), "{err}");
+        }
+        // Other bytes or another extension is a tag on another file
+        let other = format!("pubky://{PK}/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR");
+        for file in [(other.as_str(), "image/png"), (src.as_str(), "image/jpeg")] {
+            assert!(
+                deletion_paths(ObjectKind::Tag, &id, &[v0_tag(&v0_file, "pic", Some(file))])
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn a_tag_on_a_web_uri_keeps_its_target() {
+        let uri = "https://example.com/post/1";
+        let id = v1_tag_id(uri, "cool");
+        assert_eq!(
+            deletion_paths(ObjectKind::Tag, &id, &[v0_tag(uri, "cool", None)]).unwrap(),
+            vec![
+                format!("/pub/pubky.app/tags/{}", legacy_v0::tag_id(uri, "cool")),
+                format!("/pub/social/v1/tags/{id}.json"),
+            ]
+        );
+        assert!(deletion_paths(ObjectKind::Tag, H26, &[v0_tag(uri, "cool", None)]).is_err());
     }
 
     #[test]

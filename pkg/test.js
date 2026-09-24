@@ -892,16 +892,36 @@ describe("pubky-social-specs", () => {
         `/pub/pubky.app/follows/${RIO}`,
         `/pub/social/v1/follows/${RIO}.json`,
       ]);
-      // The 0.x tag id hashes the stored uri and label the way a v1 tag id does
-      const uri = userUriBuilder(RIO);
+      // The 0.x tag id hashes the stored uri and label the way a v1 tag id does, so the v1
+      // builder over the v0 spelling is the oracle for the legacy path
+      const uri = `pubky://${RIO}/pub/pubky.app/profile.json`;
       const v0Id = createTag(OTTO, uri, "friend").meta.id;
       const entry = { path: `/pub/pubky.app/tags/${v0Id}`, uri, label: "friend" };
-      assert.deepStrictEqual(deletionPaths({ kind: "tag", id: hash, listings: [entry] }), [
+      const id = createTag(OTTO, userUriBuilder(RIO), "friend").meta.id;
+      assert.deepStrictEqual(deletionPaths({ kind: "tag", id, listings: [entry] }), [
         entry.path,
-        `/pub/social/v1/tags/${hash}.json`,
+        `/pub/social/v1/tags/${id}.json`,
       ]);
-      rejects(() => deletionPaths({ kind: "tag", id: hash, listings: [{ ...entry, label: "foe" }] }), /not a stored copy of tag/);
-      rejects(() => deletionPaths({ kind: "tag", id: hash, listings: [entry.path] }), /not a stored copy of tag/);
+      // A v0 tag of another target is not a copy of this tag, valid as it is
+      const otherId = createTag(OTTO, userUriBuilder(OTTO), "friend").meta.id;
+      rejects(() => deletionPaths({ kind: "tag", id: otherId, listings: [entry] }), `Validation Error: legacy tag ${entry.path} is not a copy of tag ${otherId}`);
+      rejects(() => deletionPaths({ kind: "tag", id, listings: [{ ...entry, label: "foe" }] }), /not a stored copy of tag/);
+      rejects(() => deletionPaths({ kind: "tag", id, listings: [entry.path] }), /not a stored copy of tag/);
+      // A tag on a v0 File object targets the v1 media file, which its src and content_type spell
+      const fileUri = `pubky://${RIO}/pub/pubky.app/files/0032SSN7Q4EVG`;
+      const onFile = {
+        path: `/pub/pubky.app/tags/${createTag(OTTO, fileUri, "pic").meta.id}`,
+        uri: fileUri,
+        label: "pic",
+        src: `pubky://${RIO}/pub/pubky.app/blobs/${hash}`,
+        contentType: "image/png",
+      };
+      const fileTagId = createTag(OTTO, `pubky://${RIO}/pub/social/v1/files/${hash}.png`, "pic").meta.id;
+      assert.deepStrictEqual(deletionPaths({ kind: "tag", id: fileTagId, listings: [onFile] }), [
+        onFile.path,
+        `/pub/social/v1/tags/${fileTagId}.json`,
+      ]);
+      rejects(() => deletionPaths({ kind: "tag", id: fileTagId, listings: [{ ...onFile, contentType: undefined }] }), /needs its File src and content_type/);
     });
 
     it("is the one private path for a mute", () => {
