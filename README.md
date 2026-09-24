@@ -46,13 +46,16 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 
 ## Features
 
-| Feature   | Purpose                        |
-| --------- | ------------------------------ |
-| `openapi` | OpenAPI schemas via `utoipa`   |
+| Feature    | Purpose                        |
+| ---------- | ------------------------------ |
+| `openapi`  | OpenAPI schemas via `utoipa`   |
+| `migrator` | The 0.x to v1 transforms       |
 
 ```toml
 pubky-social-specs = { version = "1.0.0-alpha.4", features = ["openapi"] }
 ```
+
+`migrator` adds the `migrate` module: pure functions that take one owner's `pub/pubky.app/` objects as bytes and return the `social/v1` objects to write, with references rewritten, media dereferenced through the 0.x File objects, content-addressed ids re-derived, and every output read back through the v1 reader before it is returned. An object that cannot migrate is skipped with a counted category, never repaired. Only a client that runs the migration needs it, so it is off by default and adds nothing to the wasm bundle otherwise.
 
 - **MSRV:** 1.89 (see `rust-version` in `Cargo.toml`)
 - **API docs:** [docs.rs/pubky-social-specs](https://docs.rs/pubky-social-specs)
