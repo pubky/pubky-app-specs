@@ -72,6 +72,29 @@ fn parse_uri_tags_the_resource() {
     );
 }
 
+#[cfg(feature = "migrator")]
+#[wasm_bindgen_test]
+fn a_migrated_write_is_what_read_object_gives_with_its_meta() {
+    use pubky_social_specs::wasm::{create_migration, migrate};
+    let mut run = create_migration(PK).unwrap();
+    let path = format!("pub/pubky.app/follows/{PK}");
+    let result = migrate(&mut run, &path, br#"{"created_at":1727740800000000}"#).unwrap();
+    let write = js_sys::Array::from(&get(&result, "writes")).get(0);
+    assert_eq!(string(&write, "kind"), "follow");
+    assert_eq!(string(&write, "meta.id"), PK);
+    assert_eq!(
+        string(&write, "meta.url"),
+        follow_uri_builder(PK.into(), PK.into())
+    );
+    assert_eq!(
+        get(&write, "object.created_at").as_f64(),
+        Some(1727740800000000.0)
+    );
+    assert_eq!(js_sys::Array::from(&get(&result, "dropped")).length(), 0);
+    let skipped = migrate(&mut run, &path, b"not json").unwrap();
+    assert_eq!(string(&skipped, "skip"), "malformed");
+}
+
 #[wasm_bindgen_test]
 fn a_built_object_reads_back_and_validates() {
     let uri = format!("pubky://{PK}/pub/social/v1/profile.json");

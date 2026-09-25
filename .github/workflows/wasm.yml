@@ -20,4 +20,4 @@ jobs:
       - name: Install Firefox
         uses: browser-actions/setup-firefox@v1
       - name: Run Wasm-Pack Tests
-        run: wasm-pack test --headless --firefox
+        run: wasm-pack test --headless --firefox -- --features migrator
