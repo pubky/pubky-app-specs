@@ -10,6 +10,7 @@
 import * as glue from "./pubky_social_specs.js";
 import { validationLimits } from "./validationLimits.js";
 import { validMimeTypes, mimeToExtTable } from "./mimeTypes.js";
+import { skipReasons } from "./skipReasons.js";
 
 const MALFORMED = "Validation Error: text must be well-formed UTF-16";
 
@@ -50,14 +51,25 @@ function wellFormed(text) {
 // What each argument slot takes. A value of another type never reaches the wasm, where a
 // non-string in a string slot reads memory it does not own.
 const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+// The glue allocates what `length` reports and copies what the view holds, so a subclass whose
+// getter lies would write past its allocation: the view's own length has to agree with it
+const intrinsicLength = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  "length",
+).get;
+// Any realm's Uint8Array (or a Buffer): a view of single bytes
+const isBytes = (v) => {
+  if (!ArrayBuffer.isView(v) || v.BYTES_PER_ELEMENT !== 1) return false;
+  try {
+    return intrinsicLength.call(v) === v.length;
+  } catch {
+    return false; // a DataView has no intrinsic length
+  }
+};
 const KINDS = {
   string: [(v) => typeof v === "string", "a string"],
   "string?": [(v) => v === undefined || v === null || typeof v === "string", "a string or absent"],
-  // Any realm's Uint8Array (or a Buffer): a view of single bytes that is not a DataView
-  bytes: [
-    (v) => ArrayBuffer.isView(v) && v.BYTES_PER_ELEMENT === 1 && !(v instanceof DataView),
-    "a Uint8Array",
-  ],
+  bytes: [isBytes, "a Uint8Array"],
   object: [isObject, "an object"],
   "object?": [(v) => v === undefined || v === null || isObject(v), "an object or absent"],
   array: [(v) => Array.isArray(v), "an array"],
@@ -66,6 +78,8 @@ const KINDS = {
     (v) => Array.isArray(v) && Array.from(v).every((s) => typeof s === "string"),
     "an array of strings",
   ],
+  // A handle this glue made; one from the other entry holds a pointer into another instance
+  migration: [(v) => v instanceof glue.Migration, "a Migration handle"],
 };
 
 // A string argument, and each string of a `strings` slot, reaches the wasm as it is
@@ -139,12 +153,17 @@ const bookmarkUriBuilder = wrap("bookmarkUriBuilder", "string", "string");
 const tagUriBuilder = wrap("tagUriBuilder", "string", "string");
 const fileUriBuilder = wrap("fileUriBuilder", "string", "string");
 const feedUriBuilder = wrap("feedUriBuilder", "string", "string");
+// Migration; the package is built with the transforms, so the exports are always there
+const Migration = glue.Migration;
+const createMigration = wrap("createMigration", "string");
+const migrate = wrap("migrate", "migration", "string", "bytes");
 
 export {
   init,
   validationLimits,
   validMimeTypes,
   mimeToExtTable,
+  skipReasons,
   parseUri,
   stableId,
   resolveDeref,
@@ -183,4 +202,7 @@ export {
   tagUriBuilder,
   fileUriBuilder,
   feedUriBuilder,
+  Migration,
+  createMigration,
+  migrate,
 };

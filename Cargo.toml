@@ -23,6 +23,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "bundle_specs_npm"
+# The npm build ships the transforms and writes their data twin from the native crate
+required-features = ["migrator"]
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
@@ -52,7 +57,8 @@ anyhow = "1.0.100"
 
 [features]
 openapi = ["utoipa"]
-# The v0 to v1 transforms. Off by default: only a client that runs the migration needs them.
+# The v0 to v1 transforms. Off by default for the crate: only a client that runs the
+# migration needs them. The npm package is built with them, since it is that client.
 migrator = []
 
 [profile.release]
