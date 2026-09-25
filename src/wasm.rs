@@ -1,12 +1,14 @@
 //! The JS surface: plain functions over plain objects.
 //!
-//! Every export takes and returns plain JS values (strings, `Uint8Array`, objects), never a
-//! class, and throws an `Error` carrying the crate's own message. Builders take the writing
-//! user first, since `meta.url` names them, and return `{object, meta}` where `object` is the
-//! wire object exactly as it is stored. The package entry (`pkg/index.js`) wraps every export:
-//! it loads the wasm in `init()` and rejects a string argument holding ill-formed UTF-16 before
-//! it gets here, since a Rust string cannot carry a lone surrogate and the conversion would
-//! replace it silently. Objects cross as `JSON.stringify` text, whose parser refuses one.
+//! Every export takes and returns plain JS values (strings, `Uint8Array`, objects) and throws
+//! an `Error` carrying the crate's own message. The one class is the migration run handle: it
+//! holds state that lives across calls (what the 0.x File objects said), and copying that in
+//! and out on every call would grow with the tree. Builders take the writing user first, since
+//! `meta.url` names them, and return `{object, meta}` where `object` is the wire object exactly
+//! as it is stored. The package entry (`pkg/index.js`) wraps every export: it loads the wasm in
+//! `init()` and rejects a string argument holding ill-formed UTF-16 before it gets here, since
+//! a Rust string cannot carry a lone surrogate and the conversion would replace it silently.
+//! Objects cross as `JSON.stringify` text, whose parser refuses one.
 
 use crate::canonicalize::canonicalize_pubky_uri;
 use crate::constants::PROTOCOL;
@@ -64,13 +66,21 @@ fn owner_of(owner: &str) -> Result<PubkyId, JsError> {
 }
 
 /// A plain object from named values, for the shapes serde cannot give (a `Uint8Array` member).
-fn object_of(members: &[(&str, &JsValue)]) -> JsValue {
+fn object_of(members: &[(&str, &JsValue)]) -> Result<JsValue, JsError> {
     let out = js_sys::Object::new();
     for (name, value) in members {
-        // Setting a data property on a fresh plain object cannot throw
-        let _ = js_sys::Reflect::set(&out, &JsValue::from_str(name), value);
+        // A setter or a read-only member planted on Object.prototype intercepts the set, by
+        // throwing or by refusing; an object missing a member must not come back as a result
+        match js_sys::Reflect::set(&out, &JsValue::from_str(name), value) {
+            Ok(true) => {}
+            _ => {
+                return Err(fail(format!(
+                    "Validation Error: cannot set member {name} on a plain object"
+                )))
+            }
+        }
     }
-    out.into()
+    Ok(out.into())
 }
 
 /// Where a built object goes. `id` is empty for the profile, `path` is owner-relative and
@@ -93,11 +103,11 @@ impl Meta {
 }
 
 fn created(object: JsValue, meta: Meta) -> Result<JsValue, JsError> {
-    Ok(object_of(&[("object", &object), ("meta", &to_js(&meta)?)]))
+    object_of(&[("object", &object), ("meta", &to_js(&meta)?)])
 }
 
 /// Media has no JSON form, so it crosses as `{bytes}`, one copy out of wasm memory.
-fn file_object(file: &PubkySocialFile) -> JsValue {
+fn file_object(file: &PubkySocialFile) -> Result<JsValue, JsError> {
     object_of(&[("bytes", &js_sys::Uint8Array::from(&file.0[..]).into())])
 }
 
@@ -252,7 +262,7 @@ fn object_js(object: &PubkySocialObject) -> Result<JsValue, JsError> {
         PubkySocialObject::Mute(o) => to_js(o),
         PubkySocialObject::Bookmark(o) => to_js(o),
         PubkySocialObject::Tag(o) => to_js(o),
-        PubkySocialObject::File(o) => Ok(file_object(o)),
+        PubkySocialObject::File(o) => file_object(o),
         PubkySocialObject::Feed(o) => to_js(o),
     }
 }
@@ -264,10 +274,7 @@ fn object_js(object: &PubkySocialObject) -> Result<JsValue, JsError> {
 pub fn read_object(uri: &str, bytes: Vec<u8>) -> Result<JsValue, JsError> {
     let object = PubkySocialObject::from_uri_owned(uri, bytes).map_err(fail)?;
     let kind = JsValue::from_str(object.kind().wire_name());
-    Ok(object_of(&[
-        ("kind", &kind),
-        ("object", &object_js(&object)?),
-    ]))
+    object_of(&[("kind", &kind), ("object", &object_js(&object)?)])
 }
 
 /// Throws unless `object` is valid at `uri`, by the path `readObject` takes: for an object
@@ -287,9 +294,10 @@ pub fn validate(uri: &str, object: JsValue) -> Result<(), JsError> {
                     .as_deref()
                     == Some("Uint8Array")
             })
-            .map(|b| b.unchecked_into::<js_sys::Uint8Array>())
-            .ok_or_else(|| fail("Validation Error: a media object is {bytes: Uint8Array}"))?
-            .to_vec(),
+            .ok_or_else(|| fail("Validation Error: a media object is {bytes: Uint8Array}"))
+            // Copied through the constructor, which reads the view's own length rather than
+            // a `length` a subclass reports, so the copy cannot outrun its allocation
+            .map(|b| js_sys::Uint8Array::new(&b).to_vec())?,
         _ => json_of(&object)?.into_bytes(),
     };
     PubkySocialObject::from_uri_owned(uri, bytes).map_err(fail)?;
@@ -832,7 +840,7 @@ pub fn create_file(
     let root = root_of(root)?;
     let made = PubkySocialFile::create_file(bytes, declared_type, root).map_err(fail)?;
     let meta = Meta::new(&owner, &made.id, made.path);
-    created(file_object(&made.file), meta)
+    created(file_object(&made.file)?, meta)
 }
 
 /// The path extension a declared type maps to; `"bin"` for anything unmapped or malformed.
@@ -940,4 +948,79 @@ pub fn file_uri_builder(author_id: String, filename: String) -> Result<String, J
 pub fn feed_uri_builder(author_id: String, feed_id: String) -> Result<String, JsError> {
     owner_of(&author_id)?;
     Ok(crate::feed_uri_builder(author_id, feed_id))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Migration
+// ---------------------------------------------------------------------------------------------
+
+#[cfg(feature = "migrator")]
+pub use migration::{create_migration, migrate, Migration};
+
+#[cfg(feature = "migrator")]
+mod migration {
+    use super::*;
+    use crate::migrate::MigrationCtx;
+
+    /// One run over an owner's 0.x tree: what the v0 File objects read so far say about
+    /// names, blobs and extensions. Opaque to JS; `free()` it when the run ends.
+    #[wasm_bindgen]
+    pub struct Migration {
+        ctx: MigrationCtx,
+    }
+
+    /// A run for `owner`; feed it every path of the 0.x tree through `migrate`.
+    #[wasm_bindgen(js_name = createMigration)]
+    pub fn create_migration(owner: &str) -> Result<Migration, JsError> {
+        Ok(Migration {
+            ctx: MigrationCtx::new(owner_of(owner)?),
+        })
+    }
+
+    /// One 0.x object by its owner-relative path or the full `pubky://` URL a LIST returns:
+    /// `{writes, dropped}`, each write as `readObject` reads it plus its `meta`, or `{skip}`
+    /// with the category. A File object is read into the run and writes nothing, so walk
+    /// `files/` first.
+    #[wasm_bindgen]
+    pub fn migrate(
+        migration: &mut Migration,
+        v0_path: &str,
+        bytes: &[u8],
+    ) -> Result<JsValue, JsError> {
+        let migrated = match migration.ctx.migrate(v0_path, bytes) {
+            Ok(migrated) => migrated,
+            Err(skip) => return to_js(&serde_json::json!({ "skip": skip.as_str() })),
+        };
+        let owner = migration.ctx.owner();
+        let writes = js_sys::Array::new();
+        for (path, bytes) in migrated.writes {
+            writes.push(&write_js(owner, &path, bytes)?);
+        }
+        let dropped: Vec<String> = migrated.dropped.iter().map(ToString::to_string).collect();
+        object_of(&[
+            ("writes", &JsValue::from(writes)),
+            ("dropped", &to_js(&dropped)?),
+        ])
+    }
+
+    /// A write as `readObject` reads it back, with where it goes, so after the PUT the
+    /// engine holds what a later GET would give. Media is wrapped as it is: its bytes passed
+    /// the same gate in the transform, and hashing them again would double the cost of a blob.
+    fn write_js(owner: &PubkyId, path: &str, bytes: Vec<u8>) -> Result<JsValue, JsError> {
+        let url = [PROTOCOL, owner.as_ref(), "/", path].concat();
+        let parsed = ParsedUri::try_from(url.as_str())
+            .map_err(|_| fail("Validation Error: unreachable, the transform read this path"))?;
+        let id = parsed.resource.id().unwrap_or_default();
+        let object = match parsed.resource {
+            Resource::File(_) => PubkySocialObject::File(PubkySocialFile(bytes)),
+            _ => PubkySocialObject::from_uri_owned(&url, bytes).map_err(|_| {
+                fail("Validation Error: unreachable, the transform read this object back")
+            })?,
+        };
+        object_of(&[
+            ("kind", &JsValue::from_str(object.kind().wire_name())),
+            ("object", &object_js(&object)?),
+            ("meta", &to_js(&Meta::new(owner, &id, format!("/{path}")))?),
+        ])
+    }
 }
