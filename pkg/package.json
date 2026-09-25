@@ -29,7 +29,13 @@
       "import": "./mimeTypes.js",
       "require": "./mimeTypes.cjs"
     },
-    "./mimeTypes.json": "./mimeTypes.json"
+    "./mimeTypes.json": "./mimeTypes.json",
+    "./skipReasons": {
+      "types": "./skipReasons.d.ts",
+      "import": "./skipReasons.js",
+      "require": "./skipReasons.cjs"
+    },
+    "./skipReasons.json": "./skipReasons.json"
   },
   "files": [
     "index.js",
@@ -47,7 +53,11 @@
     "mimeTypes.json",
     "mimeTypes.js",
     "mimeTypes.cjs",
-    "mimeTypes.d.ts"
+    "mimeTypes.d.ts",
+    "skipReasons.json",
+    "skipReasons.js",
+    "skipReasons.cjs",
+    "skipReasons.d.ts"
   ],
   "homepage": "https://pubky.app",
   "keywords": [
@@ -64,9 +74,9 @@
     "url": "git+https://github.com/pubky/pubky-social-specs.git"
   },
   "scripts": {
-    "build": "cargo run --bin bundle_specs_npm",
+    "build": "cargo run --features migrator --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts && mocha test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts skipReasons.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts skipReasons.d.ts && mocha test.js"
   },
   "sideEffects": false,
   "type": "module",

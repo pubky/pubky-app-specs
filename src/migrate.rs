@@ -73,11 +73,25 @@ pub enum Skip {
     Oversize,
     /// The output fails the v1 reader.
     Invalid,
-    /// The path is not a v0 object with a v1 counterpart.
+    /// The path is not a v0 object with a v1 counterpart, or it is another owner's.
     NotMigrated,
 }
 
 impl Skip {
+    /// Every category, in declaration order, for a report that counts them.
+    pub const ALL: &[Skip] = &[
+        Skip::Malformed,
+        Skip::Shape,
+        Skip::UnsafeInteger,
+        Skip::Tombstone,
+        Skip::EmptyTitle,
+        Skip::UnknownPostKind,
+        Skip::UnknownFeedContent,
+        Skip::Oversize,
+        Skip::Invalid,
+        Skip::NotMigrated,
+    ];
+
     /// The snake_case category name.
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -192,11 +206,13 @@ impl MigrationCtx {
 
         if let Some(hash) = &hash {
             // One extension per blob: the File with the bytewise-lowest id names it, so the
-            // answer does not depend on the order the run met the Files in
+            // answer does not depend on the order the run met the Files in; a File read again
+            // replaces its own earlier reading, as it does in `files`
             let ext = mime_to_ext(content_type);
             let image = essence(content_type).is_some_and(|e| e.starts_with("image/"));
-            let lower = |(held, _, _): &(String, String, bool)| tsid.as_bytes() < held.as_bytes();
-            if self.exts.get(hash).is_none_or(lower) {
+            let takes_over =
+                |(held, _, _): &(String, String, bool)| tsid.as_bytes() <= held.as_bytes();
+            if self.exts.get(hash).is_none_or(takes_over) {
                 self.exts
                     .insert(hash.clone(), (tsid.to_string(), ext, image));
             }
@@ -209,6 +225,18 @@ impl MigrationCtx {
             },
         );
         Ok(())
+    }
+
+    /// One v0 object by its owner-relative path, for a run that walks the tree: a File
+    /// object is read into the run and writes nothing, anything else goes through
+    /// [`transform`]. Walk `files/` first, so the objects that reference them find them.
+    pub fn migrate(&mut self, v0_path: &str, v0_bytes: &[u8]) -> Result<Migrated, Skip> {
+        match classify(&self.owner, v0_path)? {
+            legacy_v0::Resource::File(tsid) => self
+                .read_v0_file(&tsid, v0_bytes)
+                .map(|()| Migrated::default()),
+            resource => transform_resource(resource, v0_bytes, self),
+        }
     }
 
     /// The extension a blob migrates under; `bin` for a blob no File names.
@@ -713,18 +741,41 @@ pub fn transform_blob(hash: &str, bytes: &[u8], ctx: &MigrationCtx) -> Result<Mi
 
 /// Any v0 object by its owner-relative path (`pub/pubky.app/...`), classified by the v0
 /// parser. A v0 File has no v1 counterpart and writes nothing; read it into the context with
-/// [`MigrationCtx::read_v0_file`] before anything that references it.
+/// [`MigrationCtx::read_v0_file`] before anything that references it, or walk the tree with
+/// [`MigrationCtx::migrate`], which does both.
 pub fn transform(v0_path: &str, v0_bytes: &[u8], ctx: &MigrationCtx) -> Result<Migrated, Skip> {
-    use legacy_v0::Resource;
-    let uri = [
-        PROTOCOL,
-        ctx.owner.as_ref(),
-        "/",
-        v0_path.trim_start_matches('/'),
-    ]
-    .concat();
+    transform_resource(classify(&ctx.owner, v0_path)?, v0_bytes, ctx)
+}
+
+/// What the v0 parser calls a path of the owner's tree, given as the owner-relative path or
+/// the full `pubky://` URL a LIST returns. A path it does not know has no v1 counterpart, and
+/// another owner's tree is not this run's to migrate.
+fn classify(owner: &PubkyId, v0_path: &str) -> Result<legacy_v0::Resource, Skip> {
+    let uri = if v0_path.starts_with(PROTOCOL) {
+        v0_path.to_string()
+    } else {
+        [
+            PROTOCOL,
+            owner.as_ref(),
+            "/",
+            v0_path.trim_start_matches('/'),
+        ]
+        .concat()
+    };
     let parsed = legacy_v0::ParsedUri::try_from(uri.as_str()).map_err(|_| Skip::NotMigrated)?;
-    match parsed.resource {
+    if parsed.user_id != *owner {
+        return Err(Skip::NotMigrated);
+    }
+    Ok(parsed.resource)
+}
+
+fn transform_resource(
+    resource: legacy_v0::Resource,
+    v0_bytes: &[u8],
+    ctx: &MigrationCtx,
+) -> Result<Migrated, Skip> {
+    use legacy_v0::Resource;
+    match resource {
         Resource::User => transform_user(v0_bytes, ctx),
         Resource::Post(id) => transform_post(&id, v0_bytes, ctx),
         Resource::Follow(pk) => transform_follow(pk.as_ref(), v0_bytes, ctx),
@@ -760,6 +811,74 @@ mod tests {
             "size": 20,
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn all_lists_every_category_once_in_order() {
+        // Wildcard-free, so a new category fails to compile here until ALL carries it
+        let position = |skip: &Skip| match skip {
+            Skip::Malformed => 0,
+            Skip::Shape => 1,
+            Skip::UnsafeInteger => 2,
+            Skip::Tombstone => 3,
+            Skip::EmptyTitle => 4,
+            Skip::UnknownPostKind => 5,
+            Skip::UnknownFeedContent => 6,
+            Skip::Oversize => 7,
+            Skip::Invalid => 8,
+            Skip::NotMigrated => 9,
+        };
+        assert_eq!(Skip::ALL.len(), 10);
+        for (index, skip) in Skip::ALL.iter().enumerate() {
+            assert_eq!(position(skip), index, "{skip}");
+        }
+    }
+
+    #[test]
+    fn a_walk_reads_files_into_the_run_and_transforms_the_rest() {
+        let mut ctx = ctx();
+        let file_path = format!("pub/pubky.app/files/{TS}");
+        assert_eq!(
+            ctx.migrate(&file_path, &file("image/png")),
+            Ok(Migrated::default())
+        );
+        assert_eq!(ctx.migrate(&file_path, b"{\"name\":1}"), Err(Skip::Shape));
+        let tag = serde_json::json!({
+            "uri": format!("pubky://{OWNER}/pub/pubky.app/files/{TS}"),
+            "label": "pic",
+            "created_at": 1727740800000000i64,
+        });
+        let migrated = ctx
+            .migrate(
+                "pub/pubky.app/tags/0034A0X7NJ536",
+                tag.to_string().as_bytes(),
+            )
+            .unwrap();
+        let (_, bytes) = &migrated.writes[0];
+        let written: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(
+            written["uri"],
+            format!("pubky://{OWNER}/pub/social/v1/files/{HASH}.png")
+        );
+        assert_eq!(
+            ctx.migrate("pub/pubky.app/widgets/x", b"{}"),
+            Err(Skip::NotMigrated)
+        );
+    }
+
+    #[test]
+    fn a_full_url_of_the_owner_classifies_like_its_path_and_another_owners_does_not() {
+        let ctx = ctx();
+        let bytes = br#"{"created_at":1727740800000000}"#;
+        let path = format!("pub/pubky.app/follows/{OWNER}");
+        let from_path = transform(&path, bytes, &ctx).unwrap();
+        let from_url = transform(&format!("pubky://{OWNER}/{path}"), bytes, &ctx).unwrap();
+        assert_eq!(from_url, from_path);
+        let other = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        assert_eq!(
+            transform(&format!("pubky://{other}/{path}"), bytes, &ctx),
+            Err(Skip::NotMigrated)
+        );
     }
 
     #[test]
@@ -813,6 +932,25 @@ mod tests {
             assert_eq!(ctx.ext_of(HASH), "png", "{order:?}");
         }
         assert_eq!(ctx().ext_of(HASH), "bin");
+    }
+
+    #[test]
+    fn a_file_read_twice_takes_its_last_reading_everywhere() {
+        let mut ctx = ctx();
+        ctx.read_v0_file(TS, &file("image/png")).unwrap();
+        let again = serde_json::to_vec(&serde_json::json!({
+            "name": "second",
+            "created_at": 1727740800000000i64,
+            "src": format!("pubky://{OWNER}/pub/pubky.app/blobs/{HASH}"),
+            "content_type": "application/pdf",
+            "size": 20,
+        }))
+        .unwrap();
+        ctx.read_v0_file(TS, &again).unwrap();
+        assert_eq!(ctx.ext_of(HASH), "pdf");
+        let rewritten = ctx.rewrite(&format!("pubky://{OWNER}/pub/pubky.app/files/{TS}"));
+        assert_eq!(rewritten.name.as_deref(), Some("second"));
+        assert!(!rewritten.image);
     }
 
     #[test]
