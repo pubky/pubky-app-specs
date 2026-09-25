@@ -181,9 +181,10 @@ impl PubkySocialObject {
                 let post = <PubkySocialPost as Validatable>::try_from(&blob, id, ctx)?;
                 Ok(PubkySocialObject::Post(post))
             }
-            Resource::Post { version: None, .. } => {
-                Err("a versionless post reference is never a stored object".to_string())
-            }
+            Resource::Post { version: None, .. } => Err(
+                "Validation Error: a versionless post reference is never a stored object"
+                    .to_string(),
+            ),
             Resource::Follow(follow_id) => {
                 let follow = <PubkySocialFollow as Validatable>::try_from(&blob, follow_id, ctx)?;
                 Ok(PubkySocialObject::Follow(follow))
@@ -196,7 +197,7 @@ impl PubkySocialObject {
                 // A bookmark read under the public root would turn a private-only resource
                 // public; the parser never classifies one there, and neither does a caller.
                 if ctx.root != <PubkySocialBookmark as HasIdPath>::ROOT {
-                    return Err("a bookmark is never a public object".to_string());
+                    return Err("Validation Error: a bookmark is never a public object".to_string());
                 }
                 let bookmark =
                     <PubkySocialBookmark as Validatable>::try_from(&blob, filename, ctx)?;
@@ -210,7 +211,9 @@ impl PubkySocialObject {
                 // A hand-built value takes the parser's leaf rule too, so a filename without a
                 // media extension is refused here as it is there
                 let id = media_stem(filename).ok_or_else(|| {
-                    format!("a media filename needs a known extension: {filename}")
+                    format!(
+                        "Validation Error: a media filename needs a known extension: {filename}"
+                    )
                 })?;
                 // Media is raw bytes with no JSON form, so it has its own reader
                 let file = PubkySocialFile::from_vec(blob.into_owned(), id)?;
@@ -221,12 +224,15 @@ impl PubkySocialObject {
                 Ok(PubkySocialObject::Feed(feed))
             }
             Resource::Foreign { .. } => {
-                Err("a foreign namespace is not a social object".to_string())
+                Err("Validation Error: a foreign namespace is not a social object".to_string())
             }
             Resource::UnsupportedVersion { .. } => {
-                Err("an unsupported epoch is a skip, not an object".to_string())
+                Err("Validation Error: an unsupported epoch is a skip, not an object".to_string())
             }
-            Resource::Unknown => Err(format!("Unrecognized resource {:?}", resource)),
+            Resource::Unknown => Err(format!(
+                "Validation Error: Unrecognized resource {:?}",
+                resource
+            )),
         }
     }
 }
@@ -503,7 +509,7 @@ mod tests {
         );
         let err = result.err().unwrap();
         assert!(
-            err.contains("Unrecognized resource"),
+            err.contains("Validation Error: Unrecognized resource"),
             "Error message does not contain expected text: {}",
             err
         );
