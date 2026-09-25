@@ -10,9 +10,12 @@ use crate::types::PubkyId;
 use crate::uri::resource::Resource;
 use crate::VALIDATION_LIMITS;
 use serde::{Deserialize, Serialize};
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 /// Which root a parsed path lives under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 #[serde(rename_all = "lowercase")]
 pub enum Visibility {
     Public,
@@ -158,7 +161,7 @@ const BOOKMARK_FILENAME_MAX: usize =
 /// it happens to be a base64url character, so the primary arm refuses it there and accepts it
 /// anywhere else in the name. Only the form: the decode round trip that recovers the target
 /// runs when the object is read.
-fn is_bookmark_filename(name: &str) -> bool {
+pub(crate) fn is_bookmark_filename(name: &str) -> bool {
     match name.strip_prefix('~') {
         Some(hash) => validate_hash_id_format(hash).is_ok(),
         None => {

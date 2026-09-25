@@ -6,7 +6,9 @@ use crate::limits::VALIDATION_LIMITS;
 use base32::{encode, Alphabet};
 use blake3::Hasher;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 /// Big-endian microseconds in Crockford base32: bytewise order is chronological order.
 fn encode_timestamp_id(micros: i64) -> String {
@@ -94,10 +96,14 @@ pub trait HashId {
     }
 }
 
-/// The storage root a path lives under.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The storage root a path lives under. Its serde spelling is the word a parsed URI's
+/// visibility uses; the path segment is [`Root::segment`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
 pub enum Root {
+    #[serde(rename = "public")]
     Pub,
+    #[serde(rename = "private")]
     Priv,
 }
 
@@ -135,7 +141,8 @@ pub trait Validatable: Sized + Serialize + DeserializeOwned {
     /// any id derived from them.
     fn try_from(blob: &[u8], id: &str, ctx: &ValidationCtx) -> Result<Self, ValidationError> {
         check_size(blob.len(), Self::MAX_BYTES)?;
-        let instance: Self = serde_json::from_slice(blob).map_err(|e| e.to_string())?;
+        let instance: Self =
+            serde_json::from_slice(blob).map_err(|e| format!("Validation Error: {e}"))?;
         instance.validate(Some(id), ctx)?;
         Ok(instance)
     }
@@ -175,29 +182,6 @@ pub trait HasIdPath {
     const ROOT: Root;
     const PATH_SEGMENT: &'static str;
     fn create_path(id: &str) -> String;
-}
-
-#[cfg(target_arch = "wasm32")]
-use serde_wasm_bindgen::from_value;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
-
-/// Provides a `.to_json()` method returning a `JsValue` with all fields in plain JSON.
-#[cfg(target_arch = "wasm32")]
-pub trait Json: Serialize + DeserializeOwned + Validatable {
-    fn export_json(&self) -> Result<JsValue, String> {
-        // A flattened `extra` makes serde emit the struct as a map; keep it a plain object
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        self.serialize(&serializer)
-            .map_err(|e| format!("JSON serialization error: {}", e))
-    }
-
-    fn import_json(js_value: &JsValue) -> Result<Self, String> {
-        let object: Self =
-            from_value(js_value.clone()).map_err(|e| format!("Error parsing js object: {}", e))?;
-        object.validate(None, &PUB_CTX)?;
-        Ok(object)
-    }
 }
 
 #[cfg(test)]

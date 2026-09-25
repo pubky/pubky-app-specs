@@ -3,17 +3,16 @@
 [![npm version](https://img.shields.io/npm/v/pubky-social-specs)](https://www.npmjs.com/package/pubky-social-specs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-JavaScript and TypeScript bindings for Pubky social data models, generated from the canonical Rust crate.
+JavaScript and TypeScript bindings for Pubky social data models, compiled from the canonical Rust crate to WebAssembly.
 
-The package initializes WASM automatically, so no manual `.wasm` loading is required.
+Every export is a plain function over plain objects. Nothing runs when the package is imported: `await init()` once, and every call after that is synchronous. The ESM (`import`) and CommonJS (`require`) entries each hold their own wasm instance, so each needs its own `init()`.
 
 ## Why Use This Package Instead of Manual JSONs?
 
-- **Validation Consistency**: Ensures your app uses the same validation rules as [Pubky indexers](https://github.com/pubky/pubky-nexus), avoiding errors. Builders trim and fold what you pass them; readers take stored objects exactly as written and reject what breaks a rule, never rewriting it.
-- **Schema Versioning**: Automatically stay up-to-date with schema changes, reducing maintenance overhead.
-- **Auto IDs & Paths**: Generates unique IDs, paths, and URLs according to Pubky standards.
-- **Rust-to-JavaScript Compatibility**: Type-safe models that work seamlessly across Rust and JavaScript/TypeScript.
-- **Future-Proof**: Easily adapt to new Pubky object types without rewriting JSON manually.
+- **Validation Consistency**: the same validation rules as [Pubky indexers](https://github.com/pubky/pubky-nexus), from the same code. Builders trim and fold what you pass them; readers take stored objects exactly as written and reject what breaks a rule, never rewriting it.
+- **Ids, Paths and URLs**: generated the way every other client generates them.
+- **Unknown members kept**: an object read and written back keeps the members this version does not know.
+- **Typed**: `types.d.ts` declares every object and every function.
 
 ## Installation
 
@@ -21,140 +20,161 @@ The package initializes WASM automatically, so no manual `.wasm` loading is requ
 npm install pubky-social-specs
 ```
 
-```bash
-yarn add pubky-social-specs
-```
-
 ## Quick Start
 
 ```js
-import { PubkySocialAttachment, PubkySocialCollectionItem, PubkySocialPostKind, PubkySpecsBuilder } from "pubky-social-specs";
+import { init, createUser, createPost } from "pubky-social-specs";
 
-const pubkyId = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
-const specs = new PubkySpecsBuilder(pubkyId);
+await init(); // loads the wasm; every other export throws until it resolves
 
-const { user, meta: userMeta } = specs.createUser(
-  "Alice",
-  "Building on Pubky",
-  null,
-  null,
-  "active"
-);
+const owner = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 
-console.log(userMeta.url); // pubky://.../pub/social/v1/profile.json
-console.log(user.toJson());
+const user = createUser(owner, { name: "Alice", bio: "Building on Pubky" });
+console.log(user.meta.url); // pubky://.../pub/social/v1/profile.json
+// PUT JSON.stringify(user.object) at user.meta.url with your pubky client
 
-const { post, meta: postMeta } = specs.createPost(
-  "Hello, Pubky!",
-  PubkySocialPostKind.Note
-);
-
-console.log(postMeta.url);
-console.log(post.toJson());
+const post = createPost(owner, { content: "Hello, Pubky!" });
+console.log(post.meta.path); // /pub/social/v1/posts/{id}/{id}.json
 ```
 
-Each create method returns:
+Every builder takes the writing user first and returns `{object, meta}`:
 
-- `meta`: generated `id`, storage `path`, and full `url`
-- a typed WASM model object with `.toJson()` (`createFile` returns bytes instead: read `file.data`, there is no JSON form)
+- `object` is the stored object exactly as it is written: `JSON.stringify(object)` is the body to PUT. Media is `{bytes: Uint8Array}`.
+- `meta` is `{id, path, url}`: the generated id (`""` for the profile), the owner-relative `path`, and the full `pubky://` `url`.
 
-## Common Models
+Every rejection is a thrown `Error` carrying the crate's own message, `Validation Error: ...` for a value the rules refuse. Ill-formed UTF-16 (a lone surrogate) is refused: a string argument before it reaches the wasm, with `Validation Error: text must be well-formed UTF-16`, and a string inside an object by the JSON parser, since objects cross as `JSON.stringify` text.
+
+## Builders
 
 ```js
-const { user, meta } = specs.createUser(name, bio, image, links, status);
-const { post, meta } = specs.createPost(content, kind, parent, embed, attachments, lock); // attachments: PubkySocialAttachment[]
-const { post, meta } = specs.createArticlePost(title, body, coverImage, parent, embed, attachments, lock);
-const { file, meta } = specs.createFile(bytes, declaredType); // bytes: Uint8Array
-const { bookmark, meta } = specs.createBookmark(target);
-const { tag, meta } = specs.createTag(uri, label);
-const { follow, meta } = specs.createFollow(pubkyId);
-const { mute, meta } = specs.createMute(pubkyId);
-const { feed, meta } = specs.createFeed({
-  tags,
-  reach,
-  layout,
-  sort,
-  content,
-  name,
-  domainTags,
-  icon,
-});
+createUser(owner, { name, bio?, image?, links?: [{ title, url }], status? });
+createPost(owner, { content, kind?, parent?, embed?, attachments?: [{ uri, alt?, name? }], lock?, root? }); // kind defaults to "note"
+createArticlePost(owner, { title, body, coverImage?, parent?, embed?, attachments?, lock?, root? });
+createCollectionPost(owner, { name, description?, items?: [{ uri, note? }], coverImage?, layout?, root? });
+createFeed(owner, { tags?, domainTags?, reach, layout, sort, content?, name, icon });
+createTag(owner, uri, label);
+createBookmark(owner, target);
+createFollow(owner, followee);
+createMute(owner, mutee);
+createFile(owner, bytes, declaredType, root?); // bytes: Uint8Array
 ```
 
-`createCollectionPost(name, description, items, coverImage, layout)` takes an array of `PubkySocialCollectionItem(uri, note)`; an item URI can be anything (a post, a user, a web page, a `nostr:` event) and the note is optional but never blank. The item constructor trims the note and leaves a blank one out. The builder trims `name` and `description` and leaves a blank description out; a stored description that is empty or whitespace-only rejects. The stored envelope is `{name, description?, items: [{uri, note?}], cover_image?, layout?}`. `createTag(uri, label)` stores the uri as written, so it must already be canonical (`pubky://...`, never the short form, no surrounding whitespace); the label is trimmed and ASCII-lowercased by the builder and a stored label must already be in that form. `createUser` stores `image` and every `links[].url` as written, so they must already be canonical: an image is a `pubky://`, `http://` or `https://` URI, a link url is `http://` or `https://`, and surrounding whitespace or the short `pubky<pk>` form rejects. The builder trims `name`, `bio`, `status` and every link title; `PubkySocialUser.fromJson` never rewrites what it reads, so what you stored is what you get, padding included. `parent` and `embed` are any URI string (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written with a lowercase scheme; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `createPost` trims `content`; `PubkySocialPost.fromJson` reads it as stored, so content that is only whitespace rejects unless the post has an embed or attachments. `attachments` is an array of `PubkySocialAttachment(uri, alt, name)` or `null`; the stored post always carries an array, `[]` when empty. The constructor trims `name`, and after that it is stored as written and counted as written, so a padded name at the 255 cap is rejected rather than trimmed into range.
+`root` is `"public"` (the default) or `"private"`, the same words `parseUri` reports as `visibility`; the path spells them `pub` and `priv`. A post under `"private"` is a draft, and only a draft may reference the owner's private media.
 
-`createBookmark(target)` puts the target IN the filename: `meta.id` is the canonical target in unpadded base64url and `meta.path` is `priv/social/v1/bookmarks/{filename}.json`, so listing every bookmark is one LIST with no GETs for the primary form (an overflow entry costs one GET), and the same target always lands on the same filename. Bookmarks live under the private root, so a capability scoped to the public prefix alone cannot read them. A target over 187 UTF-8 bytes overflows: the filename becomes `~{hash}`, which is one way, and the content carries `target`. `bookmarkTarget(filename, bookmark)` reads a stored entry back and throws when the entry breaks those rules, which is how a reader tells an invalid entry from one it should show; it takes a `PubkySocialBookmark` instance, so a reader holding stored JSON calls `PubkySocialBookmark.fromJson(json)` first. `bookmarkFilename(target)` gives the same filename without building an object, for an un-bookmark flow that only needs the path. The target can be any URI (`pubky://`, `https://`, `nostr:`, ...) and must already be canonical.
+Every optional input member takes `null` or `undefined` for absent. An input member the builder does not know is an error, so a misspelled option never goes missing silently. So is an argument of the wrong type, and an object with no JSON form (one that refers to itself).
 
-`createFile(bytes, declaredType)` stores the bytes as they are, with no metadata object: `meta.id` is the hash of the bytes and `meta.path` is `files/{hash}.{ext}`, where the extension comes from the declared type and is path-only. The declared type is read once, here, and never stored. `fileUriBuilder(pubkyId, filename)` takes that whole filename, since an extension cannot be derived from an id.
+`createUser` stores `image` and every `links[].url` as written, so they must already be canonical: an image is a `pubky://`, `http://` or `https://` URI, a link url is `http://` or `https://`, and surrounding whitespace or the short `pubky<pk>` form rejects. The builder trims `name`, `bio`, `status` and every link title; a blank `bio` or `status` is left out. A stored profile is never rewritten on read, padding included, and `validate` does not trim either: it refuses a blank `bio` or `status`, so an edit path maps blank to `null` itself.
 
-Feeds are private by default: `createFeed` returns a `/priv/` path. `feedPaths(id)` gives both addresses as `{private, public}`, and `feedLifecycle(id)` gives the operations each step needs as `{publish: {from, to}, unpublish: [...], delete: [...]}`: run them in the order given; a delete of a missing path is a skip, and the publish copy always runs because the name and icon live outside the id, so an existing public copy may be stale. The id is derived from the filter alone, so `tags` and `domainTags` are folded, deduplicated and sorted by the builder, and editing the filter gives a new id (write the new file, delete the old one). `domainTags` is optional and can be omitted. `icon` is required and is a [Lucide](https://lucide.dev/icons) icon name (max 50 chars, `a-z`, `0-9`, `-`); legacy feeds may have a missing or `null` icon. Reach accepts `wot` and `me` in addition to `following`, `followers`, `friends`, and `all`.
+`parent` and `embed` are any URI (`pubky://`, `https://`, `nostr:`, `geo:`, ...), stored exactly as written; a thread can be rooted at a post, a user or an external resource. A post reference is always versionless (`.../posts/{id}`, never a version file). `createPost` trims `content`; `readObject` reads it as stored, so content that is only whitespace rejects unless the post has an embed or attachments. The stored post always carries `attachments`, `[]` when empty. The builder trims an attachment `name`; after that it is stored and counted as written.
 
-For runnable examples covering posts, embeds, files, feeds, URI helpers, and MIME type validation, see [`example.js`](https://github.com/pubky/pubky-social-specs/blob/main/pkg/example.js).
+`createArticlePost` and `createCollectionPost` write their envelope into `content` as JSON: `{title, body, cover_image?}` and `{name, description?, items: [{uri, note?}], cover_image?, layout?}`. A collection item can point anywhere (a post, a user, a web page, a `nostr:` event) and its note is optional but never blank. The builder trims the collection `name`, its `description` and each item `note`, leaving a blank description or note out; a stored description that is empty or whitespace-only rejects. A collection takes no parent, embed or attachments.
 
-## URI Helpers
+`createTag(owner, uri, label)` stores the uri as written, so it must already be canonical; the builder trims and ASCII-lowercases the label.
+
+`createBookmark(owner, target)` puts the target in the filename: `meta.id` is the canonical target in unpadded base64url and the path is `/priv/social/v1/bookmarks/{filename}.json`, so listing every bookmark is one LIST with no GETs, and one target always lands on one filename. A target over 187 UTF-8 bytes overflows: the filename becomes `~{hash}` and the object carries `target`. `bookmarkTarget(filename, object?)` reads an entry back and throws when it breaks those rules, which is how a reader tells an invalid entry from one to show. The object is needed only for a `~` overflow filename, so a primary entry reads from the LIST alone, with no GET. `bookmarkFilename(target)` gives the filename without building an object.
+
+`createFile` stores the bytes as they are: `meta.id` is the hash of the bytes and the path is `files/{hash}.{ext}`, the extension coming from the declared type. The declared type is read once, here, and never stored. Pass `"private"` as `root` for a draft's media. The 0.x File metadata object and its Blob are gone: this one call makes the one media object.
+
+Feeds are private by default: `createFeed` writes under `/priv/`. The id is derived from the filter alone, so `tags` and `domainTags` are folded, deduplicated and sorted by the builder, and editing the filter gives a new id: `feedId(feed)` derives it from an edited object, so the object keeps its unknown members. `icon` is required, a [Lucide](https://lucide.dev/icons) icon name (at most 50 chars of `a-z`, `0-9`, `-`). `feedPaths(id)` gives `{private, public}` and `feedLifecycle(id)` gives `{publish: {from, to}, unpublish: [...], delete: [...]}`: run each in the order given; a delete of a missing path is a skip, and the publish copy always runs because the name and icon live outside the id.
+
+## Reading and Editing
 
 ```js
-import {
-  userUriBuilder,
-  postUriBuilder,
-  bookmarkUriBuilder,
-  bookmarkTarget,
-  bookmarkFilename,
-  followUriBuilder,
-  tagUriBuilder,
-  muteUriBuilder,
-  fileUriBuilder,
-  feedUriBuilder,
-  parse_uri,
-} from "pubky-social-specs";
+import { readObject, validate } from "pubky-social-specs";
 
-const userUri = userUriBuilder(pubkyId);
-const postUri = postUriBuilder(pubkyId, "0033SSE3B1FQ0");
-const parsed = parse_uri(postUri);
+const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+const { kind, object } = readObject(url, bytes); // kind: "user" | "post" | ... | "file"
 
-console.log(parsed.user_id);
-console.log(parsed.resource);
-console.log(parsed.resource_id);
+object.status = "away";
+validate(url, object); // throws when the edit broke a rule
+// PUT JSON.stringify(object) back at url
 ```
 
-## Validation Limits
+The interfaces in `types.d.ts` list the known members only, so a misspelled field does not compile; unknown members still survive at runtime through read, edit, `validate` and PUT (widen with `& Extra` to reach them). `validate` checks exactly what `JSON.stringify(object)` gives, the bytes a PUT sends. `readObject(uri, bytes)` reads whatever is stored at `uri`, validated against the id, the root and the author the URI names, and returns `{kind, object}`; TypeScript narrows `object` on `kind`. Media comes back as `{kind: "file", object: {bytes}}`. Edit a stored object this way, GET, `readObject`, change the fields, `validate`, PUT: the object keeps every member this version does not know. Rebuilding it through a builder would drop them.
 
-Validation limits are published as JSON so apps can reuse canonical limits without initializing WASM.
+## Posts: Drafts, Versions and the Lifecycle
 
 ```js
-import limits, {
-  getValidationLimits,
-  validationLimits,
-} from "pubky-social-specs/validationLimits";
+const version = createVersion(owner, post, { root: "private", slug: "my-draft" }); // {id, editId, path, url}
+const edit = editVersion(owner, post, { id: version.id, head: version.editId, root: "private" });
 
-console.log(validationLimits.userNameMaxLength);
-console.log(limits.postNoteContentMaxLength);
+const plan = planPublish(owner, version.id, version.editId, post);
+// copy each of plan.mediaCopies ([from, to]) first, then PUT plan.rewrittenPost at plan.destPath
 
-const copy = getValidationLimits();
+planUnpublish(postId, publicPaths, legacyPaths, privateHeadPath); // {copyBacks, deletes}
+planDelete(owner, postId, legacyPaths, [{ root, path }], versions); // {deletes, mediaGcCandidates}
 ```
 
-For raw JSON imports:
+`root` defaults to `"public"` in the options too. Editing a post keeps its id and writes a new version above the newest one:
 
 ```js
-import limitsJson from "pubky-social-specs/validationLimits.json";
-
-console.log(limitsJson.postAttachmentsMaxCount);
+const dir = `/pub/social/v1/posts/${postId}/`;
+const newest = (await list(dir)) // LIST, owner-relative paths
+  .map((path) => parseUri(`pubky://${owner}${path}`).resource)
+  .filter((r) => r.kind === "post" && r.version)
+  .map((r) => r.version)
+  .sort()
+  .at(-1);
+const url = `pubky://${owner}${dir}${newest}.json`;
+const { object: post } = readObject(url, await get(url));
+post.content = "edited";
+const next = editVersion(owner, post, { id: postId, head: newest });
+validate(next.url, post);
+// PUT JSON.stringify(post) at next.url
 ```
+
+The planners do no I/O: they take the paths the caller listed and return the operations in the order to run them.
+
+`deletionPaths({kind, id, listings})` names every stored copy of one object, legacy first. Every public kind spans the epochs, because on resync the highest understood epoch with a surviving copy wins and a surviving legacy copy would bring the object back: a post across both roots and the legacy epoch, a file across both roots plus the legacy `blobs/` bytes and the v0 File objects the caller lists, a tag plus the v0 tags the caller lists, the profile and a follow plus their legacy path. A feed is its two v1 copies; a mute and a bookmark are their one private path.
+
+A listing is a path, spelled exactly as its epoch writes it, except for the two legacy copies whose path cannot name the object: a v0 File object is `{path, src}`, and it counts only when its stored `src` resolves to this file's bytes; a v0 tag is `{path, uri, label, src?, contentType?}`, and its path must be the 0.x id of its stored `uri` and `label` while that target and label, respelled as v1 writes them, must derive the v1 id being deleted; a v0 tag on a v0 File object also carries that object's `src` and `content_type`, which spell the v1 media file the tag targets. Every entry is tied to the object being deleted; anything else throws, naming the entry.
+
+## URIs
+
+```js
+import { parseUri, stableId, resolveDeref, listPrefix, postUriBuilder } from "pubky-social-specs";
+
+parseUri(postUriBuilder(owner, "0033SSE3B1FQ0"));
+// { userId, visibility: "public", resource: { kind: "post", id: "0033SSE3B1FQ0" }, path: "/pub/social/v1/posts/0033SSE3B1FQ0" }
+
+stableId("pub/pubky.app/posts/0033SSE3B1FQ0"); // { kind: "key", key: "posts/0033SSE3B1FQ0" }
+listPrefix(owner, "private"); // "pubky://.../priv/social/v1/", a LIST prefix, not a URI
+legacyListPrefix(owner); // "pubky://.../pub/pubky.app/", the 0.x tree an account delete or export walks
+```
+
+`parseUri` reports paths under another namespace, an epoch this version does not speak, and anything else as `foreign`, `unsupportedVersion` and `unknown` kinds; it throws only on a string that is not a canonical `pubky://` URI. `stableId` keys every epoch spelling of one object together, or returns `{kind: "needsDeref", tsid}` for a legacy media reference that `resolveDeref(tsid, src)` completes from its v0 File object.
+
+The URI builders check the owner key and throw on a malformed one. They are `userUriBuilder`, `postUriBuilder`, `followUriBuilder`, `muteUriBuilder`, `bookmarkUriBuilder`, `tagUriBuilder`, `fileUriBuilder` (the whole `{hash}.{ext}` filename) and `feedUriBuilder`.
 
 ## MIME Types
 
 ```js
-import { getValidMimeTypes, mimeToExt, essence, mimeToExtTable } from "pubky-social-specs";
+import { validMimeTypes, mimeToExt, essence, mimeToExtTable } from "pubky-social-specs";
 
-// A picker hint only: createFile accepts any declared type, unmapped ones land on .bin
-const accept = getValidMimeTypes().join(",");
-
+const accept = validMimeTypes.join(","); // a picker hint only; it gates nothing
 mimeToExt("IMAGE/PNG; charset=x"); // "png", and "bin" for anything unmapped
-essence("IMAGE/PNG; charset=x"); // "image/png", undefined when malformed
-mimeToExtTable(); // the whole frozen map as a plain object
+essence("IMAGE/PNG; charset=x"); // "image/png", null when malformed
+mimeToExtTable["image/png"]; // "png", from the whole frozen map
 ```
 
-`getValidMimeTypes` is an advisory hint for a file picker; it gates nothing. `createFile` accepts any declared type and maps it through `mimeToExt`.
+`validMimeTypes` and `mimeToExtTable` are frozen data, readable before `init()`, and also published without the wasm as `pubky-social-specs/mimeTypes`.
+
+## Validation Limits
+
+`validationLimits` is a frozen plain object, readable before `init()`:
+
+```js
+import { validationLimits } from "pubky-social-specs";
+
+validationLimits.userNameMaxLength;
+```
+
+The same values are published without the wasm at all. Under Node's ESM loader (and TypeScript's `nodenext`), a JSON import needs its attribute:
+
+```js
+import { validationLimits } from "pubky-social-specs/validationLimits";
+import limitsJson from "pubky-social-specs/validationLimits.json" with { type: "json" };
+```
 
 ## Reading 0.x data
 

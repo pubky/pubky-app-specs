@@ -45,8 +45,13 @@
 
 use crate::uri::media_stem;
 use crate::{traits::HasIdPath, traits::Validatable, traits::ValidationCtx, ParsedUri, Resource};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+#[cfg(target_arch = "wasm32")]
+use tsify_next::Tsify;
 
 pub mod bookmark;
+pub mod deletion;
 pub mod feed;
 pub mod file;
 pub mod follow;
@@ -60,6 +65,39 @@ use super::{
     PubkySocialBookmark, PubkySocialFeed, PubkySocialFile, PubkySocialFollow, PubkySocialMute,
     PubkySocialPost, PubkySocialTag, PubkySocialUser,
 };
+
+/// Which kind of stored object a value or a request is about. The JS surface tags every
+/// object it hands out with it and takes it back wherever a caller names an object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum ObjectKind {
+    User,
+    Post,
+    Follow,
+    Mute,
+    Bookmark,
+    Tag,
+    File,
+    Feed,
+}
+
+impl ObjectKind {
+    /// The frozen spelling, the one its serde form uses.
+    pub fn wire_name(&self) -> &'static str {
+        match self {
+            ObjectKind::User => "user",
+            ObjectKind::Post => "post",
+            ObjectKind::Follow => "follow",
+            ObjectKind::Mute => "mute",
+            ObjectKind::Bookmark => "bookmark",
+            ObjectKind::Tag => "tag",
+            ObjectKind::File => "file",
+            ObjectKind::Feed => "feed",
+        }
+    }
+}
 
 /// A unified enum wrapping all PubkySocial objects.
 #[derive(Debug, Clone)]
@@ -75,14 +113,36 @@ pub enum PubkySocialObject {
 }
 
 impl PubkySocialObject {
+    pub fn kind(&self) -> ObjectKind {
+        match self {
+            PubkySocialObject::User(_) => ObjectKind::User,
+            PubkySocialObject::Post(_) => ObjectKind::Post,
+            PubkySocialObject::Follow(_) => ObjectKind::Follow,
+            PubkySocialObject::Mute(_) => ObjectKind::Mute,
+            PubkySocialObject::Bookmark(_) => ObjectKind::Bookmark,
+            PubkySocialObject::Tag(_) => ObjectKind::Tag,
+            PubkySocialObject::File(_) => ObjectKind::File,
+            PubkySocialObject::Feed(_) => ObjectKind::Feed,
+        }
+    }
+
     /// Given a URI and a blob (raw data from the homeserver),
     /// this function returns the fully formed PubkySocialObject.
     pub fn from_uri<S: AsRef<str>>(uri: S, blob: &[u8]) -> Result<Self, String> {
-        let parsed_uri = ParsedUri::try_from(uri.as_ref())?;
+        Self::from_uri_cow(uri.as_ref(), Cow::Borrowed(blob))
+    }
+
+    /// [`Self::from_uri`] over bytes the caller already owns: media keeps them with no copy.
+    pub fn from_uri_owned<S: AsRef<str>>(uri: S, blob: Vec<u8>) -> Result<Self, String> {
+        Self::from_uri_cow(uri.as_ref(), Cow::Owned(blob))
+    }
+
+    fn from_uri_cow(uri: &str, blob: Cow<'_, [u8]>) -> Result<Self, String> {
+        let parsed_uri = ParsedUri::try_from(uri)?;
         let ctx = ValidationCtx {
             root: parsed_uri.visibility.root(),
         };
-        let object = Self::from_resource(&parsed_uri.resource, blob, &ctx)?;
+        let object = Self::from_resource_cow(&parsed_uri.resource, blob, &ctx)?;
         // The URI names the author, so the ownership rule can run here where a bare
         // `Resource` cannot supply it
         if let PubkySocialObject::Post(post) = &object {
@@ -100,9 +160,17 @@ impl PubkySocialObject {
         blob: &[u8],
         ctx: &ValidationCtx,
     ) -> Result<Self, String> {
+        Self::from_resource_cow(resource, Cow::Borrowed(blob), ctx)
+    }
+
+    fn from_resource_cow(
+        resource: &Resource,
+        blob: Cow<'_, [u8]>,
+        ctx: &ValidationCtx,
+    ) -> Result<Self, String> {
         match resource {
             Resource::User => {
-                let user = <PubkySocialUser as Validatable>::try_from(blob, "", ctx)?;
+                let user = <PubkySocialUser as Validatable>::try_from(&blob, "", ctx)?;
                 Ok(PubkySocialObject::User(user))
             }
             Resource::Post {
@@ -110,18 +178,18 @@ impl PubkySocialObject {
                 version: Some(_),
                 ..
             } => {
-                let post = <PubkySocialPost as Validatable>::try_from(blob, id, ctx)?;
+                let post = <PubkySocialPost as Validatable>::try_from(&blob, id, ctx)?;
                 Ok(PubkySocialObject::Post(post))
             }
             Resource::Post { version: None, .. } => {
                 Err("a versionless post reference is never a stored object".to_string())
             }
             Resource::Follow(follow_id) => {
-                let follow = <PubkySocialFollow as Validatable>::try_from(blob, follow_id, ctx)?;
+                let follow = <PubkySocialFollow as Validatable>::try_from(&blob, follow_id, ctx)?;
                 Ok(PubkySocialObject::Follow(follow))
             }
             Resource::Mute(muted_id) => {
-                let mute = <PubkySocialMute as Validatable>::try_from(blob, muted_id, ctx)?;
+                let mute = <PubkySocialMute as Validatable>::try_from(&blob, muted_id, ctx)?;
                 Ok(PubkySocialObject::Mute(mute))
             }
             Resource::Bookmark(filename) => {
@@ -130,11 +198,12 @@ impl PubkySocialObject {
                 if ctx.root != <PubkySocialBookmark as HasIdPath>::ROOT {
                     return Err("a bookmark is never a public object".to_string());
                 }
-                let bookmark = <PubkySocialBookmark as Validatable>::try_from(blob, filename, ctx)?;
+                let bookmark =
+                    <PubkySocialBookmark as Validatable>::try_from(&blob, filename, ctx)?;
                 Ok(PubkySocialObject::Bookmark(bookmark))
             }
             Resource::Tag(tag_id) => {
-                let tag = <PubkySocialTag as Validatable>::try_from(blob, tag_id, ctx)?;
+                let tag = <PubkySocialTag as Validatable>::try_from(&blob, tag_id, ctx)?;
                 Ok(PubkySocialObject::Tag(tag))
             }
             Resource::File(filename) => {
@@ -144,11 +213,11 @@ impl PubkySocialObject {
                     format!("a media filename needs a known extension: {filename}")
                 })?;
                 // Media is raw bytes with no JSON form, so it has its own reader
-                let file = PubkySocialFile::from_bytes(blob, id)?;
+                let file = PubkySocialFile::from_vec(blob.into_owned(), id)?;
                 Ok(PubkySocialObject::File(file))
             }
             Resource::Feed(feed_id) => {
-                let feed = <PubkySocialFeed as Validatable>::try_from(blob, feed_id, ctx)?;
+                let feed = <PubkySocialFeed as Validatable>::try_from(&blob, feed_id, ctx)?;
                 Ok(PubkySocialObject::Feed(feed))
             }
             Resource::Foreign { .. } => {
@@ -174,6 +243,15 @@ mod tests {
 
     // These tests assume that the respective try_from implementations for each model
     // parse the provided JSON. Adjust the JSON payloads as needed.
+
+    #[test]
+    fn unparsable_bytes_are_a_validation_error() {
+        let uri = user_uri_builder("operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".into());
+        let err = PubkySocialObject::from_uri(&uri, b"{").unwrap_err();
+        assert!(err.starts_with("Validation Error: "), "{err}");
+        let err = PubkySocialObject::from_uri_owned(uri, b"{".to_vec()).unwrap_err();
+        assert!(err.starts_with("Validation Error: "), "{err}");
+    }
 
     #[test]
     fn test_import_user() {

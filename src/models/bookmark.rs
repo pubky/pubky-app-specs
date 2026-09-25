@@ -10,11 +10,6 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -39,19 +34,16 @@ const PRIV_CTX: ValidationCtx = ValidationCtx {
 /// `Validatable` alone is NOT the full validation surface here: the target rules live on the
 /// filename, so they run only when `validate` is given one. [`bookmark_target`] is the whole
 /// read-side rule and [`create_bookmark`] the whole write-side one.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialBookmark {
     pub created_at: i64,
     /// The canonical target, required in the overflow form and forbidden in the primary form,
     /// where the filename carries it.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[serde(flatten)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -205,29 +197,6 @@ fn check_stored_target(target: &str) -> Result<(), ValidationError> {
 fn not_base64(filename: &str) -> String {
     format!("Validation Error: bookmark filename is not canonical base64url: {filename}")
 }
-
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialBookmark {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-
-    /// Getter for `target`, set only in the overflow form.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn target(&self) -> Option<String> {
-        self.target.clone()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialBookmark {}
 
 impl HasIdPath for PubkySocialBookmark {
     const ROOT: Root = Root::Priv;

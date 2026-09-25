@@ -48,7 +48,7 @@ All validation in `pubky-social-specs` happens **inside the WASM module** (Rust)
 ┌─────────────────────────────────────────────────────────┐
 │                    JavaScript Client                     │
 │                                                         │
-│   const user = PubkySocialUser.fromJson({                  │
+│   const { object } = createUser(owner, {                │
 │       name: "Alice🔥",                                  │
 │       bio: "Hello 𓀀"                                   │
 │   });                                                   │
@@ -100,32 +100,29 @@ For client-side validation (for UX feedback), we recommend relying on the existi
 
 ### How to Validate in Your Application
 
-The WASM module automatically validates all objects when you create them or parse them from JSON. Use these methods for validation:
+The WASM module validates every object a builder creates, `readObject` reads or `validate` is given. Use these methods for validation:
 
 ```javascript
-import { PubkySpecsBuilder, PubkySocialUser } from "pubky-social-specs";
+import { init, createUser, validate, userUriBuilder } from "pubky-social-specs";
 
-// Method 1: Using builder
+await init();
+
+// Method 1: Using a builder
 try {
-    const builder = new PubkySpecsBuilder(userId);
-    const { user } = builder.createUser(
-        "Alice🔥",       // Emoji counts as 1 character
-        "Bio with 𓀀",   // Hieroglyph counts as 1 character
-        null, null, null
-    );
+    const { object } = createUser(userId, {
+        name: "Alice🔥",       // Emoji counts as 1 character
+        bio: "Bio with 𓀀",    // Hieroglyph counts as 1 character
+    });
     console.log("User is valid!");
 } catch (error) {
     showError(error.message);  // Validation failed
 }
 
-// Method 2: From JSON
+// Method 2: An object read or edited in memory
 try {
-    const user = PubkySocialUser.fromJson({
+    validate(userUriBuilder(userId), {
         name: "Alice🔥",
         bio: "Bio with 𓀀",
-        image: null,
-        links: null,
-        status: null
     });
     console.log("User is valid!");
 } catch (error) {

@@ -1,815 +1,789 @@
-import {
-  PubkySocialAttachment,
-  PubkySocialBookmark,
-  PubkySocialCollectionItem,
-  PubkySocialPost,
-  PubkySocialPostKind,
-  PubkySocialUser,
-  PubkySpecsBuilder,
-  bookmarkFilename,
-  bookmarkTarget,
-  bookmarkUriBuilder,
-  essence,
-  feedLifecycle,
-  feedPaths,
-  followUriBuilder,
-  getValidMimeTypes,
-  mimeToExt,
-  mimeToExtTable,
-  postUriBuilder,
-  userUriBuilder,
-} from "./index.js";
+import * as specs from "./index.js";
 import { createRequire } from "node:module";
 import assert from "assert";
+import vm from "node:vm";
+
+const {
+  init,
+  validationLimits,
+  parseUri,
+  stableId,
+  resolveDeref,
+  readObject,
+  validate,
+  createUser,
+  createPost,
+  createArticlePost,
+  createCollectionPost,
+  createVersion,
+  editVersion,
+  planPublish,
+  planUnpublish,
+  planDelete,
+  createFeed,
+  feedPaths,
+  feedLifecycle,
+  createTag,
+  createBookmark,
+  bookmarkFilename,
+  bookmarkTarget,
+  createFollow,
+  createMute,
+  createFile,
+  mimeToExt,
+  essence,
+  mimeToExtTable,
+  validMimeTypes,
+  feedId,
+  legacyListPrefix,
+  deletionPaths,
+  listPrefix,
+  userUriBuilder,
+  postUriBuilder,
+  followUriBuilder,
+  muteUriBuilder,
+  bookmarkUriBuilder,
+  tagUriBuilder,
+  fileUriBuilder,
+  feedUriBuilder,
+} = specs;
 
 const require = createRequire(import.meta.url);
-const { validationLimits, getValidationLimits } = require("./validationLimits.cjs");
+const { validationLimits: subpathLimits } = require("./validationLimits.cjs");
+const mimeSubpath = require("./mimeTypes.cjs");
 const validationLimitsJson = require("./validationLimits.json");
 
 const OTTO = "8kkppkmiubfq4pxn6f73nqrhhhgkb5xyfprntc9si3np9ydbotto";
 const RIO = "dzswkfy7ek3bqnoc89jxuqqfbzhjrj6mi8qthgbxxcqkdugm3rio";
+const MALFORMED = "Validation Error: text must be well-formed UTF-16";
 
-describe("PubkySpecs Example Objects Tests", () => {
-  let specsBuilder;
+// Every rejection is an Error carrying the crate's message
+function rejects(fn, check) {
+  assert.throws(fn, (err) => {
+    assert.ok(err instanceof Error, `expected an Error, got ${typeof err}: ${err}`);
+    if (typeof check === "string") {
+      assert.strictEqual(err.message, check);
+    } else if (check instanceof RegExp) {
+      assert.match(err.message, check);
+    }
+    return true;
+  });
+}
 
-  beforeEach(() => {
-    specsBuilder = new PubkySpecsBuilder(OTTO);
+// What a homeserver GET returns for a built object
+function stored(object) {
+  return new TextEncoder().encode(JSON.stringify(object));
+}
+
+describe("before init()", () => {
+  it("nothing runs at import: every function throws until init() resolves", () => {
+    rejects(() => parseUri(`pubky://${OTTO}`), /await init\(\) before calling parseUri\(\)/);
+    rejects(() => createUser(OTTO, { name: "Alice" }), /before calling createUser\(\)/);
+    rejects(() => userUriBuilder(OTTO), /before calling userUriBuilder\(\)/);
   });
 
-  describe("User Pubky-social-specs", () => {
-    it("should create user with correct properties", () => {
-      const { user, meta: userMeta } = specsBuilder.createUser(
-        "Alice Smith",
-        "Software Developer", 
-        null, 
-        null, 
-        "active"
-      );
+  it("validationLimits and the MIME tables are data, readable without the wasm", () => {
+    assert.deepStrictEqual(validationLimits, validationLimitsJson);
+    assert.strictEqual(mimeToExtTable["image/png"], "png");
+    assert.ok(validMimeTypes.includes("image/png"));
+  });
+});
 
-      // Test meta properties
-      assert.ok(userMeta.url, "User should have a URL");
-      assert.ok(userMeta.url.includes(OTTO), "URL should contain user ID");
-      assert.ok(userMeta.url.includes("profile.json"), "URL should point to profile.json");
+describe("pubky-social-specs", () => {
+  before(async () => {
+    await init();
+  });
 
-      // Test user object content
-      const userJson = user.toJson();
-      assert.strictEqual(userJson.name, "Alice Smith", "User name should match");
-      assert.strictEqual(userJson.bio, "Software Developer", "User bio should match");
-      assert.strictEqual(userJson.status, "active", "User status should match");
+  describe("init()", () => {
+    it("is idempotent", async () => {
+      const first = init();
+      assert.strictEqual(init(), first, "a second call returns the same load");
+      await first;
+      assert.strictEqual(parseUri(userUriBuilder(OTTO)).resource.kind, "user");
     });
 
-    it("cannot create user with name too short", () => {
-      assert.throws(
-        () => {
-          specsBuilder.createUser("AB", null, null, null, null); // 2 chars, min is 3
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg.includes("Invalid name length"),
-            `Expected 'Invalid name length' error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for name too short"
-      );
+    it("the CommonJS entry exports the same surface, loaded by its own init()", async () => {
+      const cjs = require("./index.cjs");
+      assert.deepStrictEqual(Object.keys(cjs).sort(), Object.keys(specs).sort());
+      rejects(() => cjs.userUriBuilder(OTTO), /await init\(\)/);
+      await cjs.init();
+      assert.strictEqual(cjs.userUriBuilder(OTTO), userUriBuilder(OTTO));
+    });
+  });
+
+  describe("UTF-16 well-formedness at the entry", () => {
+    const profile = `pubky://${OTTO}/pub/social/v1/profile.json`;
+
+    it("rejects a lone surrogate in a string argument", () => {
+      rejects(() => createTag(OTTO, profile, "\uD800"), MALFORMED);
+      rejects(() => parseUri(`${profile}\uDC00`), MALFORMED);
     });
 
-    it("should store image and link urls as written", () => {
+    it("an object carrying one is refused by the JSON parser, member names included", () => {
+      // The exact text is the parser's; that it is refused is the contract
+      rejects(() => createUser(OTTO, { name: "Al\uDC00ice" }), /^Validation Error: /);
+      rejects(() => createUser(OTTO, { name: "Alice", links: [{ title: "\uD83D", url: "https://a.dev" }] }), /^Validation Error: /);
+      rejects(() => validate(profile, { name: "Alice", "\uD83D": 1 }), /^Validation Error: /);
+      rejects(() => planUnpublish("0032SSN7Q4EVG", ["\uD800"], []), MALFORMED);
+    });
+
+    it("accepts surrogate pairs", () => {
+      const { object } = createUser(OTTO, { name: "🔥".repeat(50) });
+      assert.strictEqual(object.name, "🔥".repeat(50));
+    });
+
+    it("the fallback loop agrees where String.prototype.isWellFormed is missing", () => {
+      const original = Object.getOwnPropertyDescriptor(String.prototype, "isWellFormed");
+      delete String.prototype.isWellFormed;
+      try {
+        for (const bad of ["a\uD800", "\uDC00b", "\uDC00\uD800", "\uD800\uD800"]) {
+          rejects(() => createTag(OTTO, profile, bad), MALFORMED);
+        }
+        assert.strictEqual(createTag(OTTO, profile, "x🔥").object.label, "x🔥");
+      } finally {
+        if (original) Object.defineProperty(String.prototype, "isWellFormed", original);
+      }
+    });
+  });
+
+  describe("User", () => {
+    it("creates a profile with meta naming the owner", () => {
+      const { object, meta } = createUser(OTTO, {
+        name: "Alice Smith",
+        bio: "Software Developer",
+        status: "active",
+      });
+      assert.strictEqual(meta.id, "", "the profile has no id");
+      assert.strictEqual(meta.path, "/pub/social/v1/profile.json");
+      assert.strictEqual(meta.url, userUriBuilder(OTTO));
+      assert.strictEqual(Object.getPrototypeOf(object), Object.prototype, "a plain object, not a Map");
+      assert.strictEqual(object.name, "Alice Smith");
+      assert.strictEqual(object.bio, "Software Developer");
+      assert.strictEqual(object.status, "active");
+    });
+
+    it("rejects a name too short", () => {
+      rejects(() => createUser(OTTO, { name: "AB" }), /Invalid name length/);
+    });
+
+    it("rejects an input member it does not know, so a typo is never dropped silently", () => {
+      rejects(() => createUser(OTTO, { name: "Alice", bios: "x" }), /^Validation Error: unknown field `bios`/);
+    });
+
+    it("rejects an owner that is not a pubky", () => {
+      rejects(() => createUser("nope", { name: "Alice" }), /52 ASCII characters/);
+    });
+
+    it("stores image and link urls as written", () => {
       const image = `pubky://${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
-      const { user } = specsBuilder.createUser(
-        "Alice Smith",
-        null,
+      const { object } = createUser(OTTO, {
+        name: "Alice Smith",
         image,
-        [{ title: "site", url: "https://example.com/a" }],
-        null
-      );
-
-      const userJson = user.toJson();
-      assert.strictEqual(userJson.image, image, "Image should be stored verbatim");
-      assert.strictEqual(
-        userJson.links[0].url,
-        "https://example.com/a",
-        "Link url should be stored verbatim"
-      );
+        links: [{ title: "site", url: "https://example.com/a" }],
+      });
+      assert.strictEqual(object.image, image);
+      assert.strictEqual(object.links[0].url, "https://example.com/a");
     });
 
     it("trims name, bio, status and link titles in the builder", () => {
-      const { user } = specsBuilder.createUser(
-        "  Alice Smith  ",
-        "  Software Developer  ",
-        null,
-        [{ title: "  site  ", url: "https://example.com/a" }],
-        "  active  "
-      );
-
-      const userJson = user.toJson();
-      assert.strictEqual(userJson.name, "Alice Smith", "Name should be trimmed");
-      assert.strictEqual(userJson.bio, "Software Developer", "Bio should be trimmed");
-      assert.strictEqual(userJson.status, "active", "Status should be trimmed");
-      assert.strictEqual(userJson.links[0].title, "site", "Link title should be trimmed");
+      const { object } = createUser(OTTO, {
+        name: "  Alice Smith  ",
+        bio: "  Software Developer  ",
+        links: [{ title: "  site  ", url: "https://example.com/a" }],
+        status: "  active  ",
+      });
+      assert.strictEqual(object.name, "Alice Smith");
+      assert.strictEqual(object.bio, "Software Developer");
+      assert.strictEqual(object.status, "active");
+      assert.strictEqual(object.links[0].title, "site");
     });
 
     it("drops a blank bio or status instead of storing an empty one", () => {
-      const { user } = specsBuilder.createUser("Alice Smith", "   ", null, null, "  ");
-
-      const userJson = user.toJson();
-      assert.ok(
-        userJson.bio === null || userJson.bio === undefined,
-        `Blank bio should be absent, got: ${JSON.stringify(userJson.bio)}`
-      );
-      assert.ok(
-        userJson.status === null || userJson.status === undefined,
-        `Blank status should be absent, got: ${JSON.stringify(userJson.status)}`
-      );
+      const { object } = createUser(OTTO, { name: "Alice Smith", bio: "   ", status: "  " });
+      assert.strictEqual(object.bio, null);
+      assert.strictEqual(object.status, null);
     });
 
     it("reads a stored profile back as written", () => {
-      const stored = {
+      const bytes = {
         name: "  Alice Smith  ",
         bio: "  Software Developer  ",
         links: [{ title: "  site  ", url: "https://example.com/a" }],
         status: "  active  ",
       };
-      const user = PubkySocialUser.fromJson(stored);
+      const { kind, object } = readObject(userUriBuilder(OTTO), stored(bytes));
+      assert.strictEqual(kind, "user");
+      assert.strictEqual(object.name, bytes.name, "padding is kept");
+      assert.strictEqual(object.bio, bytes.bio);
+      assert.strictEqual(object.status, bytes.status);
+      assert.strictEqual(object.links[0].title, bytes.links[0].title);
+    });
 
-      const userJson = user.toJson();
-      assert.strictEqual(userJson.name, stored.name, "Name should keep its padding");
-      assert.strictEqual(userJson.bio, stored.bio, "Bio should keep its padding");
-      assert.strictEqual(userJson.status, stored.status, "Status should keep its padding");
-      assert.strictEqual(
-        userJson.links[0].title,
-        stored.links[0].title,
-        "Link title should keep its padding"
+    it("rejects a padded image", () => {
+      rejects(
+        () => createUser(OTTO, { name: "Alice Smith", image: " https://x.com/a.png " }),
+        "Validation Error: image must be a canonical pubky or web URI of at most 300 code points:  https://x.com/a.png ",
       );
     });
 
-    it("cannot create user with a padded image", () => {
-      assert.throws(
-        () => {
-          specsBuilder.createUser("Alice Smith", null, " https://x.com/a.png ", null, null);
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg ===
-              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points:  https://x.com/a.png ",
-            `Expected padded image error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for a padded image"
-      );
-    });
-
-    it("cannot create user with the short form image URI", () => {
+    it("rejects the short form image URI", () => {
       const short = `pubky${OTTO}/pub/social/v1/files/0032SSN7Q4EVG`;
-      assert.throws(
-        () => {
-          specsBuilder.createUser("Alice Smith", null, short, null, null);
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg === `Validation Error: image must be spelled in canonical form: ${short}`,
-            `Expected canonical-form image error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for the short form image URI"
+      rejects(
+        () => createUser(OTTO, { name: "Alice Smith", image: short }),
+        `Validation Error: image must be spelled in canonical form: ${short}`,
       );
     });
 
-    it("cannot create user with an ipfs image", () => {
-      assert.throws(
-        () => {
-          specsBuilder.createUser("Alice Smith", null, "ipfs://x", null, null);
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg ===
-              "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: ipfs://x",
-            `Expected image scheme error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for a non pubky or web image"
+    it("rejects an ipfs image", () => {
+      rejects(
+        () => createUser(OTTO, { name: "Alice Smith", image: "ipfs://x" }),
+        "Validation Error: image must be a canonical pubky or web URI of at most 300 code points: ipfs://x",
       );
     });
 
-    it("cannot create user with a pubky link url", () => {
-      assert.throws(
-        () => {
-          specsBuilder.createUser("Alice Smith", null, null, [
-            { title: "profile", url: `pubky://${OTTO}/pub/social/v1/profile.json` },
-          ], null);
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg ===
-              `Validation Error: links[0].url must be a canonical web URI of at most 300 code points: pubky://${OTTO}/pub/social/v1/profile.json`,
-            `Expected link url error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for a pubky link url"
+    it("rejects a pubky link url", () => {
+      const url = `pubky://${OTTO}/pub/social/v1/profile.json`;
+      rejects(
+        () => createUser(OTTO, { name: "Alice Smith", links: [{ title: "profile", url }] }),
+        `Validation Error: links[0].url must be a canonical web URI of at most 300 code points: ${url}`,
       );
-    });
-
-    it("should accept emoji name at max length (50 chars)", () => {
-      const emojiName = "🔥".repeat(50); // 50 emoji = 50 Unicode chars (but many more bytes)
-      assert.strictEqual([...emojiName].length, 50, "Should be 50 Unicode characters");
-
-      const { user } = specsBuilder.createUser(emojiName, null, null, null, null);
-      const userJson = user.toJson();
-      assert.strictEqual(userJson.name, emojiName, "Emoji name should be preserved");
     });
   });
 
-  describe("Post Pubky-social-specs", () => {
-    it("should create basic post with correct properties", () => {
-      const postContent = "Hello, Pubky world! This is my first post."
-      const { post, meta } = specsBuilder.createPost(postContent, PubkySocialPostKind.Note);
-
-      // Test meta properties
-      assert.ok(meta.id, "Post should have an ID");
-      assert.ok(meta.url, "Post should have a URL");
-      const postChunks = meta.url.split("/")
-      assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
-      assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
-      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
-
-      // Test post content
-      const postJson = post.toJson();
-      assert.strictEqual(postJson.content, postContent, "Post content should match");
-      assert.strictEqual(postJson.kind, "note", "Post kind should match");
+  describe("Post", () => {
+    it("creates a note at posts/{id}/{id}.json", () => {
+      const content = "Hello, Pubky world! This is my first post.";
+      const { object, meta } = createPost(OTTO, { content });
+      const chunks = meta.url.split("/");
+      assert.strictEqual(chunks[2], OTTO);
+      assert.strictEqual(chunks[6], "posts");
+      assert.strictEqual(chunks[7], meta.id);
+      assert.strictEqual(meta.path, `/pub/social/v1/posts/${meta.id}/${meta.id}.json`);
+      assert.strictEqual(object.content, content);
+      assert.strictEqual(object.kind, "note", "the kind defaults to note");
+      assert.deepStrictEqual(object.attachments, [], "always an array on the wire");
     });
 
-    it("should create reply post with parent reference", () => {
-      const parentPostUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`
-      const parentPostUri = postUriBuilder(RIO, "0033SSE3B1FQ0")
-      assert.strictEqual(parentPostUri, parentPostUriRaw, "Parent post URI should match");
-
-      const { post: replyPost } = specsBuilder.createPost(
-        "This is a reply to the first post!",
-        PubkySocialPostKind.Note,
-        parentPostUriRaw
-      );
-
-      // Test reply content
-      const replyJson = replyPost.toJson();
-      assert.strictEqual(replyJson.parent, parentPostUriRaw, "Reply should reference parent URL");
+    it("carries a parent", () => {
+      const parent = `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`;
+      assert.strictEqual(postUriBuilder(RIO, "0033SSE3B1FQ0"), parent);
+      const { object } = createPost(OTTO, { content: "A reply", parent });
+      assert.strictEqual(object.parent, parent);
     });
 
-    it("should create repost with embed", () => {
-      const embedUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
-      const embedUriFromBuilder = postUriBuilder(RIO, "0033SREKPC4N0")
-      assert.strictEqual(embedUriFromBuilder, embedUriRaw, "Embed URI should match");
-
-      const { post: repost } = specsBuilder.createPost(
-        "This is a repost to random post!",
-        PubkySocialPostKind.Note,
-        null,
-        embedUriRaw
-      );
-
-      // Test repost content
-      const repostJson = repost.toJson();
-      assert.strictEqual(repostJson.embed, embedUriRaw, "Embed URI should match");
-    });
-
-    it("should carry attachment objects with alt and name", () => {
-      const uri = `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`;
-      const attachment = new PubkySocialAttachment(uri, "a cat", "  cat.jpg  ");
-      assert.strictEqual(attachment.uri, uri);
-      assert.strictEqual(attachment.alt, "a cat");
-      assert.strictEqual(attachment.name, "cat.jpg", "name should be trimmed");
-
-      const { post } = specsBuilder.createPost("", PubkySocialPostKind.Image, null, null, [attachment]);
-      const postJson = post.toJson();
-      assert.deepStrictEqual(postJson.attachments, [{ uri, alt: "a cat", name: "cat.jpg" }]);
-      assert.strictEqual(post.attachments[0].alt, "a cat", "getter should return attachment instances");
+    it("carries an embed", () => {
+      const embed = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
+      assert.strictEqual(postUriBuilder(RIO, "0033SREKPC4N0"), embed);
+      const { object } = createPost(OTTO, { content: "A repost", embed });
+      assert.strictEqual(object.embed, embed);
     });
 
     it("trims content in the builder and reads a stored post back as written", () => {
-      const { post } = specsBuilder.createPost("  hello  ", PubkySocialPostKind.Note, null, null, null);
-      assert.strictEqual(post.toJson().content, "hello", "Content should be trimmed");
-
-      const stored = PubkySocialPost.fromJson({
-        content: "  hello  ",
-        kind: "note",
-        parent: null,
-        embed: null,
-        attachments: [],
-      });
-      assert.strictEqual(stored.toJson().content, "  hello  ", "Content should keep its padding");
+      const { object, meta } = createPost(OTTO, { content: "  hello  " });
+      assert.strictEqual(object.content, "hello", "content is trimmed");
+      const stored = { content: "  hello  ", kind: "note", parent: null, embed: null, attachments: [] };
+      assert.strictEqual(readObject(meta.url, new TextEncoder().encode(JSON.stringify(stored))).object.content, "  hello  ", "padding is kept on read");
     });
 
-    it("toJson returns a plain object and keeps unknown members", () => {
-      const post = PubkySocialPost.fromJson({
-        content: "x",
-        kind: "note",
-        parent: null,
-        embed: null,
-        attachments: [],
-        later: 1,
+    it("carries attachment objects, the builder trimming the name", () => {
+      const uri = `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`;
+      const { object } = createPost(OTTO, {
+        content: "",
+        kind: "image",
+        attachments: [{ uri, alt: "a cat", name: "  cat.jpg  " }],
       });
-      const postJson = post.toJson();
-      assert.strictEqual(Object.getPrototypeOf(postJson), Object.prototype, "toJson must not return a Map");
-      assert.strictEqual(postJson.kind, "note");
-      assert.strictEqual(postJson.later, 1, "unknown members survive a round trip");
+      assert.deepStrictEqual(object.attachments, [{ uri, alt: "a cat", name: "cat.jpg" }]);
     });
 
-    it("cannot create post with too many attachments", () => {
-      const attachments = [
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ53H`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ54I`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55J`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55K`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55L`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55M`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55N`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55O`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55P`,
-        `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ55A`, // 11th attachment exceeds limit
-      ].map((uri) => new PubkySocialAttachment(uri, null, null));
-
-      assert.throws(
-        () => {
-          specsBuilder.createPost(
-            "Post with too many attachments",
-            PubkySocialPostKind.Image,
-            null,
-            null,
-            attachments
-          );
-        },
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          assert.ok(
-            msg.includes("Too many attachments"),
-            `Expected 'Too many attachments' error, got: "${msg}"`
-          );
-          return true;
-        },
-        "Expected validation error for too many attachments"
-      );
+    it("rejects an unknown kind by name", () => {
+      rejects(() => createPost(OTTO, { content: "x", kind: "short" }), "Validation Error: Invalid content kind: short");
     });
 
-    describe("Post lock", () => {
-      const validLockUrl = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
+    it("rejects too many attachments", () => {
+      const attachments = Array.from({ length: validationLimits.postAttachmentsMaxCount + 1 }, () => ({
+        uri: `pubky://${OTTO}/pub/social/v1/files/0034A0X7NJ52G`,
+      }));
+      rejects(() => createPost(OTTO, { content: "x", kind: "image", attachments }), /Too many attachments/);
+    });
 
-      it("should create locked post with valid pubky lock URL", () => {
-        const postContent = "Visible preview for locked content";
-        const { post } = specsBuilder.createPost(
-          postContent,
-          PubkySocialPostKind.Note,
-          null,
-          null,
-          null,
-          validLockUrl
-        );
+    describe("lock", () => {
+      const lock = `pubky://${RIO}/pub/locks/0034A0X7NJ52G`;
 
-        assert.strictEqual(post.lock, validLockUrl, "lock getter should return lock URL");
-        const postJson = post.toJson();
-        assert.strictEqual(postJson.content, postContent, "Post content should match");
-        assert.strictEqual(postJson.lock, validLockUrl, "toJson should include lock URL");
+      it("stores a pubky lock URL", () => {
+        const { object } = createPost(OTTO, { content: "Visible preview for locked content", lock });
+        assert.strictEqual(object.lock, lock);
       });
 
-      it("should create unlocked post when lock is omitted", () => {
-        const { post } = specsBuilder.createPost("Hello", PubkySocialPostKind.Note);
-        const lock = post.lock;
-        assert.ok(
-          lock === null || lock === undefined,
-          "createPost should produce unlocked post"
-        );
-        const postJson = post.toJson();
-        assert.ok(
-          postJson.lock === null || postJson.lock === undefined,
-          "toJson should not include lock for unlocked post"
-        );
+      it("leaves the lock out of an unlocked post", () => {
+        const { object } = createPost(OTTO, { content: "Hello" });
+        assert.ok(!("lock" in object), "absent, not null");
       });
 
-      it("should deserialize post without lock field as unlocked", () => {
-        const post = PubkySocialPost.fromJson({
-          content: "Hello World!",
-          kind: "note",
-          parent: null,
-          embed: null,
+      it("reads a stored post without lock or attachments as unlocked and empty", () => {
+        const { meta } = createPost(OTTO, { content: "x" });
+        const { object } = readObject(meta.url, stored({ content: "Hello World!", kind: "note", parent: null, embed: null }));
+        assert.strictEqual(object.lock, undefined);
+        assert.deepStrictEqual(object.attachments, []);
+      });
+
+      it("rejects a web or hostless lock URL", () => {
+        for (const bad of ["https://locks.example.com/session/0034A0X7NJ52G", "pubky:lock-id"]) {
+          rejects(() => createPost(OTTO, { content: "Preview", lock: bad }), /lock/);
+        }
+      });
+    });
+
+    describe("article", () => {
+      it("writes the envelope into content and trims the title", () => {
+        const cover = `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`;
+        const { object, meta } = createArticlePost(OTTO, {
+          title: "  On Pubky  ",
+          body: "# Hello\n\nbody",
+          coverImage: cover,
         });
-        const lock = post.lock;
-        assert.ok(
-          lock === null || lock === undefined,
-          "fromJson without lock should deserialize as unlocked"
-        );
-      });
-
-      it("cannot create post with non-pubky lock URL", () => {
-        assert.throws(
-          () => {
-            specsBuilder.createPost(
-              "Preview",
-              PubkySocialPostKind.Note,
-              null,
-              null,
-              null,
-              "https://locks.example.com/session/0034A0X7NJ52G"
-            );
-          },
-          (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            assert.ok(
-              msg.includes("lock"),
-              `Expected lock error, got: "${msg}"`
-            );
-            return true;
-          },
-          "Expected validation error for non-pubky lock URL"
-        );
-      });
-
-      it("cannot create post with hostless lock URL", () => {
-        assert.throws(
-          () => {
-            specsBuilder.createPost(
-              "Preview",
-              PubkySocialPostKind.Note,
-              null,
-              null,
-              null,
-              "pubky:lock-id"
-            );
-          },
-          (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            assert.ok(msg.includes("lock"), `Expected lock error, got: "${msg}"`);
-            return true;
-          },
-          "Expected validation error for hostless lock URL"
-        );
-      });
-    });
-
-    describe("Article posts", () => {
-      it("should create article post with JSON envelope content", () => {
-        const { post, meta } = specsBuilder.createArticlePost(
-          "  On Pubky  ",
-          "# Hello\n\nbody",
-          `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`
-        );
-        assert.ok(meta.id, "Article post should have an ID");
-        const postJson = post.toJson();
-        assert.strictEqual(postJson.kind, "article", "Post kind should be article");
-        assert.deepStrictEqual(postJson.attachments, []);
-        const envelope = JSON.parse(postJson.content);
-        assert.strictEqual(envelope.title, "On Pubky", "Title should be trimmed");
+        assert.ok(meta.id);
+        assert.strictEqual(object.kind, "article");
+        assert.deepStrictEqual(object.attachments, []);
+        const envelope = JSON.parse(object.content);
+        assert.strictEqual(envelope.title, "On Pubky");
         assert.strictEqual(envelope.body, "# Hello\n\nbody");
-        assert.strictEqual(envelope.cover_image, `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`);
+        assert.strictEqual(envelope.cover_image, cover);
       });
 
-      it("should accept parent, embed, attachments and lock on an article", () => {
-        const { post } = specsBuilder.createArticlePost(
-          "Reply article",
-          "body",
-          null,
-          `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`,
-          "https://example.com/source",
-          [new PubkySocialAttachment(`pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`, "alt", "a.jpg")],
-          `pubky://${RIO}/pub/app.locks/0034A0X7NJ52G.json`
-        );
-        const postJson = post.toJson();
-        assert.strictEqual(postJson.parent, `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`);
-        assert.strictEqual(postJson.embed, "https://example.com/source");
-        assert.strictEqual(postJson.attachments.length, 1);
-        assert.ok(postJson.lock);
+      it("takes parent, embed, attachments and lock", () => {
+        const parent = `pubky://${RIO}/pub/social/v1/posts/0033SSE3B1FQ0`;
+        const { object } = createArticlePost(OTTO, {
+          title: "Reply article",
+          body: "body",
+          parent,
+          embed: "https://example.com/source",
+          attachments: [{ uri: `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`, alt: "alt", name: "a.jpg" }],
+          lock: `pubky://${RIO}/pub/app.locks/0034A0X7NJ52G.json`,
+        });
+        assert.strictEqual(object.parent, parent);
+        assert.strictEqual(object.embed, "https://example.com/source");
+        assert.strictEqual(object.attachments.length, 1);
+        assert.ok(object.lock);
       });
 
-      it("cannot create article with empty title", () => {
-        assert.throws(
-          () => specsBuilder.createArticlePost("   ", "body", null),
-          (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            assert.ok(msg.includes("title"), `Expected title error, got: "${msg}"`);
-            return true;
-          }
-        );
+      it("rejects a blank title", () => {
+        rejects(() => createArticlePost(OTTO, { title: "   ", body: "body" }), /title/);
       });
     });
 
-    describe("Collection posts", () => {
-      const collectionItemUri = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
-      const coverImageUrl = `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`;
+    describe("collection", () => {
+      const item = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
+      const cover = `pubky://${RIO}/pub/social/v1/files/0034A0X7NJ52G`;
 
-      it("should create collection post with JSON envelope content", () => {
-        assert.strictEqual(
-          typeof specsBuilder.createCollectionPost,
-          "function",
-          "PubkySpecsBuilder should expose createCollectionPost"
-        );
-
-        const { post, meta } = specsBuilder.createCollectionPost(
-          "Favorite posts",
-          "Posts worth revisiting",
-          [new PubkySocialCollectionItem(collectionItemUri, "worth it")],
-          coverImageUrl
-        );
-
-        assert.ok(meta.id, "Collection post should have an ID");
-        assert.ok(meta.url, "Collection post should have a URL");
-        const postChunks = meta.url.split("/");
-        assert.strictEqual(postChunks[2], OTTO, "URL should contain user ID");
-        assert.strictEqual(postChunks[6], "posts", "URL should contain posts path");
-        assert.strictEqual(postChunks[7], meta.id, "URL should contain post ID");
-      assert.strictEqual(meta.path, "/pub/social/v1/posts/" + meta.id + "/" + meta.id + ".json", "post storage path");
-
-        const postJson = post.toJson();
-        assert.strictEqual(postJson.kind, "collection", "Post kind should be collection");
-        assert.deepStrictEqual(postJson.attachments, [], "Collection items should not be stored in post.attachments");
-
-        const envelope = JSON.parse(postJson.content);
-        assert.strictEqual(envelope.name, "Favorite posts", "Collection name should match");
-        assert.strictEqual(
-          envelope.description,
-          "Posts worth revisiting",
-          "Collection description should match"
-        );
-        assert.deepStrictEqual(
-          envelope.items,
-          [{ uri: collectionItemUri, note: "worth it" }],
-          "Collection items are objects with an optional note"
-        );
-        assert.strictEqual(envelope.cover_image, coverImageUrl, "Collection cover image should match");
+      it("writes the envelope into content, items as {uri, note?}", () => {
+        const { object, meta } = createCollectionPost(OTTO, {
+          name: "Favorite posts",
+          description: "Posts worth revisiting",
+          items: [{ uri: item, note: "worth it" }],
+          coverImage: cover,
+          layout: "list",
+        });
+        assert.strictEqual(meta.path, `/pub/social/v1/posts/${meta.id}/${meta.id}.json`);
+        assert.strictEqual(object.kind, "collection");
+        assert.deepStrictEqual(object.attachments, [], "items never land in attachments");
+        const envelope = JSON.parse(object.content);
+        assert.strictEqual(envelope.name, "Favorite posts");
+        assert.strictEqual(envelope.description, "Posts worth revisiting");
+        assert.deepStrictEqual(envelope.items, [{ uri: item, note: "worth it" }]);
+        assert.strictEqual(envelope.cover_image, cover);
+        assert.strictEqual(envelope.layout, "list");
       });
 
       it("trims name, description and item notes in the builder", () => {
-        const { post } = specsBuilder.createCollectionPost(
-          "  Favorite posts  ",
-          "  the good ones  ",
-          [new PubkySocialCollectionItem(collectionItemUri, "  worth it  ")],
-          null
-        );
-        const envelope = JSON.parse(post.toJson().content);
-        assert.strictEqual(envelope.name, "Favorite posts", "Name should be trimmed");
-        assert.strictEqual(envelope.description, "the good ones", "Description should be trimmed");
-        assert.strictEqual(envelope.items[0].note, "worth it", "Item note should be trimmed");
+        const { object } = createCollectionPost(OTTO, {
+          name: "  Favorite posts  ",
+          description: "  the good ones  ",
+          items: [{ uri: item, note: "  worth it  " }],
+        });
+        const envelope = JSON.parse(object.content);
+        assert.strictEqual(envelope.name, "Favorite posts");
+        assert.strictEqual(envelope.description, "the good ones");
+        assert.strictEqual(envelope.items[0].note, "worth it");
       });
 
       it("drops a blank description or item note instead of storing an empty one", () => {
-        const item = new PubkySocialCollectionItem(collectionItemUri, "   ");
-        assert.strictEqual(item.note, undefined, "Blank note should be absent");
-
-        const { post } = specsBuilder.createCollectionPost("Favorite posts", "   ", [item], null);
-        const envelope = JSON.parse(post.toJson().content);
-        assert.ok(!("description" in envelope), `Blank description should be absent, got: ${post.toJson().content}`);
-        assert.deepStrictEqual(envelope.items, [{ uri: collectionItemUri }]);
+        const { object } = createCollectionPost(OTTO, {
+          name: "Favorite posts",
+          description: "   ",
+          items: [{ uri: item, note: "   " }],
+        });
+        const envelope = JSON.parse(object.content);
+        assert.ok(!("description" in envelope), `blank description is absent, got: ${object.content}`);
+        assert.deepStrictEqual(envelope.items, [{ uri: item }]);
       });
 
-      it("cannot create collection post with too many items", () => {
-        assert.strictEqual(
-          typeof specsBuilder.createCollectionPost,
-          "function",
-          "PubkySpecsBuilder should expose createCollectionPost"
-        );
-
-        const tooManyItems = Array.from(
-          { length: validationLimits.collectionItemsMaxCount + 1 },
-          (_, index) =>
-            new PubkySocialCollectionItem(
-              `pubky://${RIO}/pub/social/v1/posts/${String(index).padStart(13, "0")}`,
-              null
-            )
-        );
-
-        assert.throws(
-          () => {
-            specsBuilder.createCollectionPost("Too many", null, tooManyItems, null);
-          },
-          (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            assert.ok(
-              msg.includes(`${validationLimits.collectionItemsMaxCount} items`),
-              `Expected collection item limit error, got: "${msg}"`
-            );
-            return true;
-          },
-          "Expected validation error for too many collection items"
+      it("rejects too many items", () => {
+        const items = Array.from({ length: validationLimits.collectionItemsMaxCount + 1 }, (_, i) => ({
+          uri: `pubky://${RIO}/pub/social/v1/posts/${String(i).padStart(13, "0")}`,
+        }));
+        rejects(
+          () => createCollectionPost(OTTO, { name: "Too many", items }),
+          new RegExp(`${validationLimits.collectionItemsMaxCount} items`),
         );
       });
     });
   });
 
-  describe("Bookmark Pubky-social-specs", () => {
-    it("should create bookmark with correct properties", () => {
-      const postUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`
+  describe("versions and the lifecycle planners", () => {
+    it("drafts privately, publishes, edits, unpublishes and deletes", () => {
+      const media = createFile(OTTO, new Uint8Array([1, 2]), "image/png", "private");
+      assert.strictEqual(media.meta.path, "/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png");
+      const draft = {
+        content: "draft",
+        kind: "image",
+        parent: null,
+        embed: null,
+        attachments: [{ uri: media.meta.url }],
+      };
+      // A private reference is refused under the public root, and builds as a private draft
+      rejects(() => createPost(OTTO, draft), /private/);
+      const built = createPost(OTTO, { ...draft, root: "private" });
+      assert.strictEqual(built.meta.path, `/priv/social/v1/posts/${built.meta.id}/${built.meta.id}.json`);
+      assert.strictEqual(built.object.attachments[0].uri, media.meta.url);
 
-      const { bookmark, meta: bookmarkMeta } = specsBuilder.createBookmark(postUriRaw);
-      const bookmarkUriFromBuilder = bookmarkUriBuilder(OTTO, bookmarkMeta.id)
-      assert.strictEqual(bookmarkUriFromBuilder, bookmarkMeta.url, "Bookmark URI should match");
+      const version = createVersion(OTTO, draft, { root: "private", slug: "my-draft" });
+      assert.strictEqual(version.editId, version.id, "creation writes editId == id");
+      assert.strictEqual(version.path, `/priv/social/v1/posts/${version.id}/${version.id}-my-draft.json`);
+      assert.strictEqual(version.url, `pubky://${OTTO}${version.path}`);
+      rejects(() => createVersion(OTTO, draft, { root: "private", slug: "Bad Slug" }), /slug/);
+      // The public root when no root is given
+      rejects(() => createVersion(OTTO, draft), /private/);
 
-      // Test meta properties
-      assert.ok(bookmarkMeta.id, "Bookmark should have an ID");
-      assert.ok(bookmarkMeta.url, "Bookmark should have a URL");
-      const bookmarkChunks = bookmarkMeta.url.split("/")
-      assert.strictEqual(bookmarkChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(bookmarkChunks[3], "priv", "bookmarks live under the private root");
-      assert.strictEqual(bookmarkChunks[6], "bookmarks", "URL should contain bookmarks path");
-      assert.strictEqual(bookmarkChunks[7], bookmarkMeta.id + ".json", "URL should carry the filename");
+      const publish = planPublish(OTTO, version.id, version.editId, draft);
+      assert.deepStrictEqual(publish.mediaCopies, [[media.meta.path, "/pub/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png"]]);
+      assert.strictEqual(publish.destPath, `/pub/social/v1/posts/${version.id}/${version.id}.json`, "the public leaf has no slug");
+      const published = publish.rewrittenPost;
+      assert.strictEqual(published.attachments[0].uri, fileUriBuilder(OTTO, "PZBQ010FF079VVZPQG1RNFN6DR.png"));
+      assert.strictEqual(published.content, "draft");
 
-      // The filename IS the target, so a LIST of the prefix needs no GETs
-      assert.strictEqual(bookmarkTarget(bookmarkMeta.id, bookmark), postUriRaw, "Target should round trip");
-      assert.strictEqual(bookmarkMeta.id, Buffer.from(postUriRaw).toString("base64url"), "Filename should be base64url of the target");
+      const edit = editVersion(OTTO, draft, { id: version.id, head: version.editId, root: "private" });
+      assert.strictEqual(edit.id, version.id);
+      assert.ok(edit.editId > version.editId, "an edit sorts above the head");
 
-      // Test bookmark content
-      const bookmarkJson = bookmark.toJson();
-      assert.strictEqual(bookmarkJson.uri, undefined, "The content carries no uri");
-      assert.strictEqual(bookmarkJson.target, undefined, "A primary bookmark carries no target");
-      assert.ok(bookmarkJson.created_at, "Bookmark should have created_at timestamp");
-      assert.ok(typeof bookmarkJson.created_at === "number", "created_at should be a number");
+      const unpublish = planUnpublish(version.id, [publish.destPath], [], edit.path);
+      assert.deepStrictEqual(unpublish.copyBacks, [], "nothing public is newer than the private head");
+      assert.deepStrictEqual(unpublish.deletes, [publish.destPath]);
 
-      // The same target twice is the same filename, so a rewrite overwrites
-      const again = specsBuilder.createBookmark(`pubky${RIO}/pub/social/v1/posts/0033SREKPC4N0`);
-      assert.strictEqual(again.meta.id, bookmarkMeta.id, "One target should give one filename");
+      const copies = [
+        { root: "private", path: edit.path },
+        { root: "private", path: version.path },
+        { root: "public", path: publish.destPath },
+      ];
+      const plan = planDelete(OTTO, version.id, [], copies, [draft]);
+      assert.deepStrictEqual(plan.deletes, [publish.destPath, version.path, edit.path], "oldest first, pub before priv");
+      assert.deepStrictEqual(plan.mediaGcCandidates, [
+        "/priv/social/v1/files/PZBQ010FF079VVZPQG1RNFN6DR.png",
+      ]);
+      const listings = copies.map((c) => c.path);
+      assert.deepStrictEqual(deletionPaths({ kind: "post", id: version.id, listings }), plan.deletes);
     });
 
-    it("should spell a long target in the overflow form", () => {
-      const longUri = `https://example.com/${"a".repeat(168)}`;
-      const { bookmark, meta } = specsBuilder.createBookmark(longUri);
-      assert.ok(meta.id.startsWith("~"), "A 188 byte target overflows");
-      assert.strictEqual(bookmark.toJson().target, longUri, "The overflow content carries the target");
-      assert.strictEqual(bookmarkTarget(meta.id, bookmark), longUri, "Target should round trip");
+    it("refuses a head older than the post", () => {
+      const { object, meta } = createPost(OTTO, { content: "x" });
+      rejects(
+        () => editVersion(OTTO, object, { id: meta.id, head: "0032SSN7Q4EVG" }),
+        /older than the post id/,
+      );
     });
+  });
 
-    it("should read a stored bookmark back through fromJson", () => {
-      // What a reader actually holds: a filename from a LIST and the stored JSON
-      const postUriRaw = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
-      const longUri = `https://example.com/${"a".repeat(168)}`;
-      for (const target of [postUriRaw, longUri]) {
-        const { bookmark, meta } = specsBuilder.createBookmark(target);
-        const stored = JSON.parse(JSON.stringify(bookmark.toJson()));
-        const reread = PubkySocialBookmark.fromJson(stored);
-        assert.strictEqual(bookmarkTarget(meta.id, reread), target, "Stored JSON should read back");
-        assert.strictEqual(bookmarkFilename(target), meta.id, "Filename needs no minting");
+  describe("readObject and validate", () => {
+    it("round-trips every kind a builder writes, tagged by kind", () => {
+      const built = [
+        ["user", createUser(OTTO, { name: "Alice" })],
+        ["post", createPost(OTTO, { content: "x" })],
+        ["tag", createTag(OTTO, userUriBuilder(RIO), "friend")],
+        ["follow", createFollow(OTTO, RIO)],
+        ["mute", createMute(OTTO, RIO)],
+        ["bookmark", createBookmark(OTTO, userUriBuilder(RIO))],
+        ["feed", createFeed(OTTO, { reach: "all", layout: "columns", sort: "recent", name: "All", icon: "globe" })],
+      ];
+      for (const [kind, { object, meta }] of built) {
+        const read = readObject(meta.url, stored(object));
+        assert.strictEqual(read.kind, kind);
+        assert.deepStrictEqual(read.object, JSON.parse(JSON.stringify(object)), kind);
+        validate(meta.url, read.object);
       }
     });
 
-    it("should reject an invalid bookmark entry instead of guessing", () => {
-      const { bookmark, meta } = specsBuilder.createBookmark(`pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`);
-      assert.throws(() => bookmarkTarget(meta.id + "=", bookmark), "Padding is not a canonical filename");
-      assert.throws(() => specsBuilder.createBookmark("not a uri"), "A target must be a canonical URI");
+    it("reads media back as {bytes}", () => {
+      const { object, meta } = createFile(OTTO, new Uint8Array([1, 2]), "image/png");
+      const read = readObject(meta.url, object.bytes);
+      assert.strictEqual(read.kind, "file");
+      assert.deepStrictEqual(Array.from(read.object.bytes), [1, 2]);
+      validate(meta.url, read.object);
+      rejects(() => validate(meta.url, { bytes: new Uint8Array([3]) }), /Invalid ID/);
+      rejects(() => validate(meta.url, { data: object.bytes }), /bytes: Uint8Array/);
+    });
+
+    it("keeps unknown members through read, edit, validate", () => {
+      const url = userUriBuilder(OTTO);
+      const { object } = readObject(url, stored({ name: "Alice", ext: { badge: { level: 1 } }, later: [1, 2] }));
+      assert.deepStrictEqual(object.ext, { badge: { level: 1 } });
+      assert.deepStrictEqual(object.later, [1, 2]);
+      object.status = "editing";
+      validate(url, object);
+      object.name = "AB";
+      rejects(() => validate(url, object), /Invalid name length/);
+    });
+
+    it("checks the id the URI names", () => {
+      const a = createTag(OTTO, userUriBuilder(RIO), "a");
+      const b = createTag(OTTO, userUriBuilder(RIO), "b");
+      rejects(() => validate(b.meta.url, a.object), /Invalid ID/);
+      rejects(() => readObject(b.meta.url, stored(a.object)), /Invalid ID/);
+    });
+
+    it("refuses what is no stored object", () => {
+      rejects(() => readObject(postUriBuilder(OTTO, "0032SSN7Q4EVG"), stored({})), /versionless/);
+      rejects(() => readObject("nope", stored({})), /Not a canonical pubky URI/);
     });
   });
 
-  describe("Follow Pubky-social-specs", () => {
-    it("should create follow with correct properties", () => {
-      const { follow, meta: followMeta } = specsBuilder.createFollow(RIO);
-      const followUriFromBuilder = followUriBuilder(OTTO, RIO)
-      assert.strictEqual(followUriFromBuilder, followMeta.url, "Follow URI should match");
+  describe("what crosses the boundary", () => {
+    it("a stored __proto__ member stays an own member at every depth", () => {
+      const url = userUriBuilder(OTTO);
+      const json = '{"name":"Alice","__proto__":{"lock":"x"},"ext":{"__proto__":{"polluted":true}}}';
+      const { object } = readObject(url, new TextEncoder().encode(json));
+      assert.strictEqual(Object.getPrototypeOf(object), Object.prototype);
+      assert.strictEqual(Object.getPrototypeOf(object.ext), Object.prototype);
+      assert.ok(Object.hasOwn(object, "__proto__"));
+      assert.ok(Object.hasOwn(object.ext, "__proto__"));
+      assert.strictEqual(object.lock, undefined, "nothing is inherited from stored data");
+      assert.strictEqual(object.ext.polluted, undefined);
+      validate(url, object);
+      const again = JSON.parse(JSON.stringify(object));
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptor(again, "__proto__").value, { lock: "x" });
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptor(again.ext, "__proto__").value, { polluted: true });
+    });
 
-      // Test meta properties
-      assert.strictEqual(followMeta.id, RIO, "Follow ID should be the user being followed");
-      assert.ok(followMeta.url, "Follow should have a URL");
-      const followChunks = followMeta.url.split("/")
-      assert.strictEqual(followChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(followChunks[6], "follows", "URL should contain follows path");
-      assert.strictEqual(followChunks[7], RIO + ".json", "URL should contain follow ID");
+    it("validate checks the bytes JSON.stringify would PUT", () => {
+      const { object, meta } = createUser(OTTO, { name: "Alice" });
+      const edited = { ...object, foo: 2 ** 53 };
+      const message = "Validation Error: integer 9007199254740992 outside the JSON-safe range (in extra member foo)";
+      rejects(() => validate(meta.url, edited), message);
+      rejects(() => readObject(meta.url, stored(edited)), message);
+      // toJSON decides the stored bytes, so it decides what is checked
+      validate(meta.url, { toJSON: () => object });
+    });
 
-      // Test follow content
-      const followJson = follow.toJson();
-      assert.ok(followJson.created_at, "Follow should have created_at timestamp");
-      assert.ok(typeof followJson.created_at === "number", "created_at should be a number");
+    it("a value of the wrong type never reaches the wasm", () => {
+      rejects(() => parseUri(42), "Validation Error: parseUri() argument 1 must be a string");
+      rejects(() => createUser(OTTO, "Alice"), "Validation Error: createUser() argument 2 must be an object");
+      rejects(() => readObject(userUriBuilder(OTTO), [1, 2]), "Validation Error: readObject() argument 2 must be a Uint8Array");
+      rejects(() => createTag(OTTO, userUriBuilder(OTTO)), "Validation Error: createTag() argument 3 must be a string");
+      rejects(() => feedPaths("a", "b"), "Validation Error: feedPaths() takes at most 1 arguments");
+      rejects(() => planUnpublish("0032SSN7Q4EVG", new Array(1), []), "Validation Error: planUnpublish() argument 2 must be an array of strings");
+      rejects(() => readObject(userUriBuilder(OTTO), new DataView(new ArrayBuffer(2))), /must be a Uint8Array/);
+      rejects(() => readObject(userUriBuilder(OTTO), new Uint16Array(2)), /must be a Uint8Array/);
+    });
+
+    it("bytes from another realm pass", () => {
+      const { object, meta } = createFile(OTTO, new Uint8Array([1, 2]), "image/png");
+      const foreign = vm.runInNewContext("new Uint8Array([1, 2])");
+      assert.ok(!(foreign instanceof Uint8Array));
+      assert.strictEqual(readObject(meta.url, foreign).kind, "file");
+      validate(meta.url, object);
+      validate(meta.url, { bytes: foreign });
+    });
+
+    it("a cyclic object throws cleanly, a shared one passes", () => {
+      const cyclic = { name: "Alice" };
+      cyclic.self = cyclic;
+      rejects(() => validate(userUriBuilder(OTTO), cyclic), "Validation Error: the value has no JSON form");
+      const shared = { level: 1 };
+      validate(userUriBuilder(OTTO), { name: "Alice", ext: { a: shared, b: shared } });
     });
   });
 
-  describe("Tag Pubky-social-specs", () => {
-    it("should create tag with correct properties", () => {
-      const userUriRaw = `pubky://${OTTO}/pub/social/v1/profile.json`;
-      const userUriFromBuilder = userUriBuilder(OTTO)
-      assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
-
-      const { tag, meta: tagMeta } = specsBuilder.createTag(userUriRaw, "otto");
-
-      // Test meta properties
-      assert.ok(tagMeta.id, "Tag should have an ID");
-      assert.ok(tagMeta.url, "Tag should have a URL");
-      const tagChunks = tagMeta.url.split("/")
-      assert.strictEqual(tagChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(tagChunks[6], "tags", "URL should contain tags path");
-      assert.strictEqual(tagChunks[7], tagMeta.id + ".json", "URL should contain tag ID");
-
-      // Test tag content
-      const tagJson = tag.toJson();
-      assert.strictEqual(tagJson.uri, userUriRaw, "Tag URI should match");
-      assert.strictEqual(tagJson.label, "otto", "Tag label should match");
-      assert.ok(tagJson.created_at, "Tag should have created_at timestamp");
-      assert.ok(typeof tagJson.created_at === "number", "created_at should be a number");
-    });
-    it("cannot create a tag with invalid characters (comma, colon, space)", () => {
-      const userUriRaw = `pubky://${OTTO}/pub/social/v1/profile.json`;
-      const userUriFromBuilder = userUriBuilder(OTTO);
-      assert.strictEqual(userUriFromBuilder, userUriRaw, "User URI should match");
-
-      const invalidCases = [
-        { label: "otto,rio", invalidChar: ",", isWhitespace: false },
-        { label: "otto:rio", invalidChar: ":", isWhitespace: false },
-        { label: "otto rio", invalidChar: " ", isWhitespace: true },
-      ];
-
-      invalidCases.forEach(({ label, invalidChar, isWhitespace }) => {
-        assert.throws(
-          () => {
-            specsBuilder.createTag(userUriRaw, label);
-          },
-          (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-
-            if (isWhitespace) {
-              // Whitespace has a different error message format
-              assert.strictEqual(
-                msg,
-                `Validation Error: Tag '${label}' contains whitespace characters`,
-                `Unexpected error message for whitespace: "${msg}"`
-              );
-            } else {
-              assert.strictEqual(
-                msg,
-                `Validation Error: Tag '${label}' contains invalid character: ${invalidChar}`,
-                `Unexpected error message for invalid char '${invalidChar}': "${msg}"`
-              );
-            }
-
-            return true;
-          },
-          `Expected validation error when creating tag with invalid char '${invalidChar}' in label`
-        );
+  describe("parseUri, stableId, resolveDeref", () => {
+    it("classifies into {userId, visibility, resource, path}", () => {
+      const uri = `pubky://${OTTO}/priv/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52G-my-draft.json`;
+      assert.deepStrictEqual(parseUri(uri), {
+        userId: OTTO,
+        visibility: "private",
+        resource: { kind: "post", id: "0032SSN7Q4EVG", version: "0034A0X7NJ52G", label: "my-draft" },
+        path: "/priv/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52G-my-draft.json",
       });
+      assert.deepStrictEqual(parseUri(postUriBuilder(RIO, "0033SSE3B1FQ0")).resource, { kind: "post", id: "0033SSE3B1FQ0" });
+      assert.deepStrictEqual(parseUri(`pubky://${OTTO}`).resource, { kind: "user" });
+      assert.strictEqual(parseUri(`pubky://${OTTO}`).path, "");
+    });
+
+    it("reports foreign, unsupported and unknown paths as kinds, never errors", () => {
+      assert.deepStrictEqual(parseUri(`pubky://${OTTO}/pub/app.locks/v2/a/b`).resource, {
+        kind: "foreign",
+        namespace: "app.locks",
+        version: "v2",
+        rest: ["a", "b"],
+      });
+      assert.deepStrictEqual(parseUri(`pubky://${OTTO}/pub/social/v9/posts/0032SSN7Q4EVG`).resource, {
+        kind: "unsupportedVersion",
+        version: "v9",
+      });
+      assert.deepStrictEqual(parseUri(`pubky://${OTTO}/pub/social/v1/nothing`).resource, { kind: "unknown" });
+      rejects(() => parseUri("https://example.com"), /Not a canonical pubky URI/);
+    });
+
+    it("keys every epoch spelling of one object together", () => {
+      assert.deepStrictEqual(stableId("pub/social/v1/posts/0032SSN7Q4EVG/0034A0X7NJ52G.json"), {
+        kind: "key",
+        key: "posts/0032SSN7Q4EVG",
+      });
+      assert.deepStrictEqual(stableId("/pub/pubky.app/posts/0032SSN7Q4EVG"), { kind: "key", key: "posts/0032SSN7Q4EVG" });
+      assert.deepStrictEqual(stableId("pub/pubky.app/files/0032SSN7Q4EVG"), { kind: "needsDeref", tsid: "0032SSN7Q4EVG" });
+      assert.strictEqual(stableId("pub/elsewhere/x"), null);
+    });
+
+    it("completes a legacy media key through the v0 File object's src", () => {
+      const hash = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+      assert.strictEqual(resolveDeref("0032SSN7Q4EVG", `pubky://${OTTO}/pub/pubky.app/blobs/${hash}`), `files/${hash}`);
+      assert.strictEqual(resolveDeref("0032SSN7Q4EVG", "https://example.com/x.png"), null);
     });
   });
 
-  describe("Mute Pubky-social-specs", () => {
-    it("should create mute with correct properties", () => {
-      const { mute, meta: muteMeta } = specsBuilder.createMute(RIO);
+  describe("Bookmark", () => {
+    const target = `pubky://${RIO}/pub/social/v1/posts/0033SREKPC4N0`;
 
-      // Test meta properties
-      assert.ok(muteMeta.id, "Mute should have an ID");
-      assert.ok(muteMeta.url, "Mute should have a URL");
-      const muteChunks = muteMeta.url.split("/")
-      assert.strictEqual(muteChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(muteChunks[3], "priv", "mutes live under the private root");
-      assert.strictEqual(muteChunks[6], "mutes", "URL should contain mutes path");
-      assert.strictEqual(muteChunks[7], muteMeta.id + ".json", "URL should contain mute ID");
+    it("puts the target in the filename", () => {
+      const { object, meta } = createBookmark(OTTO, target);
+      assert.strictEqual(bookmarkUriBuilder(OTTO, meta.id), meta.url);
+      const chunks = meta.url.split("/");
+      assert.strictEqual(chunks[3], "priv", "bookmarks live under the private root");
+      assert.strictEqual(chunks[6], "bookmarks");
+      assert.strictEqual(chunks[7], `${meta.id}.json`);
+      assert.strictEqual(meta.id, Buffer.from(target).toString("base64url"));
+      assert.strictEqual(bookmarkTarget(meta.id, object), target);
+      assert.strictEqual(object.uri, undefined, "the content carries no uri");
+      assert.strictEqual(object.target, undefined, "a primary bookmark carries no target");
+      assert.strictEqual(typeof object.created_at, "number");
+      // One target, one filename, so a second bookmark overwrites the first
+      assert.strictEqual(createBookmark(OTTO, `pubky${RIO}/pub/social/v1/posts/0033SREKPC4N0`).meta.id, meta.id);
+    });
 
-      // Test mute content
-      const muteJson = mute.toJson();
-      assert.ok(muteJson.created_at, "Mute should have created_at timestamp");
-      assert.ok(typeof muteJson.created_at === "number", "created_at should be a number");
+    it("spells a long target in the overflow form", () => {
+      const long = `https://example.com/${"a".repeat(168)}`;
+      const { object, meta } = createBookmark(OTTO, long);
+      assert.ok(meta.id.startsWith("~"), "a 188 byte target overflows");
+      assert.strictEqual(object.target, long);
+      assert.strictEqual(bookmarkTarget(meta.id, object), long);
+    });
+
+    it("reads a primary entry from its filename alone", () => {
+      const { meta } = createBookmark(OTTO, target);
+      assert.strictEqual(bookmarkTarget(meta.id), target);
+      assert.strictEqual(bookmarkTarget(meta.id, null), target);
+      const long = createBookmark(OTTO, `https://example.com/${"a".repeat(168)}`);
+      rejects(() => bookmarkTarget(long.meta.id), /overflow bookmark requires target/);
+    });
+
+    it("reads stored JSON back, and names the filename without minting", () => {
+      for (const t of [target, `https://example.com/${"a".repeat(168)}`]) {
+        const { object, meta } = createBookmark(OTTO, t);
+        assert.strictEqual(bookmarkTarget(meta.id, JSON.parse(JSON.stringify(object))), t);
+        assert.strictEqual(bookmarkFilename(t), meta.id);
+      }
+    });
+
+    it("rejects an invalid entry instead of guessing", () => {
+      const { object, meta } = createBookmark(OTTO, target);
+      rejects(() => bookmarkTarget(`${meta.id}=`, object), /base64url/);
+      rejects(() => createBookmark(OTTO, "not a uri"));
     });
   });
 
-  describe("File Pubky-social-specs", () => {
-    it("should create a media file with correct properties", () => {
-      const length = 8
-      const bytes = Array.from({length}, () => Math.floor(Math.random() * 256));
-      const { file, meta: fileMeta } = specsBuilder.createFile(new Uint8Array(bytes), "application/pdf");
-
-      // Test meta properties
-      assert.ok(fileMeta.id, "File should have an ID");
-      assert.ok(fileMeta.url, "File should have a URL");
-      const fileChunks = fileMeta.url.split("/")
-      assert.strictEqual(fileChunks[2], OTTO, "URL should contain user ID");
-      assert.strictEqual(fileChunks[6], "files", "URL should contain files path");
-      assert.strictEqual(fileChunks[7], fileMeta.id + ".pdf", "the leaf is the hash and the mapped extension");
-
-      // Test file content
-      const data = file.data;
-      assert.ok(data instanceof Uint8Array, "File data should be a Uint8Array");
-      assert.deepStrictEqual(Array.from(data), bytes, "File data should round-trip");
+  describe("Follow, Tag, Mute", () => {
+    it("a follow is named by the followee", () => {
+      const { object, meta } = createFollow(OTTO, RIO);
+      assert.strictEqual(followUriBuilder(OTTO, RIO), meta.url);
+      assert.strictEqual(meta.id, RIO);
+      assert.strictEqual(meta.path, `/pub/social/v1/follows/${RIO}.json`);
+      assert.strictEqual(typeof object.created_at, "number");
     });
 
-    it("should map a declared type the table does not carry to .bin", () => {
-      const { meta } = specsBuilder.createFile(new Uint8Array([1, 2]), "application/x-not-a-real-type");
+    it("a tag is named by the hash of uri and label", () => {
+      const uri = `pubky://${OTTO}/pub/social/v1/profile.json`;
+      assert.strictEqual(userUriBuilder(OTTO), uri);
+      const { object, meta } = createTag(OTTO, uri, "otto");
+      assert.strictEqual(tagUriBuilder(OTTO, meta.id), meta.url);
+      assert.strictEqual(meta.path, `/pub/social/v1/tags/${meta.id}.json`);
+      assert.strictEqual(object.uri, uri);
+      assert.strictEqual(object.label, "otto");
+      assert.strictEqual(typeof object.created_at, "number");
+    });
+
+    it("a tag label rejects comma, colon and whitespace", () => {
+      const uri = userUriBuilder(OTTO);
+      rejects(() => createTag(OTTO, uri, "otto,rio"), "Validation Error: Tag 'otto,rio' contains invalid character: ,");
+      rejects(() => createTag(OTTO, uri, "otto:rio"), "Validation Error: Tag 'otto:rio' contains invalid character: :");
+      rejects(() => createTag(OTTO, uri, "otto rio"), "Validation Error: Tag 'otto rio' contains whitespace characters");
+    });
+
+    it("a mute lives under the private root", () => {
+      const { object, meta } = createMute(OTTO, RIO);
+      assert.strictEqual(muteUriBuilder(OTTO, RIO), meta.url);
+      assert.strictEqual(meta.path, `/priv/social/v1/mutes/${RIO}.json`);
+      assert.strictEqual(typeof object.created_at, "number");
+    });
+  });
+
+  describe("File", () => {
+    it("is the bytes, named by their hash and the mapped extension", () => {
+      const bytes = Array.from({ length: 8 }, () => Math.floor(Math.random() * 256));
+      const { object, meta } = createFile(OTTO, new Uint8Array(bytes), "application/pdf");
+      assert.strictEqual(meta.path, `/pub/social/v1/files/${meta.id}.pdf`);
+      assert.strictEqual(fileUriBuilder(OTTO, `${meta.id}.pdf`), meta.url);
+      assert.ok(object.bytes instanceof Uint8Array);
+      assert.deepStrictEqual(Array.from(object.bytes), bytes);
+    });
+
+    it("maps a type the table does not carry to .bin", () => {
+      const { meta } = createFile(OTTO, new Uint8Array([1, 2]), "application/x-not-a-real-type");
       assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
-      assert.ok(meta.url.endsWith(meta.id + ".bin"), "an unmapped type lands on .bin");
+      assert.ok(meta.url.endsWith(`${meta.id}.bin`));
+    });
+
+    it("rejects empty bytes and an unknown root", () => {
+      rejects(() => createFile(OTTO, new Uint8Array([]), "image/png"), /cannot be zero/);
+      rejects(() => createFile(OTTO, new Uint8Array([1]), "image/png", "pub"), /^Validation Error: unknown variant `pub`/);
     });
 
     it("exposes the essence and the whole frozen map", () => {
       assert.strictEqual(essence("IMAGE/PNG; charset=x"), "image/png");
-      assert.strictEqual(essence(" image/png"), undefined, "no trimming, a padded type is malformed");
-      const table = mimeToExtTable();
+      assert.strictEqual(essence(" image/png"), null, "no trimming, a padded type is malformed");
+      const table = mimeToExtTable;
+      assert.ok(Object.isFrozen(table));
+      assert.deepStrictEqual(mimeSubpath.mimeToExtTable, table);
       assert.strictEqual(table["image/svg+xml"], "svg");
       assert.strictEqual(Object.keys(table).length, 19, "the map has exactly 19 rows");
       for (const [mime, ext] of Object.entries(table)) {
-        assert.strictEqual(mimeToExt(mime), ext, `${mime} maps through mimeToExt the same way`);
+        assert.strictEqual(mimeToExt(mime), ext);
       }
+    });
+
+    it("lists the picker hint types", () => {
+      const types = validMimeTypes;
+      assert.ok(Array.isArray(types));
+      assert.ok(Object.isFrozen(types));
+      assert.deepStrictEqual(mimeSubpath.validMimeTypes, types);
+      for (const t of ["image/png", "image/jpeg", "image/gif", "image/webp", "video/mp4", "video/mpeg", "application/pdf", "application/json", "text/plain"]) {
+        assert.ok(types.includes(t), t);
+      }
+      assert.ok(!types.includes("application/x-executable"));
+      assert.ok(!types.includes("application/x-msdownload"));
+      const { meta } = createFile(OTTO, new Uint8Array([1, 2]), types[0]);
+      assert.strictEqual(meta.url.split("/").pop(), `${meta.id}.${mimeToExt(types[0])}`);
     });
   });
 
-  describe("Feed Pubky-social-specs", () => {
-    it("should create feed with correct properties", () => {
-      const { feed, meta: feedMeta } = specsBuilder.createFeed({
+  describe("Feed", () => {
+    it("lives at its private path and publishes by copy", () => {
+      const { object, meta } = createFeed(OTTO, {
         tags: ["mountain", "hike"],
         reach: "all",
         layout: "columns",
@@ -818,43 +792,43 @@ describe("PubkySpecs Example Objects Tests", () => {
         name: "nature",
         icon: "mountain",
       });
+      assert.strictEqual(meta.url.split("/")[3], "priv");
+      assert.strictEqual(feedUriBuilder(OTTO, meta.id), meta.url);
 
-      // Test meta properties
-      assert.ok(feedMeta.id, "Feed should have an ID");
-      assert.ok(feedMeta.url, "Feed should have a URL");
-      assert.ok(feedMeta.url.includes(OTTO), "URL should contain user ID");
-      assert.strictEqual(feedMeta.url.split("/")[3], "priv", "feeds live under the private root");
-      assert.ok(feedMeta.url.includes("feeds"), "URL should contain feeds path");
-      assert.ok(feedMeta.url.includes(feedMeta.id), "URL should contain feed ID");
+      const paths = feedPaths(meta.id);
+      assert.strictEqual(paths.private, `/priv/social/v1/feeds/${meta.id}.json`);
+      assert.strictEqual(paths.public, `/pub/social/v1/feeds/${meta.id}.json`);
+      assert.strictEqual(paths.private, meta.path);
 
-      // publishing is a PUT of the same bytes at the public path, unpublishing a DELETE of it
-      const paths = feedPaths(feedMeta.id);
-      assert.strictEqual(paths.private, `/priv/social/v1/feeds/${feedMeta.id}.json`, "private path");
-      assert.strictEqual(paths.public, `/pub/social/v1/feeds/${feedMeta.id}.json`, "public path");
-      assert.strictEqual(paths.private, feedMeta.path, "the builder writes the private path");
+      const lifecycle = feedLifecycle(meta.id);
+      assert.deepStrictEqual(lifecycle.publish, { from: paths.private, to: paths.public });
+      assert.deepStrictEqual(lifecycle.unpublish, [paths.public]);
+      assert.deepStrictEqual(lifecycle.delete, [paths.public, paths.private]);
+      assert.deepStrictEqual(deletionPaths({ kind: "feed", id: meta.id }), lifecycle.delete);
 
-      const lifecycle = feedLifecycle(feedMeta.id);
-      assert.deepStrictEqual(lifecycle.publish, { from: paths.private, to: paths.public }, "publish copies the bytes");
-      assert.deepStrictEqual(lifecycle.unpublish, [paths.public], "unpublish drops the public copy");
-      assert.deepStrictEqual(lifecycle.delete, [paths.public, paths.private], "delete takes the public copy first");
-
-      // Test feed content
-      const feedJson = feed.toJson();
-      assert.ok(feedJson.feed, "Feed should have feed property");
-      assert.ok(Array.isArray(feedJson.feed.tags), "Feed tags should be an array");
-      assert.deepStrictEqual(feedJson.feed.tags, ["hike","mountain"], "the builder sorts the tag filter, so one filter is one feed");
-      assert.strictEqual(feedJson.feed.reach, "all", "Feed reach should match");
-      assert.strictEqual(feedJson.feed.layout, "columns", "Feed layout should match");
-      assert.strictEqual(feedJson.feed.sort, "recent", "Feed sort should match");
-      assert.strictEqual(feedJson.feed.content, "image", "Feed content should match");
-      assert.strictEqual(feedJson.name, "nature", "Feed name should match");
-      assert.strictEqual(feedJson.icon, "mountain", "Feed icon should match");
-      assert.ok(feedJson.created_at, "Feed should have created_at timestamp");
-      assert.ok(typeof feedJson.created_at === "number", "created_at should be a number");
+      assert.deepStrictEqual(object.feed.tags, ["hike", "mountain"], "one filter, one spelling, one id");
+      assert.strictEqual(object.feed.reach, "all");
+      assert.strictEqual(object.feed.layout, "columns");
+      assert.strictEqual(object.feed.sort, "recent");
+      assert.strictEqual(object.feed.content, "image");
+      assert.strictEqual(object.name, "nature");
+      assert.strictEqual(object.icon, "mountain");
+      assert.strictEqual(typeof object.created_at, "number");
     });
 
-    it("should create feed with wot reach and domain_tags", () => {
-      const { feed } = specsBuilder.createFeed({
+    it("feedId gives an edited feed the id createFeed gives its config", () => {
+      const input = { tags: ["mountain", "hike"], reach: "all", layout: "columns", sort: "recent", name: "n", icon: "i" };
+      const { object, meta } = createFeed(OTTO, input);
+      const { object: read } = readObject(meta.url, stored({ ...object, ext: { kept: true } }));
+      assert.strictEqual(feedId(read), meta.id);
+      read.feed.tags = ["hike", "river"];
+      assert.strictEqual(feedId(read), createFeed(OTTO, { ...input, tags: ["river", "hike"] }).meta.id);
+      read.feed.tags = ["river", "hike"];
+      rejects(() => feedId(read), /sorted/);
+    });
+
+    it("takes wot reach and domainTags", () => {
+      const { object } = createFeed(OTTO, {
         tags: ["rust"],
         reach: "wot",
         layout: "columns",
@@ -864,160 +838,159 @@ describe("PubkySpecs Example Objects Tests", () => {
         domainTags: ["synonym"],
         icon: "users",
       });
-
-      const feedJson = feed.toJson();
-      assert.strictEqual(feedJson.feed.reach, "wot", "Feed reach should be wot");
-      assert.deepStrictEqual(
-        feedJson.feed.domain_tags,
-        ["synonym"],
-        "Feed domain_tags should match"
-      );
+      assert.strictEqual(object.feed.reach, "wot");
+      assert.deepStrictEqual(object.feed.domain_tags, ["synonym"]);
     });
 
-    it("should create feed with me reach without domain_tags", () => {
-      const { feed } = specsBuilder.createFeed({
-        reach: "me",
-        layout: "list",
-        sort: "popularity",
-        name: "My Posts",
-        icon: "user",
-      });
-
-      const feedJson = feed.toJson();
-      assert.strictEqual(feedJson.feed.reach, "me", "Feed reach should be me");
-      assert.ok(
-        feedJson.feed.domain_tags == null,
-        "Feed domain_tags should be absent or null when not provided"
-      );
-      assert.strictEqual(feedJson.icon, "user", "Feed icon should match");
+    it("takes me reach with no filters", () => {
+      const { object } = createFeed(OTTO, { reach: "me", layout: "list", sort: "popularity", name: "My Posts", icon: "user" });
+      assert.strictEqual(object.feed.reach, "me");
+      assert.strictEqual(object.feed.domain_tags, undefined);
+      assert.strictEqual(object.feed.tags, null);
     });
 
-    it("should reject icons outside a-z, 0-9 and -", () => {
+    it("rejects icons outside a-z, 0-9 and -", () => {
       for (const icon of ["bad icon", "bad_icon"]) {
-        assert.throws(() =>
-          specsBuilder.createFeed({
-            reach: "all",
-            layout: "columns",
-            sort: "recent",
-            name: "Bad Icon",
-            icon,
-          })
-        );
+        rejects(() => createFeed(OTTO, { reach: "all", layout: "columns", sort: "recent", name: "Bad", icon }), /icon/);
       }
     });
 
-    it("should require an icon when creating a feed", () => {
-      assert.throws(() =>
-        specsBuilder.createFeed({
-          reach: "all",
-          layout: "columns",
-          sort: "recent",
-          name: "Missing Icon",
-        })
-      );
+    it("requires an icon and a known reach", () => {
+      rejects(() => createFeed(OTTO, { reach: "all", layout: "columns", sort: "recent", name: "No icon" }), /^Validation Error: missing field `icon`/);
+      rejects(() => createFeed(OTTO, { reach: "some", layout: "columns", sort: "recent", name: "x", icon: "x" }), "Validation Error: Invalid feed reach: some");
     });
   });
 
-  describe("Valid MIME Types", () => {
-    it("should return an array of valid MIME types", () => {
-      const mimeTypes = getValidMimeTypes();
-      
-      assert.ok(Array.isArray(mimeTypes), "Should return an array");
-      assert.ok(mimeTypes.length > 0, "Should have at least one MIME type");
-    });
+  describe("deletionPaths", () => {
+    const hash = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
 
-    it("should include common image MIME types", () => {
-      const mimeTypes = getValidMimeTypes();
-      
-      assert.ok(mimeTypes.includes("image/png"), "Should include image/png");
-      assert.ok(mimeTypes.includes("image/jpeg"), "Should include image/jpeg");
-      assert.ok(mimeTypes.includes("image/gif"), "Should include image/gif");
-      assert.ok(mimeTypes.includes("image/webp"), "Should include image/webp");
-    });
-
-    it("should include common video MIME types", () => {
-      const mimeTypes = getValidMimeTypes();
-      
-      assert.ok(mimeTypes.includes("video/mp4"), "Should include video/mp4");
-      assert.ok(mimeTypes.includes("video/mpeg"), "Should include video/mpeg");
-    });
-
-    it("should include common document MIME types", () => {
-      const mimeTypes = getValidMimeTypes();
-      
-      assert.ok(mimeTypes.includes("application/pdf"), "Should include application/pdf");
-      assert.ok(mimeTypes.includes("application/json"), "Should include application/json");
-      assert.ok(mimeTypes.includes("text/plain"), "Should include text/plain");
-    });
-
-    it("should be usable for file validation before upload", () => {
-      const mimeTypes = getValidMimeTypes();
-      
-      // Valid file types
-      assert.ok(mimeTypes.includes("image/png"), "image/png should be valid");
-      assert.ok(mimeTypes.includes("application/pdf"), "application/pdf should be valid");
-      
-      // Invalid file types (not in the list)
-      assert.ok(!mimeTypes.includes("application/x-executable"), "application/x-executable should not be valid");
-      assert.ok(!mimeTypes.includes("application/x-msdownload"), "application/x-msdownload should not be valid");
-    });
-
-    it("should create file with valid MIME type from the list", () => {
-      const mimeTypes = getValidMimeTypes();
-      const validMimeType = mimeTypes[0]; // Pick the first valid MIME type
-
-      const { meta } = specsBuilder.createFile(new Uint8Array([1, 2]), validMimeType);
-      assert.strictEqual(meta.id, "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
-      assert.strictEqual(
-        meta.url.split("/").pop(),
-        meta.id + "." + mimeToExt(validMimeType),
-        "the extension comes from the declared type"
+    it("spans every epoch and both roots for media", () => {
+      assert.deepStrictEqual(
+        deletionPaths({
+          kind: "file",
+          id: hash,
+          listings: [
+            `/priv/social/v1/files/${hash}.png`,
+            { path: "/pub/pubky.app/files/0032SSN7Q4EVG", src: `pubky://${OTTO}/pub/pubky.app/blobs/${hash}` },
+          ],
+        }),
+        [
+          "/pub/pubky.app/files/0032SSN7Q4EVG",
+          `/pub/pubky.app/blobs/${hash}`,
+          `/pub/social/v1/files/${hash}.png`,
+          `/priv/social/v1/files/${hash}.png`,
+        ],
       );
+    });
+
+    it("takes the legacy copy of every public kind first", () => {
+      assert.deepStrictEqual(deletionPaths({ kind: "user", id: "" }), [
+        "/pub/pubky.app/profile.json",
+        "/pub/social/v1/profile.json",
+      ]);
+      assert.deepStrictEqual(deletionPaths({ kind: "follow", id: RIO }), [
+        `/pub/pubky.app/follows/${RIO}`,
+        `/pub/social/v1/follows/${RIO}.json`,
+      ]);
+      // The 0.x tag id hashes the stored uri and label the way a v1 tag id does, so the v1
+      // builder over the v0 spelling is the oracle for the legacy path
+      const uri = `pubky://${RIO}/pub/pubky.app/profile.json`;
+      const v0Id = createTag(OTTO, uri, "friend").meta.id;
+      const entry = { path: `/pub/pubky.app/tags/${v0Id}`, uri, label: "friend" };
+      const id = createTag(OTTO, userUriBuilder(RIO), "friend").meta.id;
+      assert.deepStrictEqual(deletionPaths({ kind: "tag", id, listings: [entry] }), [
+        entry.path,
+        `/pub/social/v1/tags/${id}.json`,
+      ]);
+      // A v0 tag of another target is not a copy of this tag, valid as it is
+      const otherId = createTag(OTTO, userUriBuilder(OTTO), "friend").meta.id;
+      rejects(() => deletionPaths({ kind: "tag", id: otherId, listings: [entry] }), `Validation Error: legacy tag ${entry.path} is not a copy of tag ${otherId}`);
+      rejects(() => deletionPaths({ kind: "tag", id, listings: [{ ...entry, label: "foe" }] }), /not a stored copy of tag/);
+      rejects(() => deletionPaths({ kind: "tag", id, listings: [entry.path] }), /not a stored copy of tag/);
+      // A tag on a v0 File object targets the v1 media file, which its src and content_type spell
+      const fileUri = `pubky://${RIO}/pub/pubky.app/files/0032SSN7Q4EVG`;
+      const onFile = {
+        path: `/pub/pubky.app/tags/${createTag(OTTO, fileUri, "pic").meta.id}`,
+        uri: fileUri,
+        label: "pic",
+        src: `pubky://${RIO}/pub/pubky.app/blobs/${hash}`,
+        contentType: "image/png",
+      };
+      const fileTagId = createTag(OTTO, `pubky://${RIO}/pub/social/v1/files/${hash}.png`, "pic").meta.id;
+      assert.deepStrictEqual(deletionPaths({ kind: "tag", id: fileTagId, listings: [onFile] }), [
+        onFile.path,
+        `/pub/social/v1/tags/${fileTagId}.json`,
+      ]);
+      rejects(() => deletionPaths({ kind: "tag", id: fileTagId, listings: [{ ...onFile, contentType: undefined }] }), /needs its File src and content_type/);
+    });
+
+    it("is the one private path for a mute", () => {
+      assert.deepStrictEqual(deletionPaths({ kind: "mute", id: RIO }), [`/priv/social/v1/mutes/${RIO}.json`]);
+      assert.deepStrictEqual(deletionPaths({ kind: "mute", id: RIO, listings: null }), [`/priv/social/v1/mutes/${RIO}.json`]);
+      rejects(() => deletionPaths({ kind: "follow", id: RIO, listings: ["/pub/pubky.app/follows/x"] }), /takes no listings/);
+      rejects(() => deletionPaths({ kind: "settings", id: "" }), /^Validation Error: unknown variant/);
+    });
+
+    it("names the listing it refuses", () => {
+      const src = `pubky://${OTTO}/pub/pubky.app/blobs/${hash}`;
+      const stray = `/pub/pubky.app/files/0032SSN7Q4EVG/../../../../priv/social/v1/mutes/${RIO}.json`;
+      rejects(() => deletionPaths({ kind: "file", id: hash, listings: [{ path: stray, src }] }), `Validation Error: not a stored copy of file ${hash}: ${stray}`);
+      // A v0 File object whose src names other bytes, or none, is not this file
+      const other = { path: "/pub/pubky.app/files/0032SSN7Q4EVG", src: `pubky://${OTTO}/pub/pubky.app/blobs/PZBQ010FF079VVZPQG1RNFN6DR` };
+      rejects(() => deletionPaths({ kind: "file", id: hash, listings: [other] }), /not a stored copy of file/);
+      rejects(() => deletionPaths({ kind: "file", id: hash, listings: [other.path] }), /not a stored copy of file/);
     });
   });
 
-  describe("Validation limits exports", () => {
-    it("should expose validationLimits from JS exports", () => {
-      assert.ok(validationLimits, "validationLimits should be defined");
-      assert.deepStrictEqual(
-        validationLimits,
-        validationLimitsJson,
-        "validationLimits should match validationLimits.json"
-      );
-      assert.strictEqual(
-        validationLimits.userNameMinLength,
-        3,
-        "userNameMinLength should match the Rust limits"
-      );
-      assert.ok(
-        Array.isArray(validationLimits.tagInvalidChars),
-        "tagInvalidChars should be an array"
-      );
+  describe("prefixes and URI builders", () => {
+    it("listPrefix spells both roots", () => {
+      assert.strictEqual(listPrefix(OTTO, "public"), `pubky://${OTTO}/pub/social/v1/`);
+      assert.strictEqual(listPrefix(OTTO, "private"), `pubky://${OTTO}/priv/social/v1/`);
+      rejects(() => listPrefix(OTTO, "pub"), /^Validation Error: unknown variant/);
+      rejects(() => listPrefix("nope", "public"), /52 ASCII characters/);
+      assert.strictEqual(legacyListPrefix(OTTO), `pubky://${OTTO}/pub/pubky.app/`);
+      rejects(() => legacyListPrefix("nope"), /^Validation Error: /);
     });
 
-    it("getValidationLimits should return a copy that matches validationLimits", () => {
-      const limitsCopy = getValidationLimits();
-
-      assert.deepStrictEqual(
-        limitsCopy,
-        validationLimits,
-        "getValidationLimits should match validationLimits"
-      );
-      assert.notStrictEqual(
-        limitsCopy,
-        validationLimits,
-        "getValidationLimits should return a new object"
-      );
+    it("every builder checks the owner key", () => {
+      for (const build of [userUriBuilder, postUriBuilder, followUriBuilder, muteUriBuilder, bookmarkUriBuilder, tagUriBuilder, fileUriBuilder, feedUriBuilder]) {
+        rejects(() => (build.length === 1 ? build("nope") : build("nope", "x")), /^Validation Error: /);
+      }
     });
 
-    it("builder.validationLimits should match the JS exports", () => {
-      const builderLimits = JSON.parse(JSON.stringify(specsBuilder.validationLimits));
+    it("every builder spells a URI the parser classifies as its kind", () => {
+      const cases = [
+        [userUriBuilder(OTTO), "user"],
+        [postUriBuilder(OTTO, "0032SSN7Q4EVG"), "post"],
+        [followUriBuilder(OTTO, RIO), "follow"],
+        [muteUriBuilder(OTTO, RIO), "mute"],
+        [bookmarkUriBuilder(OTTO, bookmarkFilename(userUriBuilder(RIO))), "bookmark"],
+        [tagUriBuilder(OTTO, "8Z8CWH8NVYQY39ZEBFGKQWWEKG"), "tag"],
+        [fileUriBuilder(OTTO, "8Z8CWH8NVYQY39ZEBFGKQWWEKG.png"), "file"],
+        [feedUriBuilder(OTTO, "8Z8CWH8NVYQY39ZEBFGKQWWEKG"), "feed"],
+      ];
+      for (const [uri, kind] of cases) {
+        assert.strictEqual(parseUri(uri).resource.kind, kind, uri);
+      }
+    });
+  });
 
-      assert.deepStrictEqual(
-        builderLimits,
-        validationLimits,
-        "builder.validationLimits should match exported validationLimits"
-      );
+  describe("validation limits", () => {
+    it("are frozen all the way down", () => {
+      assert.ok(Object.isFrozen(validationLimits));
+      assert.ok(Object.isFrozen(validationLimits.tagInvalidChars));
+      assert.ok(Object.isFrozen(subpathLimits));
+    });
+
+    it("the entry, the subpath and the JSON agree", () => {
+      assert.deepStrictEqual(validationLimits, validationLimitsJson);
+      assert.deepStrictEqual(subpathLimits, validationLimitsJson);
+      assert.strictEqual(validationLimits.userNameMinLength, 3);
+      assert.ok(Array.isArray(validationLimits.tagInvalidChars));
+    });
+
+    it("the subpath has no copy getter left", () => {
+      assert.strictEqual(require("./validationLimits.cjs").getValidationLimits, undefined);
     });
   });
 });

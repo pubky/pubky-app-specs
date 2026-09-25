@@ -5,8 +5,6 @@ use std::str::FromStr;
 
 #[cfg(target_arch = "wasm32")]
 use tsify_next::Tsify;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -45,58 +43,40 @@ impl FromStr for PubkySocialCollectionLayout {
             "grid" => Ok(Self::Grid),
             "list" => Ok(Self::List),
             "visual" => Ok(Self::Visual),
-            _ => Err(format!("Invalid collection layout: {}", s)),
+            _ => Err(format!(
+                "Validation Error: Invalid collection layout: {}",
+                s
+            )),
         }
     }
 }
 
 /// One curated item: any URI on the universal tier, with an optional note. An object rather
-/// than a string so per-item metadata stays additive, and a JS class for the same reason
-/// attachments are one: the shape crosses the wasm boundary with its fields intact.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+/// than a string so per-item metadata stays additive.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PubkySocialCollectionItem {
     /// Reference tier, universal: a social object, another app's object, or an external URI.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
     /// Curator's note on this item, `1..=collection_item_note_max_length` code points and not
     /// whitespace-only: an empty note is an absent one, spelled once.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialCollectionItem {
     /// An item over a canonical `uri` with an optional curator `note`; no unknown members.
     /// Trims the note, a blank one becoming absent; the uri passes through verbatim.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(uri: String, note: Option<String>) -> Self {
         Self {
             uri,
             note: note.and_then(trimmed_or_none),
             extra: Default::default(),
         }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl PubkySocialCollectionItem {
-    #[wasm_bindgen(getter)]
-    pub fn uri(&self) -> String {
-        self.uri.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn note(&self) -> Option<String> {
-        self.note.clone()
     }
 }
 
@@ -807,61 +787,5 @@ mod tests {
         );
         let id = post.create_id();
         assert!(post.validate(Some(&id), &PUB_CTX).is_ok());
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    #[wasm_bindgen_test::wasm_bindgen_test]
-    fn test_postkind_collection_wasm_getter() {
-        let post = PubkySocialPost {
-            content: collection_envelope_json("X", None, &[]),
-            kind: PubkySocialPostKind::Collection,
-            parent: None,
-            embed: None,
-            attachments: vec![],
-            lock: None,
-            extra: Default::default(),
-        };
-        assert_eq!(post.kind(), "Collection");
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    #[wasm_bindgen_test::wasm_bindgen_test]
-    fn test_create_collection_post_wasm_builder() {
-        // End-to-end via the JS-facing builder:
-        //   PubkySpecsBuilder.createCollectionPost(name, description?, items?, cover_image?, layout?)
-        // builds the {name, description} envelope internally, packages it
-        // into a kind=Collection PubkySocialPost, and returns a PostResult
-        // ready to ship to the homeserver. JS callers don't have to
-        // JSON-stringify the envelope themselves.
-        use crate::PubkySpecsBuilder;
-        let pubky_id = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo".to_string();
-        let builder = PubkySpecsBuilder::new(pubky_id).expect("Failed to construct builder");
-        let result = builder
-            .create_collection_post(
-                "My favorites".to_string(),
-                Some("Best things".to_string()),
-                Some(vec![PubkySocialCollectionItem::new(
-                    "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0034A0X7NJ52A".to_string(),
-                    Some("the best one".to_string()),
-                )]),
-                Some("https://example.com/cover.png".to_string()),
-                Some("list".to_string()),
-            )
-            .expect("createCollectionPost should succeed");
-
-        let post = result.post();
-        assert_eq!(post.kind, PubkySocialPostKind::Collection);
-        assert!(post.attachments.is_empty());
-        let envelope: PubkySocialCollectionContent = serde_json::from_str(&post.content)
-            .expect("Collection content must deserialize as PubkySocialCollectionContent");
-        assert_eq!(envelope.name, "My favorites");
-        assert_eq!(envelope.description.as_deref(), Some("Best things"));
-        assert_eq!(envelope.items.len(), 1);
-        assert_eq!(envelope.items[0].note.as_deref(), Some("the best one"));
-        assert_eq!(
-            envelope.cover_image.as_deref(),
-            Some("https://example.com/cover.png")
-        );
-        assert_eq!(envelope.layout, Some(PubkySocialCollectionLayout::List));
     }
 }

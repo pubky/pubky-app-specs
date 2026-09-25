@@ -11,11 +11,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -27,19 +22,15 @@ use utoipa::ToSchema;
 /// `/pub/social/v1/tags/FPB0AM9S93Q3M1GFY1KV09GMQM`
 ///
 /// Where tag_id is Crockford-base32(Blake3("{uri_tagged}:{label}")[:half])
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialTag {
     /// The URI of the resource this is a tag on
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub uri: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub label: String,
     pub created_at: i64,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
     #[serde(flatten)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -55,36 +46,6 @@ impl PubkySocialTag {
         }
     }
 }
-
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialTag {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    /// Serialize to JSON for WASM.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-
-    /// Getter for `uri`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn uri(&self) -> String {
-        self.uri.clone()
-    }
-
-    /// Getter for `label`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn label(&self) -> String {
-        self.label.clone()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialTag {}
 
 impl HasIdPath for PubkySocialTag {
     const ROOT: Root = Root::Pub;

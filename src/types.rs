@@ -1,14 +1,10 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::{PartialSchema, ToSchema};
 
 /// Represents user data with name, bio, image, links, and status.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PubkyId {
     z32: String,

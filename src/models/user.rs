@@ -8,32 +8,19 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use crate::traits::Json;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// URI: /pub/social/v1/profile.json
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialUser {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
-    // Avoid wasm-pack automatically generating getter/setters for the pub fields.
     pub name: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub bio: Option<String>,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub image: Option<String>,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub links: Option<Vec<PubkySocialUserLink>>,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub status: Option<String>,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -51,81 +38,22 @@ impl Default for PubkySocialUser {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialUser {
-    // Getters clone the data out because String/JsValue is not Copy.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn bio(&self) -> Option<String> {
-        self.bio.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn image(&self) -> Option<String> {
-        self.image.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn links(&self) -> Option<Vec<PubkySocialUserLink>> {
-        self.links.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn status(&self) -> Option<String> {
-        self.status.clone()
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = fromJson))]
-    pub fn from_json(js_value: &JsValue) -> Result<Self, String> {
-        Self::import_json(js_value)
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = toJson))]
-    pub fn to_json(&self) -> Result<JsValue, String> {
-        self.export_json()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Json for PubkySocialUser {}
-
 /// Represents a user's single link with a title and URL.
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PubkySocialUserLink {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub title: String,
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     pub url: String,
     /// Unknown members, preserved on rewrite; see the module contract in `models/mod.rs`.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(skip))]
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-#[cfg(target_arch = "wasm32")]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-impl PubkySocialUserLink {
-    // Getters clone the data out because String/JsValue is not Copy.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn title(&self) -> String {
-        self.title.clone()
-    }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter))]
-    pub fn url(&self) -> String {
-        self.url.clone()
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUser {
     /// Trims the display text it is given, link titles included. Trimming happens here and
     /// nowhere else, so a stored profile reads back byte for byte and an SDK round trip cannot
     /// change what is on the homeserver. `image` and each link `url` are references and are
     /// kept exactly as written.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(
         name: String,
         bio: Option<String>,
@@ -228,11 +156,9 @@ impl Validatable for PubkySocialUser {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl PubkySocialUserLink {
     /// Trims the title, for the reason `PubkySocialUser::new` gives; the url is a reference and
     /// is kept exactly as written.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new(title: String, url: String) -> Self {
         Self {
             title,
