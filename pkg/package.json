@@ -85,7 +85,7 @@
   "scripts": {
     "build": "cargo run --features migrator --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && mocha test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && mocha test.js migration.test.js"
   },
   "sideEffects": false,
   "type": "module",
