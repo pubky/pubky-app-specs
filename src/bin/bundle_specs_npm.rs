@@ -13,7 +13,9 @@ fn main() {
     // A failed step must fail the build, or a stale glue from an earlier run ships
     check("wasm-pack", build_wasm("nodejs"));
     write_data_assets().unwrap();
-    check("patch.mjs", patch());
+    check("patch.mjs", patch(None));
+    check("tsc", compile_migration());
+    check("patch.mjs migration", patch(Some("migration")));
     println!("📦 Pubky-social-specs JS binding package built successfully!");
 }
 
@@ -60,20 +62,63 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
     Ok(output.status)
 }
 
-fn patch() -> io::Result<ExitStatus> {
+fn patch(mode: Option<&str>) -> io::Result<ExitStatus> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 
-    println!(
-        "🩹 Lazy-loading glue and the CommonJS entry from {manifest_dir}/src/bin/patch.mjs ..."
-    );
+    match mode {
+        None => println!(
+            "🩹 Lazy-loading glue and the CommonJS entry from {manifest_dir}/src/bin/patch.mjs ..."
+        ),
+        Some(mode) => println!("🩹 CommonJS twins of {mode}/ ..."),
+    }
 
     let output = Command::new("node")
-        .args([format!("{manifest_dir}/src/bin/patch.mjs")])
+        .arg(format!("{manifest_dir}/src/bin/patch.mjs"))
+        .args(mode)
         .output()?;
 
     if !output.status.success() {
         eprintln!(
             "patch.mjs failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    Ok(output.status)
+}
+
+/// The migration engine is TypeScript; tsc emits its ES modules and declarations next to the
+/// sources. It reads the entry's declarations, so it runs after the glue is patched.
+fn compile_migration() -> io::Result<ExitStatus> {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+
+    println!("🧩 Compiling the migration engine with tsc ...");
+
+    // A module renamed or removed since the last build would otherwise ship stale
+    let migration = Path::new(&manifest_dir).join("pkg/migration");
+    for entry in fs::read_dir(&migration)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let emitted = [".js", ".cjs", ".d.ts"]
+            .iter()
+            .any(|ext| name.ends_with(ext));
+        if emitted && name != "host.d.ts" {
+            fs::remove_file(&path)?;
+        }
+    }
+
+    let output = Command::new("npx")
+        .args(["--no", "--", "tsc", "-p", "migration"])
+        .current_dir(Path::new(&manifest_dir).join("pkg"))
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "tsc failed (is `npm install` done in pkg/?): {}{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }

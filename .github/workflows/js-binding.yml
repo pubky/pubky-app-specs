@@ -31,9 +31,14 @@ jobs:
       with:
         node-version: '22.13.0'
 
+    - name: Install package dev dependencies
+      run: |
+        # The build compiles the migration engine with the package's own tsc
+        cd ./pkg
+        npm install
+
     - name: Build WASM package
       run: |
-        # Change to the js directory and run build wasm
         cd ./pkg
         npm run build
 
@@ -47,7 +52,6 @@ jobs:
     - name: Run JS tests
       run: |        
         cd ./pkg
-        npm install
         echo "Running JavaScript tests..."
         npm run test
         
