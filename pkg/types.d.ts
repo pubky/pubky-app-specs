@@ -29,12 +29,12 @@ import type {
   UriParts,
   VersionMeta,
 } from "./pubky_social_specs.js";
-import type { SkipReason } from "./skipReasons.js";
+import type { SkipReason } from "./migrationData.js";
 
 export * from "./pubky_social_specs.js";
 export { validationLimits } from "./validationLimits.js";
 export { validMimeTypes, mimeToExtTable } from "./mimeTypes.js";
-export { skipReasons, type SkipReason } from "./skipReasons.js";
+export { skipReasons, transformRev, type SkipReason } from "./migrationData.js";
 
 /**
  * Members this version does not know. A stored object keeps them at runtime through every

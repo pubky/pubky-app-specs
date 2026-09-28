@@ -10,7 +10,7 @@
 import * as glue from "./pubky_social_specs.js";
 import { validationLimits } from "./validationLimits.js";
 import { validMimeTypes, mimeToExtTable } from "./mimeTypes.js";
-import { skipReasons } from "./skipReasons.js";
+import { skipReasons, transformRev } from "./migrationData.js";
 
 const MALFORMED = "Validation Error: text must be well-formed UTF-16";
 
@@ -164,6 +164,7 @@ export {
   validMimeTypes,
   mimeToExtTable,
   skipReasons,
+  transformRev,
   parseUri,
   stableId,
   resolveDeref,

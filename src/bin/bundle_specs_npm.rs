@@ -110,25 +110,42 @@ fn write_data_assets() -> io::Result<()> {
         .iter()
         .map(|skip| skip.as_str())
         .collect();
-    let dts = skip_reasons_dts(&reasons);
+    let migration = serde_json::json!({
+        "skipReasons": reasons,
+        "transformRev": pubky_social_specs::migrate::TRANSFORM_REV,
+    });
     write_data_asset(
-        "skipReasons",
-        &serde_json::json!(reasons),
-        &[("skipReasons", "data")],
-        &dts,
+        "migrationData",
+        &migration,
+        &[
+            ("skipReasons", "data.skipReasons"),
+            ("transformRev", "data.transformRev"),
+        ],
+        &migration_data_dts(&reasons),
     )
 }
 
 /// The union is spelled from the same list as the data, so the type and the values cannot
 /// drift apart.
-fn skip_reasons_dts(reasons: &[&str]) -> String {
+fn migration_data_dts(reasons: &[&str]) -> String {
     let union = reasons
         .iter()
         .map(|reason| format!("\"{reason}\""))
         .collect::<Vec<_>>()
         .join(" | ");
     format!(
-        "/** Why one 0.x object did not migrate. */\nexport type SkipReason = {union};\n/** Every reason, frozen, so a report counts categories without a table of its own. */\nexport declare const skipReasons: readonly SkipReason[];\ndeclare const data: readonly SkipReason[];\nexport default data;\n"
+        r#"/** Why one 0.x object did not migrate. */
+export type SkipReason = {union};
+/** Every reason, frozen, so a report counts categories without a table of its own. */
+export declare const skipReasons: readonly SkipReason[];
+/** The revision of the transforms. A run records it; a tree recorded under a lower one is walked again, which picks up what earlier revisions skipped, never rewriting a destination that exists. */
+export declare const transformRev: number;
+declare const data: {{
+  readonly skipReasons: readonly SkipReason[];
+  readonly transformRev: number;
+}};
+export default data;
+"#
     )
 }
 
