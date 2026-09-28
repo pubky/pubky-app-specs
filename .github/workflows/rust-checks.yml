@@ -5,6 +5,7 @@ on:
   push:
     branches: ["main", "v1"]
   pull_request:
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
@@ -60,8 +61,18 @@ jobs:
           shared-key: "package"
           cache-on-failure: true
 
+      - name: Cargo.toml and pkg/package.json agree on the version
+        shell: bash
+        run: |
+          cargo_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          npm_version=$(jq -r .version pkg/package.json)
+          if [ "$cargo_version" != "$npm_version" ]; then
+            echo "::error::Cargo.toml is $cargo_version but pkg/package.json is $npm_version"
+            exit 1
+          fi
+
       - name: Verify crates.io package
-        run: cargo publish --dry-run
+        run: cargo publish --dry-run --locked
 
   old-names:
     name: no pre-rename identifiers
