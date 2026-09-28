@@ -178,35 +178,97 @@ import limitsJson from "pubky-social-specs/validationLimits.json" with { type: "
 
 ## Migration
 
-The 0.x to 1.x transforms ship in the same wasm. A run is one handle per owner and one `migrate` call per stored path; the engine around it, LIST, GET, PUT, is yours:
+The package carries the whole 0.x to 1.x migration: the transforms, compiled into the same wasm, and the engine that walks a tree with them, published as `pubky-social-specs/migration`. The engine uses no browser or Node global, so the same code runs in pubky-app, in a standalone web tool, and under Node for a CLI or a server run. A Node port adapter and a CLI are follow-ups.
 
 ```js
-import { createMigration, migrate, legacyListPrefix } from "pubky-social-specs";
+import { runMigration } from "pubky-social-specs/migration";
 
-const run = createMigration(owner);
-const urls = await list(legacyListPrefix(owner)); // full pubky:// URLs, fed in as they come
-// The File objects first: they name the blobs and carry the names everything else references
-const files = urls.filter((u) => u.includes("/pub/pubky.app/files/"));
-const skipped = {};
-for (const url of [...files, ...urls.filter((u) => !files.includes(u))]) {
-  const result = migrate(run, url, await get(url));
-  if ("skip" in result) {
-    (skipped[result.skip] ??= []).push(url);
-    continue;
-  }
-  for (const { kind, object, meta } of result.writes) {
-    await put(meta.url, kind === "file" ? object.bytes : JSON.stringify(object));
-  }
-  if (result.dropped.length) console.warn(url, "dropped", result.dropped);
-}
-run.free();
+const report = await runMigration({
+  owner,
+  port, // your adapter over the homeserver client, below
+  caps: session.capabilities, // optional, a string or a list of scopes
+  lock: (name, fn) => navigator.locks.request(name, { ifAvailable: true }, fn), // optional
+  onProgress: (event) => progress.set(event),
+  signal: controller.signal,
+});
 ```
 
-`migrate(run, path, bytes)` takes the owner-relative path (`pub/pubky.app/...`) or the full `pubky://` URL a LIST returns, and returns `{writes, dropped}` or `{skip}`. Each write is `{kind, object, meta}`: the object as `readObject` reads it (media as `{bytes}`) and `meta` as a builder gives it, so the PUT is the same as for anything built here, and `validate(meta.url, object)` already holds. A 0.x File object writes nothing: its name, blob and content type feed the run, so walk `files/` before the posts, tags and profile that reference them. A reference the run cannot resolve stays as written, since the legacy URI keeps resolving.
+`runMigration` calls `init()` itself. It resolves with a report in every case; only a programming error (an owner that is not a pubky, an unknown `mode`, a fault inside the package) rejects.
 
-`skip` is one of `skipReasons`, frozen data readable before `init()` and published without the wasm as `pubky-social-specs/migrationData`, so a report can count categories without a table of its own. A `[DELETED]` post or profile skips as `tombstone`; `not_migrated` is a path with no 1.x counterpart, such as `last_read`, or another owner's path. A File object is not a skip: it writes nothing and feeds the run. Compare `bytes.length` with `validationLimits.maxFileSizeBytes` before calling `migrate` on a blob: the cap is frozen data, so an `oversize` skip costs no copy into the wasm. A blob that skips leaves the references already rewritten to it dangling (they were rewritten when their post or tag migrated), so count every skip and report it. `dropped` lists `profile_image` and `profile_link[i]`: a value the 1.x gates refuse, left out so the profile still migrates.
+What a run does, in order:
 
-The handle holds the run's memory in the wasm: call `free()` when the run ends (a handle that is garbage collected is freed too, through the glue's `FinalizationRegistry`). It works only with the entry that made it, since the ESM and CommonJS entries hold separate instances. What the transforms do not decide stays with the engine: which destinations already exist, the re-check of the source after each PUT, and the order across types.
+1. With `caps` given, checks that the session covers `ENGINE_CAPS`, before any request, and aborts with `CAPS_MISSING` otherwise, the scopes to ask for in `error.caps`. A session that holds only the 0.x scope hears about its caps first. The engine never prompts.
+2. Probes the private root by a HEAD of `priv/social/v1/_migrated.json`. A homeserver without `/priv/`, where the HEAD throws `unsupported`, aborts the run with `PRIV_UNSUPPORTED` and a message saying so: the private types and the flag live there. Any other failure of the probe aborts with `IO_ERROR`. When the flag records a `transform_rev` equal to or above `transformRev`, the run returns `already_migrated` without listing anything, unless `rescan: true`.
+3. Lists `pub/social/v1/` and `priv/social/v1/` and keys every path through `stableId`. That set is the journal: a key present in either root is never written again, so a post unpublished to a draft is not copied back to the public root, and an edit made after an earlier run survives. Media is the exception: it counts as present by its exact URL, since a private copy, or one under another extension, does not serve the public references the run writes. So every blob is read and migrated, and the write it gives is what gets checked.
+4. Lists `pub/pubky.app/` and walks it by type: the File objects first, since the run reads them to rewrite media references, then blobs, posts, tags, follows, the profile, feeds, bookmarks and mutes. `settings.json`, `last_read` and anything else no 1.x type takes count as `not_migrated` without a read. A File object that cannot be read stops the run with `IO_ERROR`: every blob and post after it depends on it, and would be copied with a wrong extension or media URL that no later run rewrites. A File that reads but does not parse is only its own skip.
+5. For each object whose key is not present: GET, `migrate`, PUT every write whose key is still not present, with `ifAbsent`, then a HEAD of the 0.x object. If the owner deleted it meanwhile, or the HEAD fails, the copies just written are deleted (`deleted_mid_run`, or `io_error` for a copy the next run makes again). A destination someone else wrote since the LIST stays as it is and counts `already_present`; the run deletes only what it wrote. Two objects are in flight at a time, and an object whose write folds to a key the other is writing waits for it, and writes itself if that copy did not land. A blob over `validationLimits.maxFileSizeBytes` skips as `oversize` before it reaches the wasm.
+6. Writes the flag `{migrated_at, transform_rev, skipped}`: microseconds, `transformRev`, and the 0.x paths that did not land, by outcome. A walk with any `io_error` writes no flag and ends `incomplete`, so the next run walks again.
+
+The run never modifies the 0.x tree. `mode: "dry"` reads and counts exactly as a run does and makes no PUT, re-check or DELETE, the flag included. An interrupted run leaves nothing to clean up: run it again and it resumes from what the 1.x tree already holds.
+
+The report is `{status, mode, done, total, counts, dropped, droppedValues, skipped, notes, error?}`:
+
+- `status` is `done`, `already_migrated`, `incomplete` (the walk ended but some objects hit `io_error`; run again), `paused` or `aborted`.
+- `counts` has one number per outcome: every `skipReasons` entry, `written`, `already_present`, `deleted_mid_run`, `io_error` and `put_rejected`. A File object that reads counts in `done` only: it writes nothing and feeds the run.
+- `skipped` maps each outcome but `written` and `already_present` to its 0.x paths, the same object the flag stores; `notes` carries the detail for some of them, such as the status of a refused PUT.
+- `dropped` and `droppedValues` report the values the 1.x rules refused inside an object that still migrated (`profile_image`, `profile_link[i]`), so the host can tell the user.
+- `error` is `{code, message, needBytes?, caps?}`. `QUOTA` pauses the run with `needBytes`, the sizes the File objects declare for the blobs the walk has not yet copied or found present; free space or raise the quota, then run again. `needBytes` is left out when no blob is pending. `SESSION_EXPIRED`, `IO_ERROR` (a LIST, a File object or the flag failed), `ALREADY_RUNNING`, `UNSUPPORTED_EPOCH` and `ABORTED` (the signal fired) abort it.
+
+`onProgress` gets `{phase, kind?, done, total, counts, dropped, current?, error?}` after every object and at every phase change; `phase` is `probe`, `listing`, `migrating`, `flag`, `done`, `incomplete`, `paused` or `aborted`, and `kind` names the type being walked.
+
+Three constants go with it. `ENGINE_CAPS`, `/pub/social/v1/:rw,/priv/social/v1/:rw`, is what the engine writes and all it checks `caps` for; reading and listing the 0.x tree is anonymous. `MIGRATION_CAPS` is the full grant a migrating pubky-app holds, `ENGINE_CAPS` plus `/priv/app.pubky/v1/:rw,/pub/pubky.app/:rw`: the app's own private namespace, and the 0.x tree, which deleting a migrated object later still reaches. The engine never checks it; it is what the app asks for when it upgrades a session. `transformRev` (from the package entry, and from `pubky-social-specs/migrationData` without the wasm) is the revision of the transforms; it goes up when a transform changes what it writes. A tree recorded under a lower one is walked again, which picks up the objects an earlier revision skipped; a walk never rewrites a destination that exists.
+
+The engine migrates to `social/v1/` and nowhere else, and refuses to run (`UNSUPPORTED_EPOCH`) in a build whose list prefix names another epoch. With one 0.x epoch and one transform step, the source is always `pub/pubky.app/`; discovering the epochs present and sourcing each object from the highest one is the follow-up the next epoch brings.
+
+### The port
+
+All I/O goes through the port, and every URL is a full `pubky://` URL:
+
+```ts
+interface MigrationPort {
+  list(prefixUrl: string, cursor?: string): Promise<{ urls: string[]; next?: string }>;
+  get(url: string): Promise<Uint8Array | null>;
+  head(url: string): Promise<boolean>;
+  putJson(url: string, object: unknown, options?: { ifAbsent?: boolean }): Promise<void>;
+  putBytes(url: string, bytes: Uint8Array, options?: { ifAbsent?: boolean }): Promise<void>;
+  delete(url: string): Promise<void>;
+}
+```
+
+A LIST is deep and ascending: every URL under the prefix, spelled as the prefix is, after `cursor` when given, with `next` the cursor of the following page and absent on the last; a prefix with nothing under it is an empty page. A LIST answering another spelling stops the run with `IO_ERROR`. A missing object is `null` from `get` and `false` from `head`. The engine passes `ifAbsent: true` on every PUT of a copy: the adapter sends `If-None-Match: *` where the homeserver supports conditional PUT and a HEAD before the PUT where it does not, and throws `exists` when something is there. Every failure is a thrown `MigrationPortError(kind, message?, status?)`, and the engine branches on `kind`:
+
+| homeserver answer | `kind` | what the run does |
+|---|---|---|
+| 507 | `quota` | pauses |
+| 429 | `rate_limited` | waits 1 s, doubling up to 60 s, and calls again |
+| 401, 403 | `unauthorized` | aborts |
+| 404 | `not_found` | a GET counts `deleted_mid_run`; a DELETE ignores it |
+| 412 on an `ifAbsent` PUT | `exists` | counts `already_present` |
+| 400 or 405 for a `/priv/` path | `unsupported` | aborts on the probe |
+| no answer at all, or a 5xx other than 507 | `network` | retries three times, then counts `io_error` |
+| any other 4xx, 413 included | `rejected`, with `status` | on a PUT counts `put_rejected`; on a GET or HEAD counts `io_error` |
+
+`rejected` is a definitive refusal and lands in the flag like a skip. A server that failed is not refusing: a 5xx must reach the engine as `network`, so the object counts `io_error`, the run ends `incomplete` without a flag, and the next run writes it. `refusal(status, message?)` builds the error for a status as this table maps it; an adapter throws what it returns, and has to decide `unsupported` itself, since a bare 400 or 405 does not say the root is missing. Anything else a port throws counts as `network`, a call that never got an answer. `MemoryPort` implements the port over a `Map` for tests: `new MemoryPort({ privSupported, intercept, pageSize })`, where `privSupported: false` plays a homeserver without `/priv/`, `intercept(op, url)` runs before every call to fail it or to change `store` under the run, and `pageSize` shortens LIST pages.
+
+The retries wait through `sleep(ms, signal)`, a timer that ends early when `signal` aborts unless the host passes its own.
+
+What the host implements: the adapter from its homeserver client to the port, the lock (without one the run is unlocked; in a browser, `navigator.locks` keeps it to one tab), and the UI over `onProgress` and the report. The rest of the migration is the app's too: the capability upgrade when a run returns `CAPS_MISSING`, importing its own `settings.json` and `last_read` into its private namespace, and keeping the last progress snapshot so it can show where an interrupted run stopped.
+
+### Running it against a homeserver
+
+The tests run the engine over the vectors in a `MemoryPort`. A live run against a local homeserver is manual for now, since it needs a Node port adapter:
+
+1. Start a testnet: `cargo install pubky-testnet --locked` (a version whose homeserver serves `/priv/`), then `pubky-testnet`. The homeserver needs Postgres: point `TEST_PUBKY_CONNECTION_STRING` at one, or install with `--features embedded-postgres` to have it start one in Docker.
+2. With the pubky SDK against the testnet, sign up a user granted `ENGINE_CAPS` and the 0.x tree (`MIGRATION_CAPS` covers both) and write a small 0.x tree under `/pub/pubky.app/`: a File object and its blob, a post referencing it, a tag, a follow, a profile.
+3. Implement the port over that session following the table above, then `runMigration({ owner, port })` twice: the first run reports every object but the File objects `written`, the second returns `already_migrated`, and `rescan: true` reports what the first run wrote as `already_present` and writes only the flag.
+
+### The transforms on their own
+
+`runMigration` is built on two exports a host can also call directly: `createMigration(owner)` returns a run handle and `migrate(run, path, bytes)` migrates one stored object, by its owner-relative path (`pub/pubky.app/...`) or the full `pubky://` URL a LIST returns. It returns `{writes, dropped}` or `{skip}`. Each write is `{kind, object, meta}`: the object as `readObject` reads it (media as `{bytes}`) and `meta` as a builder gives it, so `validate(meta.url, object)` already holds and the PUT is `kind === "file" ? object.bytes : JSON.stringify(object)` at `meta.url`. A 0.x File object writes nothing: its name, blob and content type feed the run, so every File has to go through `migrate` before the posts, tags and profile that reference them. A reference the run cannot resolve stays as written, since the legacy URI keeps resolving.
+
+`skip` is one of `skipReasons`, frozen data readable before `init()`. A `[DELETED]` post or profile skips as `tombstone`; `not_migrated` is a path with no 1.x counterpart, such as `last_read`, or another owner's path. A blob that skips leaves the references already rewritten to it dangling, so count every skip and report it.
+
+The handle holds the run's memory in the wasm: call `free()` when the run ends (a handle that is garbage collected is freed too, through the glue's `FinalizationRegistry`). It works only with the entry that made it, since the ESM and CommonJS entries hold separate instances.
 
 ## Reading 0.x data
 
