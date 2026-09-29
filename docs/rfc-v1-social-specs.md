@@ -574,16 +574,24 @@ Migration is deterministic and total over real v0 data. Each record sources from
 present epoch, transforms compose in memory and write only the latest result, and ids and hashes
 are re-derived rather than minted.
 
-**Resume compares source against destination, never merely the destination's existence.** Existence
-proves that bytes landed. It does not prove they are correct, or current. So an existence check
-cannot tell a good file from one a buggy run wrote, and skips it forever. Comparison also picks up
-a source edited after it was migrated, which an existence check drops silently.
+**A destination that exists is never overwritten; its existence is the proof the object was
+done.** Writes are create-only. Freshness comes from sourcing each record from its highest present
+epoch, and the user's intent to delete comes from re-checking the source after every copy. An
+earlier draft of this section asked resume to compare source against destination and redo the
+copy when they differ. That was withdrawn: a destination that differs from the transform of its
+source is, in the normal case, an edit the user made in the new epoch after migrating, and redoing
+it would overwrite that edit with stale content. It also contradicts the rule above it, since once
+a copy exists the highest present epoch is the new one and there is nothing left to migrate. What
+comparison was meant to catch is covered elsewhere: a copy written by a buggy transform is a repair
+tool's job, never the normal walk's; a source edited from a legacy client after migration is closed
+by the client ceasing legacy writes once migrated and by the epoch cleanup.
 
 Three supporting mechanisms:
 
 - a client-private `_migrated` marker records the transform revision, so a shipped migrator fix
-  triggers a re-run
-- a malformed object is skipped and reported rather than blocking the tree
+  walks the tree again and picks up what earlier revisions skipped (it never rewrites what exists)
+- a malformed object is skipped and reported rather than blocking the tree; a run that hit a
+  transient I/O failure writes no marker, so the next run walks again
 - the homeserver's quota error surfaces as a typed failure
 
 ## Known failure mode: writes from a legacy client go unseen
@@ -592,7 +600,7 @@ Once a record exists in both epochs, the indexer serves the highest one it under
 client editing an already-migrated record writes successfully, to a path that still exists, and no
 reader ever sees the change. Nothing errors.
 
-Comparison-based resume recovers it on the next run, which narrows the window without closing it.
+The migrating client stops writing to the legacy epoch once migrated, which narrows the window.
 The cleanup pass closes it for good, because a removed epoch has nothing left to write to.
 
 ## Deletion spans epochs, and that rule is not migration-scoped
@@ -741,10 +749,14 @@ Spec crate on a long-lived `v1` branch, one PR per task, CI green on every commi
 **Migrator:**
 - [ ] **M1** transform registry + v0 reader, in the crate behind a `migrator` feature and shipped
   in the same wasm (semantic vectors committed).
-- [ ] **M2** engine in pubky-app (epoch discovery, compare-based resume, abort-if-no-`/priv/`),
-  calling the M1 transforms. Acceptance
-  includes two mismatch cases: a destination that exists but does not match its source, and a
-  source edited after it was migrated. Both must be re-migrated, not skipped.
+- [ ] **M2** engine as a library in the package (`pubky-social-specs/migration`): epoch probe,
+  existence-based resume with create-only writes, abort-if-no-`/priv/`, calling the M1 transforms,
+  with all I/O behind an injected port so the same engine runs in pubky-app, a standalone web
+  tool, or Node. This moves the engine out of pubky-app, which keeps its port adapter and the
+  route (M3); the library boundary of rule 12 still holds, the port is the only thing that
+  touches the network. Acceptance includes: a destination that exists is left in place, a
+  destination written by another device during the run is not clobbered, and an interrupted run
+  converges on resume.
 - [ ] **M3** pubky.app `/migrate` route (caps, upgrade flow, live counts, and the import of
   `settings` and `last_read` into `priv/app.pubky/v1/`, including the `last_read` ms-to-us
   conversion, which is app-owned rather than a shared transform).
