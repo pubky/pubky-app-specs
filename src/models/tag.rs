@@ -314,7 +314,7 @@ mod tests {
         let e = <PubkySocialTag as Validatable>::try_from(unfolded.as_bytes(), &id, &PUB_CTX)
             .unwrap_err();
         assert!(
-            e.contains("Invalid ID") || e.contains("stored folded"),
+            e.contains("Validation Error: Invalid ID") || e.contains("stored folded"),
             "{e}"
         );
         let mut shadow = t.clone();

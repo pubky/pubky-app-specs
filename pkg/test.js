@@ -517,7 +517,7 @@ describe("pubky-social-specs", () => {
       assert.strictEqual(read.kind, "file");
       assert.deepStrictEqual(Array.from(read.object.bytes), [1, 2]);
       validate(meta.url, read.object);
-      rejects(() => validate(meta.url, { bytes: new Uint8Array([3]) }), /Invalid ID/);
+      rejects(() => validate(meta.url, { bytes: new Uint8Array([3]) }), /^Validation Error: Invalid ID/);
       rejects(() => validate(meta.url, { data: object.bytes }), /bytes: Uint8Array/);
     });
 
@@ -535,13 +535,13 @@ describe("pubky-social-specs", () => {
     it("checks the id the URI names", () => {
       const a = createTag(OTTO, userUriBuilder(RIO), "a");
       const b = createTag(OTTO, userUriBuilder(RIO), "b");
-      rejects(() => validate(b.meta.url, a.object), /Invalid ID/);
-      rejects(() => readObject(b.meta.url, stored(a.object)), /Invalid ID/);
+      rejects(() => validate(b.meta.url, a.object), /^Validation Error: Invalid ID/);
+      rejects(() => readObject(b.meta.url, stored(a.object)), /^Validation Error: Invalid ID/);
     });
 
     it("refuses what is no stored object", () => {
       rejects(() => readObject(postUriBuilder(OTTO, "0032SSN7Q4EVG"), stored({})), /versionless/);
-      rejects(() => readObject("nope", stored({})), /Not a canonical pubky URI/);
+      rejects(() => readObject("nope", stored({})), /^Validation Error: Not a canonical pubky URI/);
     });
   });
 
@@ -627,7 +627,7 @@ describe("pubky-social-specs", () => {
         version: "v9",
       });
       assert.deepStrictEqual(parseUri(`pubky://${OTTO}/pub/social/v1/nothing`).resource, { kind: "unknown" });
-      rejects(() => parseUri("https://example.com"), /Not a canonical pubky URI/);
+      rejects(() => parseUri("https://example.com"), /^Validation Error: Not a canonical pubky URI/);
     });
 
     it("keys every epoch spelling of one object together", () => {

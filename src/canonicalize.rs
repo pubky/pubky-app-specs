@@ -36,17 +36,21 @@ pub fn canonicalize_pubky_uri(raw: &str) -> Result<String, ()> {
     // Segments: no empty segment (kills `//`, leading and trailing slashes), no `.` or `..`,
     // and nowhere a `%`, `?`, `#`, an ASCII control, or a frozen-whitespace code point.
     // Everything else, including non-ASCII, passes: foreign apps may use it.
-    if path.split('/').any(|seg| {
-        seg.is_empty()
-            || seg == "."
-            || seg == ".."
-            || seg.chars().any(|c| {
-                matches!(c, '%' | '?' | '#') || c.is_ascii_control() || is_frozen_whitespace(c)
-            })
-    }) {
+    if !path.split('/').all(is_canonical_segment) {
         return Err(());
     }
     Ok(["pubky://", host, "/", path].concat())
+}
+
+/// One path segment as the pubky canonicalizer accepts it, so a namespace handed to a path
+/// builder obeys the same rule the parser applies to the stored path.
+pub(crate) fn is_canonical_segment(seg: &str) -> bool {
+    !seg.is_empty()
+        && seg != "."
+        && seg != ".."
+        && !seg.chars().any(|c| {
+            matches!(c, '/' | '%' | '?' | '#') || c.is_ascii_control() || is_frozen_whitespace(c)
+        })
 }
 
 /// The web gate: the stored and hashed form of an `http`/`https` reference is the trimmed raw
@@ -151,7 +155,8 @@ impl AllowedSchemes {
 /// is invalid in any object) and the versionless rule (a social post reference names the
 /// logical post, never a stored version). `owner: None` skips only the ownership rule: plain
 /// `validate(id, ctx)` has no author in scope, so builders and ingest pass `Some`. Returns the
-/// canonical form.
+/// canonical form. An error is the fragment after the field name ("must be versionless: ...");
+/// every caller prefixes it with the position and `Validation Error: `, as [`checked`] does.
 pub fn validate_reference(
     uri: &str,
     schemes: AllowedSchemes,
