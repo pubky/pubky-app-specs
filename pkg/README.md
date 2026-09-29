@@ -230,6 +230,8 @@ npm run test
 npm run example
 ```
 
+Releases are cut from a git tag, and a build that is not on npm yet can be installed from an `npm pack` tarball. Both are described in [Releasing](https://github.com/pubky/pubky-social-specs#releasing).
+
 ## License
 
 MIT

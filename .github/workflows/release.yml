@@ -1,0 +1,214 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run every check and build, publish nothing
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The CI workflows themselves, so a release can never pass with less than a PR does.
+  rust-checks:
+    uses: ./.github/workflows/rust-checks.yml
+  native:
+    uses: ./.github/workflows/native.yml
+  wasm:
+    uses: ./.github/workflows/wasm.yml
+  js-binding:
+    uses: ./.github/workflows/js-binding.yml
+
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      publish: ${{ steps.version.outputs.publish }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      wasm_bytes: ${{ steps.pack.outputs.wasm_bytes }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Versions agree, and a tag names them and sits on v1 or main
+        id: version
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          cargo_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          npm_version=$(jq -r .version pkg/package.json)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$cargo_version" ] || [ "$GITHUB_REF_NAME" != "v$npm_version" ]; then
+              echo "::error::tag $GITHUB_REF_NAME, Cargo.toml $cargo_version and pkg/package.json $npm_version must name one version"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor HEAD origin/v1 && ! git merge-base --is-ancestor HEAD origin/main; then
+              echo "::error::tag $GITHUB_REF_NAME points at $(git rev-parse HEAD), which is on neither origin/v1 nor origin/main"
+              exit 1
+            fi
+          elif [ "$DRY_RUN" = false ]; then
+            echo "::error::publishing needs a tag ref, got $GITHUB_REF_TYPE $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+          publish=false
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$DRY_RUN" != true ]; then publish=true; fi
+          case "$cargo_version" in
+            *-*) dist_tag=next prerelease=true ;;
+            *) dist_tag=latest prerelease=false ;;
+          esac
+          {
+            echo "version=$cargo_version"
+            echo "dist_tag=$dist_tag"
+            echo "prerelease=$prerelease"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: pkg/.nvmrc
+
+      # No build cache here: this build is what gets published.
+      - name: Build and pack the npm package
+        id: pack
+        shell: bash
+        run: |
+          cd pkg
+          npm run build
+          tarball=$(npm pack --json | jq -r '.[0].filename')
+          wasm_bytes=$(stat -c %s pubky_social_specs_bg.wasm)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "wasm_bytes=$wasm_bytes" >> "$GITHUB_OUTPUT"
+          {
+            echo "### pubky-social-specs ${{ steps.version.outputs.version }}"
+            echo
+            echo "- wasm: $wasm_bytes bytes"
+            echo "- npm dist-tag: ${{ steps.version.outputs.dist_tag }}"
+            echo "- publish: ${{ steps.version.outputs.publish }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: pkg/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: pkg/pubky_social_specs_bg.wasm
+          if-no-files-found: error
+
+  crates:
+    needs: [verify, rust-checks, native, wasm, js-binding]
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish to crates.io
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  npm:
+    needs: [verify, rust-checks, native, wasm, js-binding]
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: pkg/.nvmrc
+
+      - name: npm can publish with OIDC
+        run: |
+          v=$(npm --version)
+          if ! printf '%s\n' 11.5.1 "$v" | sort -V -C; then
+            echo "::error::npm $v cannot publish through a trusted publisher, it needs 11.5.1 or newer"
+            exit 1
+          fi
+
+      # Publish the tarball verify built, not a rebuild.
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+
+      - name: Publish to npm
+        run: npm publish "./$TARBALL" --access public --tag "$DIST_TAG"
+        env:
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+          DIST_TAG: ${{ needs.verify.outputs.dist_tag }}
+
+  github-release:
+    needs: [verify, crates, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+
+      - name: Create the GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" "./$TARBALL" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --prerelease="$PRERELEASE" \
+            --notes "wasm: $WASM_BYTES bytes
+
+          - crates.io: https://crates.io/crates/pubky-social-specs/$VERSION
+          - npm: https://www.npmjs.com/package/pubky-social-specs/v/$VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          WASM_BYTES: ${{ needs.verify.outputs.wasm_bytes }}
