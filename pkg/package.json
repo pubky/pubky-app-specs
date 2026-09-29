@@ -94,6 +94,7 @@
   },
   "scripts": {
     "build": "cargo run --features migrator --bin bundle_specs_npm",
+    "e2e": "mocha e2e/migrate.e2e.js",
     "example": "node example.js",
     "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && mocha test.js migration.test.js sdk-port.test.js cli.test.js"
   },
