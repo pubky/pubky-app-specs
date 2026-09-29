@@ -1,9 +1,8 @@
 //! The one normalization every consumer shares, so an indexer, a migrator and a client
 //! cannot disagree about which stored paths are the same object.
 
-use crate::constants::{epoch_segment, PRIVATE_ROOT, PUBLIC_ROOT, SOCIAL_NAMESPACE};
+use crate::constants::{PRIVATE_ROOT, PROTOCOL, PUBLIC_ROOT, SOCIAL_NAMESPACE};
 use crate::models::legacy_v0::{ParsedUri, Resource};
-use crate::uri::strip_media_ext;
 
 /// The dedup key of a stored object across epochs and roots, or a legacy media reference
 /// that needs its v0 File object to complete.
@@ -24,6 +23,9 @@ const ID_SEGMENTS: &[&str] = &["tags", "follows", "mutes", "bookmarks", "feeds"]
 /// the migrator can find them; in v1 they belong to the app, not to this library.
 const LEAF_SEGMENTS: &[&str] = &["last_read", "settings"];
 
+/// Any canonical key works: an owner-relative path has no host, and the key never keeps one.
+const PLACEHOLDER_HOST: &str = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+
 fn strip_json(leaf: &str) -> &str {
     leaf.strip_suffix(".json").unwrap_or(leaf)
 }
@@ -43,17 +45,18 @@ fn keyed(segment: &str, id: &str) -> Option<String> {
 ///
 /// The key drops the root, so a private draft and its published copy are one object, and it
 /// drops the whole post version leaf, label included, so every edit of a post is one row.
-/// No id is validated here: the key comes from a path the ingest already accepted.
 ///
-/// Only `social/v1` keys. A new epoch exists for a change that breaks these rules, a
-/// re-pinned id function or a grammar break, so a later epoch adds its own rules here
-/// instead of inheriting v1's.
+/// A leaf is read on the terms of the epoch that wrote it. A `social/v1` path goes through
+/// the v1 parser and keys from the resource it classifies, so the key cannot drift from the
+/// grammar: whatever the parser calls unknown (a wrong root, a malformed id, a nested post
+/// path, a `blobs/` segment) has no key. A `pubky.app` path keeps the v0 reading: a post
+/// leaf is dropped from its first segment on, any other leaf is the id, and a trailing extra
+/// segment is ignored because the v0 parser ignores it and keys the object anyway. No v0 id
+/// is validated here: the key comes from a path the v0 ingest already accepted.
 ///
-/// A leaf is read on the terms of the epoch that wrote it. A post leaf is the version path,
-/// so everything from its first segment on is dropped under every epoch. Any other leaf is
-/// the id: under `pubky.app` a trailing extra segment is ignored, because the v0 parser
-/// ignores it and keys the object anyway, and under a social epoch it makes the path no
-/// object at all, because the v1 parser rejects it.
+/// Only `social/v1` keys among the social epochs. A new epoch exists for a change that
+/// breaks these rules, a re-pinned id function or a grammar break, so a later epoch adds
+/// its own rules here instead of inheriting v1's.
 ///
 /// What collapses across epochs is the path grammar, not the id inside it. `posts`, `files`
 /// and `blobs`, `follows`, `mutes` and `profile` carry the same id in both spellings of one
@@ -72,67 +75,57 @@ pub fn stable_id(owner_relative_path: &str) -> Option<StableId> {
         return None;
     }
 
-    let (namespace, tail) = after_root.split_once('/')?;
-    let (legacy, rest) = if namespace == LEGACY_EPOCH {
-        (true, tail)
-    } else if namespace == SOCIAL_NAMESPACE {
-        let (version, rest) = tail.split_once('/')?;
-        if version != epoch_segment() {
-            return None;
-        }
-        (false, rest)
-    } else {
+    let (namespace, rest) = after_root.split_once('/')?;
+    if namespace == SOCIAL_NAMESPACE {
+        return social_key(path).map(StableId::Key);
+    }
+    if namespace != LEGACY_EPOCH {
         return None;
-    };
+    }
 
     // The resource segment and everything after it.
     let (segment, leaf) = match rest.split_once('/') {
         Some((s, l)) => (s, Some(l)),
         None => (rest, None),
     };
-    let leaf = leaf.filter(|l| !l.is_empty());
-
-    // A post leaf is a version path under every epoch, so it always trims to its first
-    // segment. For every other resource the leaf is the id, and the two epochs read an
-    // extra segment differently: the v0 parser matches `[resource, id, ..]` and ignores
-    // whatever follows, the v1 parser rejects it. Each epoch gets its own answer, or a
-    // read-then-key pass drops objects the epoch's own parser accepted.
-    let leaf = match leaf {
-        Some(l) if segment == "posts" || legacy => match l.split('/').next().unwrap_or(l) {
+    // The v0 parser matches `[resource, id, ..]` and ignores whatever follows, so only the
+    // first segment of the leaf is read, or a read-then-key pass drops objects v0 accepted.
+    let leaf = match leaf.filter(|l| !l.is_empty()) {
+        Some(l) => match l.split('/').next().unwrap_or(l) {
             "" => return None,
             first => Some(first),
         },
-        Some(l) if l.contains('/') => return None,
-        none_or_plain => none_or_plain,
+        None => None,
     };
 
     let key = match (segment, leaf) {
         ("posts", Some(id)) => keyed("posts", id)?,
+        // The v0 metadata object names the bytes; only its `src` completes the key.
         ("files", Some(leaf)) => {
-            if legacy {
-                // The v0 metadata object names the bytes; only its `src` completes the key.
-                return Some(StableId::NeedsDeref {
-                    tsid: leaf.to_string(),
-                });
-            }
-            keyed("files", strip_media_ext(leaf))?
+            return Some(StableId::NeedsDeref {
+                tsid: leaf.to_string(),
+            })
         }
         // v0 kept the bytes under `blobs/` and their metadata under `files/`; the bytes are
-        // the v1 media object, so a blob id keys straight onto it. Ingest never writes a
-        // `blobs/` path under a social epoch, the segment rule simply does not ask.
+        // the v1 media object, so a blob id keys straight onto it.
         ("blobs", Some(leaf)) => keyed("files", leaf)?,
-        (seg, Some(leaf))
-            if ID_SEGMENTS.contains(&seg) || (legacy && LEAF_SEGMENTS.contains(&seg)) =>
-        {
+        (seg, Some(leaf)) if ID_SEGMENTS.contains(&seg) || LEAF_SEGMENTS.contains(&seg) => {
             keyed(seg, strip_json(leaf))?
         }
         ("profile.json", None) => "profile".to_string(),
-        (seg, None) if legacy && LEAF_SEGMENTS.contains(&strip_json(seg)) => {
-            strip_json(seg).to_string()
-        }
+        (seg, None) if LEAF_SEGMENTS.contains(&strip_json(seg)) => strip_json(seg).to_string(),
         _ => return None,
     };
     Some(StableId::Key(key))
+}
+
+/// The key of a `social/v1` path, from the resource the v1 parser classifies it as.
+fn social_key(path: &str) -> Option<String> {
+    let uri = [PROTOCOL, PLACEHOLDER_HOST, "/", path].concat();
+    match crate::ParsedUri::try_from(uri.as_str()).ok()?.resource {
+        crate::Resource::User => Some("profile".to_string()),
+        resource => Some(format!("{resource}/{}", resource.id()?)),
+    }
 }
 
 /// Completes a legacy `files/{tsid}` reference through the v0 File object's `src`
@@ -210,42 +203,34 @@ mod tests {
     }
 
     #[test]
-    fn a_blobs_path_under_a_social_epoch_still_keys_as_media() {
-        // Ingest never produces this: v1 has no blobs/ resource. The segment rule is
-        // epoch-blind on purpose, so the spelling keys rather than dropping on the floor.
-        assert_eq!(
-            key(&format!("pub/social/v1/blobs/{HASH}")).as_deref(),
-            Some(format!("files/{HASH}").as_str())
-        );
+    fn a_blobs_path_under_a_social_epoch_has_no_key() {
+        // v1 has no blobs/ resource, so the parser calls the path unknown.
+        for path in [
+            format!("pub/social/v1/blobs/{HASH}"),
+            format!("priv/social/v1/blobs/{HASH}"),
+            format!("pub/social/v1/blobs/{HASH}.png"),
+        ] {
+            assert_eq!(stable_id(&path), None, "{path}");
+        }
     }
 
     #[test]
     fn only_a_closed_set_extension_is_stripped() {
-        // The strip set is case-sensitive, matching the parser, which reads `.JPG` as a
-        // filename that happens to contain a dot.
-        let cases: &[(&str, &str)] = &[
-            (
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.jpg",
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG",
-            ),
-            ("8Z8CWH8NVYQY39ZEBFGKQWWEKG", "8Z8CWH8NVYQY39ZEBFGKQWWEKG"),
-            (
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.JPG",
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.JPG",
-            ),
-            (
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.tar.gz",
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.tar.gz",
-            ),
-            (
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.tar.zip",
-                "8Z8CWH8NVYQY39ZEBFGKQWWEKG.tar",
-            ),
-        ];
-        for (leaf, expected) in cases {
+        assert_eq!(
+            key(&format!("priv/social/v1/files/{HASH}.jpg")).as_deref(),
+            Some(format!("files/{HASH}").as_str())
+        );
+        // The strip set is case-sensitive and takes one rightmost extension, matching the
+        // parser, which then finds no canonical hash and calls the leaf unknown.
+        for leaf in [
+            HASH.to_string(),
+            format!("{HASH}.JPG"),
+            format!("{HASH}.tar.gz"),
+            format!("{HASH}.tar.zip"),
+        ] {
             assert_eq!(
-                key(&format!("priv/social/v1/files/{leaf}")).as_deref(),
-                Some(format!("files/{expected}").as_str()),
+                stable_id(&format!("priv/social/v1/files/{leaf}")),
+                None,
                 "{leaf}"
             );
         }
@@ -253,41 +238,75 @@ mod tests {
 
     #[test]
     fn the_remaining_segments_drop_one_trailing_json() {
-        let cases: &[(&str, &str)] = &[
-            ("pub/social/v1/profile.json", "profile"),
-            ("pub/pubky.app/profile.json", "profile"),
-            ("pub/social/v1/tags/ABC.json", "tags/ABC"),
-            ("pub/pubky.app/tags/ABC", "tags/ABC"),
-            ("pub/social/v1/follows/PK.json", "follows/PK"),
-            ("priv/social/v1/mutes/PK.json", "mutes/PK"),
-            ("priv/social/v1/bookmarks/ABC.json", "bookmarks/ABC"),
-            ("priv/social/v1/feeds/ABC.json", "feeds/ABC"),
-            ("pub/pubky.app/last_read", "last_read"),
-            ("pub/pubky.app/settings.json", "settings"),
+        let cases: &[(String, String)] = &[
+            ("pub/social/v1/profile.json".into(), "profile".into()),
+            ("pub/pubky.app/profile.json".into(), "profile".into()),
+            (
+                format!("pub/social/v1/tags/{HASH}.json"),
+                format!("tags/{HASH}"),
+            ),
+            ("pub/pubky.app/tags/ABC".into(), "tags/ABC".into()),
+            (
+                format!("pub/social/v1/follows/{OWNER}.json"),
+                format!("follows/{OWNER}"),
+            ),
+            (
+                format!("priv/social/v1/mutes/{OWNER}.json"),
+                format!("mutes/{OWNER}"),
+            ),
+            (
+                format!("priv/social/v1/bookmarks/{B64}.json"),
+                format!("bookmarks/{B64}"),
+            ),
+            (
+                format!("priv/social/v1/bookmarks/~{HASH}.json"),
+                format!("bookmarks/~{HASH}"),
+            ),
+            (
+                format!("priv/social/v1/feeds/{HASH}.json"),
+                format!("feeds/{HASH}"),
+            ),
+            (
+                format!("pub/social/v1/feeds/{HASH}.json"),
+                format!("feeds/{HASH}"),
+            ),
+            ("pub/pubky.app/last_read".into(), "last_read".into()),
+            ("pub/pubky.app/settings.json".into(), "settings".into()),
         ];
         for (path, expected) in cases {
-            assert_eq!(key(path).as_deref(), Some(*expected), "{path}");
+            assert_eq!(key(path).as_deref(), Some(expected.as_str()), "{path}");
         }
     }
 
     #[test]
     fn a_post_keys_the_same_with_or_without_a_version_leaf() {
         let versionless = key("pub/social/v1/posts/0RDX5H0000000");
-        for leaf in [
-            "0RDX5J0000002.json",
-            "0RDX5J0000002-hello-world.json",
-            "0RDX5J0000002",
-            "anything/at/all",
-        ] {
+        assert!(versionless.is_some());
+        for leaf in ["0RDX5J0000002.json", "0RDX5J0000002-hello-world.json"] {
             assert_eq!(
                 key(&format!("pub/social/v1/posts/0RDX5H0000000/{leaf}")),
                 versionless,
                 "{leaf}"
             );
         }
+        // A leaf the parser does not read as a version is no stored object.
+        for leaf in [
+            "0RDX5J0000002",
+            "0RDX5J0000002.JSON",
+            "0RDX5J0000002-Hello.json",
+            "0RDX5J000000.json",
+        ] {
+            assert_eq!(
+                stable_id(&format!("pub/social/v1/posts/0RDX5H0000000/{leaf}")),
+                None,
+                "{leaf}"
+            );
+        }
     }
 
     const OWNER: &str = "operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo";
+    /// base64url of a canonical pubky post reference: a primary bookmark filename.
+    const B64: &str = "cHVia3k6Ly9vcGVycnI4d3NicHIzdWU5ZDRxajQxZ2Uxa2NjNnI3ZmRpeTZvM3VnanJyaGk0eTc3cmRvL3B1Yi9zb2NpYWwvdjEvcG9zdHMvMDAzMlNTTjdRNEVWRw";
 
     #[test]
     fn a_deref_completes_only_through_a_legacy_blob_src() {
@@ -360,13 +379,51 @@ mod tests {
     }
 
     #[test]
-    fn a_post_leaf_is_a_path_under_every_epoch() {
-        for root in ["pub/social/v1", "pub/pubky.app"] {
-            assert_eq!(
-                key(&format!("{root}/posts/0RDX5H0000000/a/b/c")).as_deref(),
-                Some("posts/0RDX5H0000000"),
-                "{root}"
-            );
+    fn a_nested_post_path_keys_only_under_the_legacy_epoch() {
+        // v0 ignores what follows the id; the v1 grammar has exactly one version leaf.
+        assert_eq!(
+            key("pub/pubky.app/posts/0RDX5H0000000/a/b/c").as_deref(),
+            Some("posts/0RDX5H0000000")
+        );
+        for path in [
+            "pub/social/v1/posts/0RDX5H0000000/a/b/c",
+            "pub/social/v1/posts/0RDX5H0000000/0RDX5J0000002.json/x",
+            "priv/social/v1/posts/0RDX5H0000000/0RDX5J0000002/0RDX5J0000002.json",
+            "pub/social/v1/posts/0RDX5H0000000.json",
+        ] {
+            assert_eq!(stable_id(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_resource_under_the_wrong_root_has_no_key() {
+        for path in [
+            "priv/social/v1/profile.json".to_string(),
+            format!("priv/social/v1/tags/{HASH}.json"),
+            format!("priv/social/v1/follows/{OWNER}.json"),
+            format!("pub/social/v1/mutes/{OWNER}.json"),
+            format!("pub/social/v1/bookmarks/{B64}.json"),
+            // Root spellings the grammar does not have.
+            format!("Pub/social/v1/tags/{HASH}.json"),
+            format!("private/social/v1/tags/{HASH}.json"),
+            format!("pub/Social/v1/tags/{HASH}.json"),
+            format!("pub/social/V1/tags/{HASH}.json"),
+        ] {
+            assert_eq!(stable_id(&path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_malformed_social_id_has_no_key() {
+        for path in [
+            "pub/social/v1/tags/ABC.json",
+            "pub/social/v1/follows/PK.json",
+            "priv/social/v1/feeds/ABC.json",
+            "priv/social/v1/bookmarks/_x.json",
+            "pub/social/v1/posts/0RDX5H000000",
+            "pub/social/v1/posts/0rdx5h0000000",
+        ] {
+            assert_eq!(stable_id(path), None, "{path}");
         }
     }
 

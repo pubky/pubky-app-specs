@@ -26,6 +26,9 @@ jobs:
       - name: Run native tests
         run: cargo nextest run --no-fail-fast
 
+      - name: Run native tests with the migrator
+        run: cargo nextest run --no-fail-fast --features migrator
+
   msrv:
     name: MSRV (1.89)
     runs-on: ubuntu-latest

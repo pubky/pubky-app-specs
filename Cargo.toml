@@ -52,6 +52,8 @@ anyhow = "1.0.100"
 
 [features]
 openapi = ["utoipa"]
+# The v0 to v1 transforms. Off by default: only a client that runs the migration needs them.
+migrator = []
 
 [profile.release]
 opt-level = "z"   # Requests maximum optimization for binary size (“z” stands for “size”), rather than speed.

@@ -199,11 +199,12 @@ fn a_v0_path_and_its_v1_counterpart_key_the_same() {
 #[test]
 fn a_re_derived_id_keys_the_same_under_either_epoch_spelling() {
     let id = "86805FC1CSFZD4W6HZ09S24QWG";
-    for segment in ["tags", "bookmarks", "feeds"] {
+    // Each under the root the v1 grammar binds it to; a tag under `priv/` is no object.
+    for (segment, root) in [("tags", "pub"), ("bookmarks", "priv"), ("feeds", "priv")] {
         let want = Some(StableId::Key(format!("{segment}/{id}")));
         assert_eq!(stable_id(&format!("pub/pubky.app/{segment}/{id}")), want);
         assert_eq!(
-            stable_id(&format!("priv/social/v1/{segment}/{id}.json")),
+            stable_id(&format!("{root}/social/v1/{segment}/{id}.json")),
             want
         );
     }
