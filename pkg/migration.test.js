@@ -718,6 +718,34 @@ describe("migration engine", () => {
       assert.deepStrictEqual(names, [`pubky-social-specs:migration:${owner}`]);
     });
 
+    it("refuses a write outside the 1.x roots before any PUT, as a fault in the package", async () => {
+      const entry = require("pubky-social-specs");
+      const migrate = entry.migrate;
+      // The CommonJS engine reads the entry's exports when it loads, so a fresh load takes the fake
+      const fresh = () => {
+        for (const key of Object.keys(require.cache)) if (/[\\/]migration[\\/]/.test(key)) delete require.cache[key];
+        return require("./migration/index.cjs");
+      };
+      // A transform that sends each copy over its own 0.x source
+      entry.migrate = (handle, source, bytes) => {
+        const result = migrate(handle, source, bytes);
+        for (const write of result.writes ?? []) write.meta = { ...write.meta, url: source };
+        return result;
+      };
+      try {
+        const cjs = fresh();
+        const port = new cjs.MemoryPort();
+        for (const [path, { input }] of rows) port.store.set(url(path), input);
+        const before = new Map(port.store);
+        await assert.rejects(cjs.runMigration({ owner, port }), /a write to pubky:\/\/\w+\/pub\/pubky\.app\/.*, outside pubky:\/\/\w+\/pub\/social\/v1\/ and pubky:\/\/\w+\/priv\/social\/v1\//);
+        assert.ok(!port.calls.some((c) => ["putJson", "putBytes", "delete"].includes(c.op)));
+        assert.deepStrictEqual(port.store, before);
+      } finally {
+        entry.migrate = migrate;
+        fresh();
+      }
+    });
+
     it("refuses a mode it does not know", async () => {
       await assert.rejects(runMigration({ owner, port: legacyPort(), mode: "Dry" }), /mode must be "run" or "dry"/);
     });

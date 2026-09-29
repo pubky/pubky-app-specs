@@ -166,6 +166,8 @@ class Run {
   readonly #port: MigrationPort;
   readonly #dry: boolean;
   readonly #ownerPrefix: string;
+  /** The two 1.x roots, the only places the run writes to or deletes from. */
+  #roots: string[] = [];
   #handle?: Migration;
   #phase: Phase = "probe";
   #kind?: Bucket;
@@ -215,6 +217,7 @@ class Run {
       this.#emit();
       const privatePrefix = listPrefix(owner, "private");
       const flagUrl = privatePrefix + FLAG;
+      this.#roots = [publicPrefix, privatePrefix];
       const flag = await this.#probe(flagUrl);
       if (flag && !rescan && flag.transformRev >= transformRev) {
         this.#skipped = flag.skipped;
@@ -373,6 +376,12 @@ class Run {
       return this.#count("invalid", path, message);
     }
     if ("skip" in result) return this.#count(result.skip, path);
+    // The port can write the whole tree, the 0.x one included, which the run must never touch
+    for (const write of result.writes) {
+      if (!this.#roots.some((root) => write.meta.url.startsWith(root))) {
+        throw new Error(`pubky-social-specs/migration: a write to ${write.meta.url}, outside ${this.#roots.join(" and ")}`);
+      }
+    }
     if (bucket === "files") {
       this.#learnFile(path, bytes);
       return undefined;
