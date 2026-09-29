@@ -1,4 +1,7 @@
 {
+  "bin": {
+    "pubky-social-migrate": "bin/migrate.js"
+  },
   "bugs": {
     "url": "https://github.com/pubky/pubky-social-specs/issues"
   },
@@ -72,7 +75,8 @@
     "migration/**/*.js",
     "migration/**/*.cjs",
     "migration/**/*.d.ts",
-    "!migration/host.d.ts"
+    "!migration/host.d.ts",
+    "bin/migrate.js"
   ],
   "homepage": "https://pubky.app",
   "keywords": [
@@ -91,7 +95,7 @@
   "scripts": {
     "build": "cargo run --features migrator --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && mocha test.js migration.test.js sdk-port.test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && mocha test.js migration.test.js sdk-port.test.js cli.test.js"
   },
   "sideEffects": false,
   "type": "module",
