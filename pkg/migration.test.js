@@ -2,33 +2,20 @@ import assert from "assert";
 import { createRequire } from "node:module";
 import { init, readObject, listPrefix, transformRev, validationLimits } from "./index.js";
 import * as migration from "./migration/index.js";
+import { corpus, legacyTree, bytesOf } from "./migration.fixture.js";
 
 const { runMigration, MemoryPort, MigrationPortError, refusal, ENGINE_CAPS, MIGRATION_CAPS, BUCKETS, bucketOf } = migration;
 
 const require = createRequire(import.meta.url);
-const corpus = require("../vectors/semantic/v0_to_v1.json");
 const owner = corpus.owner;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const url = (path) => `pubky://${owner}/${path}`;
-const bytesOf = (input) => encoder.encode("raw" in input ? input.raw : JSON.stringify(input.body));
 const FLAG = url("priv/social/v1/_migrated.json");
 const LEGACY = url("pub/pubky.app/");
 
-// The 0.x tree of the vectors: every File, then each vector input at its path. Several rows
-// share a path; the first one is the stored object.
-const rows = new Map();
-for (const file of corpus.files) {
-  rows.set(`pub/pubky.app/files/${file.tsid}`, { input: bytesOf(file), expected: { writes: [] } });
-}
-for (const { input, expected } of corpus.vectors) {
-  if (!rows.has(input.path)) rows.set(input.path, { input: bytesOf(input), expected });
-}
-rows.set("pub/pubky.app/settings.json", {
-  input: encoder.encode(JSON.stringify({ language: "en" })),
-  expected: { skip: "not_migrated" },
-});
+const rows = new Map([...legacyTree()].map(([path, row]) => [path, { input: bytesOf(row), expected: row.expected }]));
 
 const legacyPort = (options) => {
   const port = new MemoryPort(options);

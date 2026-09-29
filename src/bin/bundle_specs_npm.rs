@@ -95,20 +95,7 @@ fn compile_migration() -> io::Result<ExitStatus> {
     println!("🧩 Compiling the migration engine with tsc ...");
 
     // A module renamed or removed since the last build would otherwise ship stale
-    let migration = Path::new(&manifest_dir).join("pkg/migration");
-    for entry in fs::read_dir(&migration)? {
-        let path = entry?.path();
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        let emitted = [".js", ".cjs", ".d.ts"]
-            .iter()
-            .any(|ext| name.ends_with(ext));
-        if emitted && name != "host.d.ts" {
-            fs::remove_file(&path)?;
-        }
-    }
+    remove_emitted(&Path::new(&manifest_dir).join("pkg/migration"))?;
 
     let output = Command::new("npx")
         .args(["--no", "--", "tsc", "-p", "migration"])
@@ -124,6 +111,28 @@ fn compile_migration() -> io::Result<ExitStatus> {
     }
 
     Ok(output.status)
+}
+
+/// Deletes what tsc and patch.mjs emit under `dir`, its subdirectories included.
+fn remove_emitted(dir: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            remove_emitted(&path)?;
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let emitted = [".js", ".cjs", ".d.ts"]
+            .iter()
+            .any(|ext| name.ends_with(ext));
+        if emitted && name != "host.d.ts" {
+            fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
 }
 
 fn write_data_assets() -> io::Result<()> {

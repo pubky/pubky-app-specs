@@ -9,6 +9,7 @@
   ],
   "description": "Pubky social data model specifications",
   "devDependencies": {
+    "@synonymdev/pubky": "^0.14.0",
     "mocha": "^11.7.5",
     "typescript": "^7.0.2"
   },
@@ -40,6 +41,11 @@
       "types": "./migration/index.d.ts",
       "import": "./migration/index.js",
       "require": "./migration/index.cjs"
+    },
+    "./migration/pubky-sdk": {
+      "types": "./migration/adapters/pubky-sdk.d.ts",
+      "import": "./migration/adapters/pubky-sdk.js",
+      "require": "./migration/adapters/pubky-sdk.cjs"
     }
   },
   "files": [
@@ -63,9 +69,9 @@
     "migrationData.js",
     "migrationData.cjs",
     "migrationData.d.ts",
-    "migration/*.js",
-    "migration/*.cjs",
-    "migration/*.d.ts",
+    "migration/**/*.js",
+    "migration/**/*.cjs",
+    "migration/**/*.d.ts",
     "!migration/host.d.ts"
   ],
   "homepage": "https://pubky.app",
@@ -85,7 +91,7 @@
   "scripts": {
     "build": "cargo run --features migrator --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && mocha test.js migration.test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts migration/adapters/pubky-sdk.d.ts && mocha test.js migration.test.js sdk-port.test.js"
   },
   "sideEffects": false,
   "type": "module",

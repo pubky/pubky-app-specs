@@ -38,7 +38,7 @@ function commonJs(source, file) {
 
 if (process.argv[2] === "migration") {
   const dir = path.join(pkg, "migration");
-  for (const file of (await readdir(dir)).filter((f) => f.endsWith(".js"))) {
+  for (const file of (await readdir(dir, { recursive: true })).filter((f) => f.endsWith(".js"))) {
     const source = await readFile(path.join(dir, file), "utf8");
     await writeFile(path.join(dir, file.replace(/\.js$/, ".cjs")), commonJs(source, `migration/${file}`));
   }
