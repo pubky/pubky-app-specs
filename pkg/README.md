@@ -176,9 +176,41 @@ import { validationLimits } from "pubky-social-specs/validationLimits";
 import limitsJson from "pubky-social-specs/validationLimits.json" with { type: "json" };
 ```
 
+## Migration
+
+The 0.x to 1.x transforms ship in the same wasm. A run is one handle per owner and one `migrate` call per stored path; the engine around it, LIST, GET, PUT, is yours:
+
+```js
+import { createMigration, migrate, legacyListPrefix } from "pubky-social-specs";
+
+const run = createMigration(owner);
+const urls = await list(legacyListPrefix(owner)); // full pubky:// URLs, fed in as they come
+// The File objects first: they name the blobs and carry the names everything else references
+const files = urls.filter((u) => u.includes("/pub/pubky.app/files/"));
+const skipped = {};
+for (const url of [...files, ...urls.filter((u) => !files.includes(u))]) {
+  const result = migrate(run, url, await get(url));
+  if ("skip" in result) {
+    (skipped[result.skip] ??= []).push(url);
+    continue;
+  }
+  for (const { kind, object, meta } of result.writes) {
+    await put(meta.url, kind === "file" ? object.bytes : JSON.stringify(object));
+  }
+  if (result.dropped.length) console.warn(url, "dropped", result.dropped);
+}
+run.free();
+```
+
+`migrate(run, path, bytes)` takes the owner-relative path (`pub/pubky.app/...`) or the full `pubky://` URL a LIST returns, and returns `{writes, dropped}` or `{skip}`. Each write is `{kind, object, meta}`: the object as `readObject` reads it (media as `{bytes}`) and `meta` as a builder gives it, so the PUT is the same as for anything built here, and `validate(meta.url, object)` already holds. A 0.x File object writes nothing: its name, blob and content type feed the run, so walk `files/` before the posts, tags and profile that reference them. A reference the run cannot resolve stays as written, since the legacy URI keeps resolving.
+
+`skip` is one of `skipReasons`, frozen data readable before `init()` and published without the wasm as `pubky-social-specs/skipReasons`, so a report can count categories without a table of its own. A `[DELETED]` post or profile skips as `tombstone`; `not_migrated` is a path with no 1.x counterpart, such as `last_read`, or another owner's path. A File object is not a skip: it writes nothing and feeds the run. Compare `bytes.length` with `validationLimits.maxFileSizeBytes` before calling `migrate` on a blob: the cap is frozen data, so an `oversize` skip costs no copy into the wasm. A blob that skips leaves the references already rewritten to it dangling (they were rewritten when their post or tag migrated), so count every skip and report it. `dropped` lists `profile_image` and `profile_link[i]`: a value the 1.x gates refuse, left out so the profile still migrates.
+
+The handle holds the run's memory in the wasm: call `free()` when the run ends (a handle that is garbage collected is freed too, through the glue's `FinalizationRegistry`). It works only with the entry that made it, since the ESM and CommonJS entries hold separate instances. What the transforms do not decide stays with the engine: which destinations already exist, the re-check of the source after each PUT, and the order across types.
+
 ## Reading 0.x data
 
-The frozen 0.x reader (`legacy_v0`) is Rust only. This package exposes the 1.x surface; a JS consumer that has to read un-migrated data goes through a Rust service or through the migration.
+The frozen 0.x reader (`legacy_v0`) is Rust only. This package exposes the 1.x surface and the migration; a JS consumer that has to read un-migrated data as such goes through a Rust service.
 
 ## Specification
 

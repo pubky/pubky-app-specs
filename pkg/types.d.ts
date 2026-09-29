@@ -16,6 +16,7 @@ import type {
   FeedLifecycle,
   FeedPaths,
   Meta,
+  Migration,
   PubkySocialCollectionLayout,
   PubkySocialFeedLayout,
   PubkySocialFeedReach,
@@ -28,10 +29,12 @@ import type {
   UriParts,
   VersionMeta,
 } from "./pubky_social_specs.js";
+import type { SkipReason } from "./skipReasons.js";
 
 export * from "./pubky_social_specs.js";
 export { validationLimits } from "./validationLimits.js";
 export { validMimeTypes, mimeToExtTable } from "./mimeTypes.js";
+export { skipReasons, type SkipReason } from "./skipReasons.js";
 
 /**
  * Members this version does not know. A stored object keeps them at runtime through every
@@ -168,6 +171,18 @@ export interface PublishPlan {
   destPath: string;
 }
 
+// ---- migration ----
+
+/** A write of `migrate`: the object as `readObject` reads it, and where it goes. */
+export type MigratedWrite = ReadObject & { meta: Meta };
+
+/** A value the rules refused and the transform left out, so the object around it still migrated. */
+// Spelled by hand; it follows the Rust `Dropped` in `src/migrate.rs`.
+export type Dropped = "profile_image" | `profile_link[${number}]`;
+
+/** What one 0.x object became, or why it did not. */
+export type MigrateResult = { writes: MigratedWrite[]; dropped: Dropped[] } | { skip: SkipReason };
+
 // ---- the entry ----
 
 /** Loads the wasm. Await it once before calling anything else; every other call throws until then. */
@@ -244,3 +259,16 @@ export function essence(declared: string): string | null;
 export function deletionPaths(input: DeletionInput): string[];
 export function listPrefix(userId: string, root: Root): string;
 export function legacyListPrefix(userId: string): string;
+
+/**
+ * A run over `owner`'s 0.x tree. The handle is opaque and holds what the File objects read
+ * so far say about names, blobs and extensions; call `free()` on it when the run ends. It
+ * works only with the entry that made it.
+ */
+export function createMigration(owner: string): Migration;
+/**
+ * One 0.x object by its owner-relative path (`pub/pubky.app/...`) or the full `pubky://` URL
+ * a LIST returns. A File object is read into the run and writes nothing, so walk `files/`
+ * before anything that references them.
+ */
+export function migrate(migration: Migration, v0Path: string, bytes: Uint8Array): MigrateResult;

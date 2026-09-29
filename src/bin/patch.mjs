@@ -5,7 +5,7 @@
 // nothing runs until the entry's `init()` asks. The ESM copy carries the wasm inline as base64
 // (browsers and bundlers load one file), the CJS copy reads the `.wasm` next to it.
 
-import { readFile, writeFile, rename } from "node:fs/promises";
+import { readFile, writeFile, rename, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path, { dirname } from "node:path";
 
@@ -64,11 +64,11 @@ if (/\bexports\.|\brequire\(|\bmodule\.exports\b/.test(esm)) {
 
 await writeFile(path.join(pkg, `${name}.cjs`), cjs);
 await writeFile(path.join(pkg, `${name}.js`), esm);
-await Promise.all(
-  ["_bg.wasm", ".d.ts"].map((suffix) =>
-    rename(path.join(pkg, `nodejs/${name}${suffix}`), path.join(pkg, `${name}${suffix}`)),
-  ),
-);
+await rename(path.join(pkg, `nodejs/${name}_bg.wasm`), path.join(pkg, `${name}_bg.wasm`));
+// The exported class declares [Symbol.dispose], which the default lib of a consumer lacks
+const dts = await readFile(path.join(pkg, `nodejs/${name}.d.ts`), "utf8");
+await writeFile(path.join(pkg, `${name}.d.ts`), `/// <reference lib="esnext.disposable" />\n${dts}`);
+await unlink(path.join(pkg, `nodejs/${name}.d.ts`));
 
 // index.cjs from index.js: relative ESM imports become requires of the .cjs twin, and the one
 // closing `export { ... };` becomes module.exports.

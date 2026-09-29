@@ -43,6 +43,10 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
             target,
             "--out-dir",
             &format!("pkg/{}", target),
+            // The package is what the browser migrator runs, so it ships the transforms
+            "--",
+            "--features",
+            "migrator",
         ])
         .output()?;
 
@@ -100,6 +104,31 @@ fn write_data_assets() -> io::Result<()> {
             ("mimeToExtTable", "data.mimeToExtTable"),
         ],
         MIME_TYPES_DTS,
+    )?;
+
+    let reasons: Vec<&str> = pubky_social_specs::migrate::Skip::ALL
+        .iter()
+        .map(|skip| skip.as_str())
+        .collect();
+    let dts = skip_reasons_dts(&reasons);
+    write_data_asset(
+        "skipReasons",
+        &serde_json::json!(reasons),
+        &[("skipReasons", "data")],
+        &dts,
+    )
+}
+
+/// The union is spelled from the same list as the data, so the type and the values cannot
+/// drift apart.
+fn skip_reasons_dts(reasons: &[&str]) -> String {
+    let union = reasons
+        .iter()
+        .map(|reason| format!("\"{reason}\""))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    format!(
+        "/** Why one 0.x object did not migrate. */\nexport type SkipReason = {union};\n/** Every reason, frozen, so a report counts categories without a table of its own. */\nexport declare const skipReasons: readonly SkipReason[];\ndeclare const data: readonly SkipReason[];\nexport default data;\n"
     )
 }
 

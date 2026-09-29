@@ -36,6 +36,10 @@ const {
   validMimeTypes,
   feedId,
   legacyListPrefix,
+  skipReasons,
+  Migration,
+  createMigration,
+  migrate,
   deletionPaths,
   listPrefix,
   userUriBuilder,
@@ -86,6 +90,15 @@ describe("before init()", () => {
     assert.deepStrictEqual(validationLimits, validationLimitsJson);
     assert.strictEqual(mimeToExtTable["image/png"], "png");
     assert.ok(validMimeTypes.includes("image/png"));
+  });
+
+  it("skipReasons is frozen data, the entry, the subpath and the JSON agreeing", () => {
+    assert.ok(Object.isFrozen(skipReasons));
+    assert.deepStrictEqual([...skipReasons], require("./skipReasons.json"));
+    assert.deepStrictEqual([...require("./skipReasons.cjs").skipReasons], [...skipReasons]);
+    for (const reason of ["malformed", "shape", "tombstone", "oversize", "invalid", "not_migrated"]) {
+      assert.ok(skipReasons.includes(reason), reason);
+    }
   });
 });
 
@@ -581,6 +594,24 @@ describe("pubky-social-specs", () => {
       rejects(() => planUnpublish("0032SSN7Q4EVG", new Array(1), []), "Validation Error: planUnpublish() argument 2 must be an array of strings");
       rejects(() => readObject(userUriBuilder(OTTO), new DataView(new ArrayBuffer(2))), /must be a Uint8Array/);
       rejects(() => readObject(userUriBuilder(OTTO), new Uint16Array(2)), /must be a Uint8Array/);
+      rejects(() => migrate({}, "pub/pubky.app/profile.json", stored({})), "Validation Error: migrate() argument 1 must be a Migration handle");
+    });
+
+    it("a byte view whose length lies never reaches the wasm", () => {
+      class Lying extends Uint8Array {
+        get length() {
+          return 1 << 20;
+        }
+      }
+      rejects(() => readObject(userUriBuilder(OTTO), new Lying(2)), "Validation Error: readObject() argument 2 must be a Uint8Array");
+      rejects(() => createFile(OTTO, new Lying(2), "image/png"), "Validation Error: createFile() argument 2 must be a Uint8Array");
+      const run = createMigration(OTTO);
+      rejects(() => migrate(run, "pub/pubky.app/profile.json", new Lying(2)), "Validation Error: migrate() argument 3 must be a Uint8Array");
+      run.free();
+      // validate reads a media view by its own length: the lie is ignored, not trusted
+      const { meta } = createFile(OTTO, new Uint8Array([1, 2]), "image/png");
+      validate(meta.url, { bytes: new Lying([1, 2]) });
+      rejects(() => validate(meta.url, { bytes: new Lying([1, 2, 3]) }), /Invalid ID/);
     });
 
     it("bytes from another realm pass", () => {
@@ -972,6 +1003,131 @@ describe("pubky-social-specs", () => {
       for (const [uri, kind] of cases) {
         assert.strictEqual(parseUri(uri).resource.kind, kind, uri);
       }
+    });
+  });
+
+  describe("migration", () => {
+    const corpus = require("../vectors/semantic/v0_to_v1.json");
+    const owner = corpus.owner;
+    const bytesOf = (input) => ("raw" in input ? new TextEncoder().encode(input.raw) : stored(input.body));
+    // A vector row by the start of its name, as `migrate` takes it
+    const vector = (prefix) => {
+      const { input } = corpus.vectors.find((v) => v.name.startsWith(prefix));
+      return [input.path, bytesOf(input)];
+    };
+    let run;
+
+    before(() => {
+      run = createMigration(owner);
+      // The File objects first: they name the blobs and carry the names everything else references
+      for (const file of corpus.files) {
+        const result = migrate(run, `pub/pubky.app/files/${file.tsid}`, bytesOf(file));
+        assert.deepStrictEqual(result, { writes: [], dropped: [] });
+      }
+    });
+    after(() => run.free());
+
+    it("every vector row migrates to its paths, or skips with a listed reason", () => {
+      const seen = new Set();
+      for (const { name, input, expected } of corpus.vectors) {
+        const result = migrate(run, input.path, bytesOf(input));
+        // The full URL a LIST returns is the same input
+        assert.deepStrictEqual(migrate(run, `pubky://${owner}/${input.path}`, bytesOf(input)), result, name);
+        if (expected.skip) {
+          assert.deepStrictEqual(result, { skip: expected.skip }, name);
+          assert.ok(skipReasons.includes(result.skip), name);
+          seen.add(result.skip);
+          continue;
+        }
+        assert.deepStrictEqual(
+          result.writes.map((w) => w.meta.path),
+          expected.writes.map((w) => `/${w.path}`),
+          name,
+        );
+        assert.deepStrictEqual(result.dropped, expected.dropped ?? [], name);
+        for (const { kind, object, meta } of result.writes) {
+          assert.strictEqual(meta.url, `pubky://${owner}${meta.path}`, name);
+          validate(meta.url, object);
+          const body = kind === "file" ? object.bytes : stored(object);
+          assert.deepStrictEqual(readObject(meta.url, body), { kind, object }, name);
+        }
+      }
+      // shape is a File that does not read, oversize a blob over 100 MB: neither is a vector
+      const expected = skipReasons.filter((r) => r !== "shape" && r !== "oversize");
+      assert.deepStrictEqual([...seen].sort(), [...expected].sort());
+    });
+
+    it("dereferences a post's media through the File objects, name included", () => {
+      const [write] = migrate(run, ...vector("image post")).writes;
+      assert.strictEqual(write.kind, "post");
+      assert.strictEqual(write.meta.id, "0034A0X7NJ52J");
+      assert.deepStrictEqual(write.object.attachments[0], {
+        uri: fileUriBuilder(owner, "AKSZ57W2RFKHV1EHK007FQQ8TW.png"),
+        name: "photo.png",
+      });
+      // A File the run never read stays as written: the legacy URI keeps resolving
+      assert.strictEqual(write.object.attachments[3].uri, `pubky://${owner}/pub/pubky.app/files/0032SSN7Q4EVG`);
+    });
+
+    it("a blob becomes the media object, the extension from the lowest File naming it", () => {
+      const [path, bytes] = vector("blob: same bytes");
+      const [write] = migrate(run, path, bytes).writes;
+      assert.strictEqual(write.kind, "file");
+      assert.strictEqual(write.meta.path, "/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png");
+      assert.strictEqual(write.meta.id, "AKSZ57W2RFKHV1EHK007FQQ8TW");
+      assert.deepStrictEqual(write.object.bytes, bytes);
+    });
+
+    it("a tag, a bookmark and a feed re-derive their ids; the bookmark and the feed go private", () => {
+      const [tag] = migrate(run, ...vector("tag: a media target")).writes;
+      assert.match(tag.meta.path, /^\/pub\/social\/v1\/tags\/[0-9A-Z]{26}\.json$/);
+      assert.strictEqual(tag.object.uri, fileUriBuilder(owner, "AKSZ57W2RFKHV1EHK007FQQ8TW.png"));
+      const [bookmark] = migrate(run, ...vector("bookmark: the rewritten")).writes;
+      assert.ok(bookmark.meta.path.startsWith("/priv/social/v1/bookmarks/"), bookmark.meta.path);
+      const [feed] = migrate(run, ...vector("feed: private")).writes;
+      assert.ok(feed.meta.path.startsWith("/priv/social/v1/feeds/"), feed.meta.path);
+      assert.strictEqual(feed.meta.id, feedId(feed.object));
+    });
+
+    it("reports what a profile dropped and still writes it", () => {
+      const result = migrate(run, ...vector("profile: an image and a link"));
+      assert.deepStrictEqual(result.dropped, ["profile_image", "profile_link[0]"]);
+      assert.strictEqual(result.writes[0].object.image, null);
+      assert.deepStrictEqual(result.writes[0].object.links, [{ title: "Web", url: "https://web.example" }]);
+    });
+
+    it("a tombstone, an unknown kind and a bad object skip; nothing throws", () => {
+      assert.deepStrictEqual(migrate(run, ...vector("tombstone post")), { skip: "tombstone" });
+      assert.deepStrictEqual(migrate(run, ...vector("unknown post kind")), { skip: "unknown_post_kind" });
+      const follow = `pub/pubky.app/follows/${RIO}`;
+      assert.deepStrictEqual(migrate(run, follow, new TextEncoder().encode("not json")), { skip: "malformed" });
+      assert.deepStrictEqual(migrate(run, "pub/pubky.app/last_read", stored({})), { skip: "not_migrated" });
+      // Another owner's tree is not this run's to migrate
+      assert.deepStrictEqual(migrate(run, `pubky://${RIO}/pub/pubky.app/profile.json`, stored({ name: "Alice" })), { skip: "not_migrated" });
+    });
+
+    it("a handle from the other entry is refused before the wasm", async () => {
+      const cjs = require("./index.cjs");
+      await cjs.init();
+      const foreign = cjs.createMigration(owner);
+      assert.ok(foreign instanceof cjs.Migration && !(foreign instanceof Migration));
+      rejects(() => migrate(foreign, "pub/pubky.app/profile.json", stored({ name: "Alice" })), "Validation Error: migrate() argument 1 must be a Migration handle");
+      foreign.free();
+    });
+
+    it("a File that does not read skips, and its references stay as written", () => {
+      const spare = createMigration(owner);
+      assert.deepStrictEqual(migrate(spare, "pub/pubky.app/files/0033000000000", stored({ name: 1 })), { skip: "shape" });
+      const [write] = migrate(spare, ...vector("tag: a media target")).writes;
+      assert.strictEqual(write.object.uri, `pubky://${owner}/pub/pubky.app/files/0033000000000`);
+      spare.free();
+    });
+
+    it("a freed handle is refused, an owner that is not a pubky too", () => {
+      rejects(() => createMigration("nope"), /52 ASCII characters/);
+      const spent = createMigration(owner);
+      spent.free();
+      assert.throws(() => migrate(spent, "pub/pubky.app/profile.json", stored({ name: "Alice" })));
     });
   });
 
