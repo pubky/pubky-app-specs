@@ -105,7 +105,7 @@ describe("migration engine", () => {
       assert.strictEqual(await port.get(url("pub/a")), null);
       assert.strictEqual(await port.head(url("pub/a")), false);
       await assert.rejects(port.delete(url("pub/a")), (e) => e instanceof MigrationPortError && e.kind === "not_found" && e.status === 404);
-      await assert.rejects(port.head(url("priv/social/v1/_migrated.json")), { kind: "unsupported" });
+      await assert.rejects(port.head(url("priv/social/v1/_migrated.json")), { kind: "unsupported", status: 403 });
       await assert.rejects(port.putJson(url("priv/social/v1/x"), {}), { kind: "unsupported" });
       await port.putJson(url("pub/a"), { b: 1 });
       assert.deepStrictEqual(JSON.parse(decoder.decode(await port.get(url("pub/a")))), { b: 1 });

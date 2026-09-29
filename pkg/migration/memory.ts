@@ -5,7 +5,10 @@ import type { MigrationPort, PutOptions } from "./port.js";
 export type PortOp = "list" | "get" | "head" | "putJson" | "putBytes" | "delete";
 
 export interface MemoryPortOptions {
-  /** `false` plays a homeserver without the private root: every `/priv/` call throws `unsupported`. */
+  /**
+   * `false` plays a homeserver without the private root: every `/priv/` call throws `unsupported`
+   * with the 403 such a homeserver answers.
+   */
   privSupported?: boolean;
   /**
    * Runs before every call. Throw a `MigrationPortError` to fail the call, such as
@@ -82,7 +85,7 @@ class MemoryPort implements MigrationPort {
     this.calls.push({ op, url });
     await this.#intercept?.(op, url);
     if (!this.#privSupported && /^pubky:\/\/[^/]+\/priv\//.test(url)) {
-      throw new MigrationPortError("unsupported", "unknown root /priv/", 400);
+      throw new MigrationPortError("unsupported", "Writing to directories other than '/pub/' is forbidden", 403);
     }
   }
 }
