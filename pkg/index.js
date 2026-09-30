@@ -78,8 +78,12 @@ const KINDS = {
     (v) => Array.isArray(v) && Array.from(v).every((s) => typeof s === "string"),
     "an array of strings",
   ],
-  // A handle this glue made; one from the other entry holds a pointer into another instance
-  migration: [(v) => v instanceof glue.Migration, "a Migration handle"],
+  // A JS number the wasm reads as a size: a fraction or a negative would be converted silently
+  size: [(v) => Number.isSafeInteger(v) && v >= 0, "a non-negative integer"],
+  // A live handle this glue made: one from the other entry holds a pointer into another
+  // instance, and a freed or finished one holds none
+  hasher: [(v) => v instanceof glue.Hasher && v.__wbg_ptr !== 0, "a Hasher handle"],
+  migration: [(v) => v instanceof glue.Migration && v.__wbg_ptr !== 0, "a Migration handle"],
 };
 
 // A string argument, and each string of a `strings` slot, reaches the wasm as it is
@@ -139,6 +143,10 @@ const createFollow = wrap("createFollow", "string", "string");
 const createMute = wrap("createMute", "string", "string");
 // Media
 const createFile = wrap("createFile", "string", "bytes", "string", "string?");
+const Hasher = glue.Hasher;
+const hasherNew = wrap("hasherNew");
+const hasherUpdate = wrap("hasherUpdate", "hasher", "bytes");
+const hasherFinish = wrap("hasherFinish", "hasher");
 const mimeToExt = wrap("mimeToExt", "string");
 const essence = wrap("essence", "string");
 // Deletion, prefixes and URIs
@@ -157,6 +165,7 @@ const feedUriBuilder = wrap("feedUriBuilder", "string", "string");
 const Migration = glue.Migration;
 const createMigration = wrap("createMigration", "string");
 const migrate = wrap("migrate", "migration", "string", "bytes");
+const migrateBlob = wrap("migrateBlob", "migration", "string", "size", "string");
 
 export {
   init,
@@ -190,6 +199,10 @@ export {
   createFollow,
   createMute,
   createFile,
+  Hasher,
+  hasherNew,
+  hasherUpdate,
+  hasherFinish,
   mimeToExt,
   essence,
   deletionPaths,
@@ -206,4 +219,5 @@ export {
   Migration,
   createMigration,
   migrate,
+  migrateBlob,
 };

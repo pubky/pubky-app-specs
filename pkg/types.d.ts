@@ -15,6 +15,7 @@ import type {
   EditVersionOptions,
   FeedLifecycle,
   FeedPaths,
+  Hasher,
   Meta,
   Migration,
   PubkySocialCollectionLayout,
@@ -183,6 +184,15 @@ export type Dropped = "profile_image" | `profile_link[${number}]`;
 /** What one 0.x object became, or why it did not; `note` is present when the 0.x reader or the JSON parser refused the object, or the 0.x path parser its path, and says why. */
 export type MigrateResult = { writes: MigratedWrite[]; dropped: Dropped[] } | { skip: SkipReason; note?: string };
 
+/** A write of `migrateBlob`: only where the media goes, since the caller holds the bytes. */
+export interface MigratedBlobWrite {
+  kind: "file";
+  meta: Meta;
+}
+
+/** Where one 0.x blob goes, or why it does not. */
+export type MigrateBlobResult = { writes: MigratedBlobWrite[]; dropped: Dropped[] } | { skip: SkipReason };
+
 // ---- the entry ----
 
 /** Loads the wasm. Await it once before calling anything else; every other call throws until then. */
@@ -253,6 +263,14 @@ export function createFile(
   declaredType: string,
   root?: Root | null,
 ): Created<PubkySocialFile>;
+/**
+ * A media id computed a chunk at a time, so bytes too large to copy into the wasm whole never
+ * are: feed every chunk in order to `hasherUpdate`, then `hasherFinish` gives what
+ * `createFile` would give as `meta.id` and consumes the handle.
+ */
+export function hasherNew(): Hasher;
+export function hasherUpdate(hasher: Hasher, chunk: Uint8Array): void;
+export function hasherFinish(hasher: Hasher): string;
 export function mimeToExt(declared: string): string;
 export function essence(declared: string): string | null;
 
@@ -272,3 +290,14 @@ export function createMigration(owner: string): Migration;
  * before anything that references them.
  */
 export function migrate(migration: Migration, v0Path: string, bytes: Uint8Array): MigrateResult;
+/**
+ * A 0.x blob without its bytes: `size` is their length and `hash` is `hasherFinish` over
+ * them. The same rules as `migrate` on the bytes, and the same result but for the write,
+ * which is `{kind: "file", meta}`; the caller PUTs its own bytes at `meta.url`.
+ */
+export function migrateBlob(
+  migration: Migration,
+  v0Path: string,
+  size: number,
+  hash: string,
+): MigrateBlobResult;

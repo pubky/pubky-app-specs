@@ -1,6 +1,7 @@
 import assert from "assert";
 import { createRequire } from "node:module";
-import { init, readObject, listPrefix, transformRev, validationLimits } from "./index.js";
+import { randomBytes } from "node:crypto";
+import { init, readObject, listPrefix, transformRev, validationLimits, createFile, createMigration, migrate } from "./index.js";
 import * as migration from "./migration/index.js";
 import { corpus, legacyTree, bytesOf } from "./migration.fixture.js";
 
@@ -592,7 +593,8 @@ describe("migration engine", () => {
     it("a blob over the cap skips as oversize without reaching the wasm", async () => {
       const blob = url("pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78");
       const port = legacyPort();
-      const huge = { length: validationLimits.maxFileSizeBytes + 1 };
+      // Zero-filled, so the pages are only reserved; nothing reads them
+      const huge = new Uint8Array(validationLimits.maxFileSizeBytes + 1);
       const sized = delegate(port, {
         get: async (target) => (target === blob ? huge : port.get(target)),
       });
@@ -612,6 +614,24 @@ describe("migration engine", () => {
       assert.strictEqual(report.counts.invalid, expectedCounts().invalid + 1);
       assert.ok(report.skipped.invalid.includes(follow.slice(`pubky://${owner}/`.length)));
       assert.match(report.notes.at(-1).message, /^Validation Error: migrate\(\) argument 3 must be a Uint8Array/);
+    });
+
+    it("a blob GET that gives no Uint8Array counts invalid with a note, and the run goes on", async () => {
+      const blob = url("pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78");
+      for (const odd of ["orphan bytes", [1, 2]]) {
+        const port = legacyPort();
+        const report = await runMigration({
+          owner,
+          port: delegate(port, { get: async (target) => (target === blob ? odd : port.get(target)) }),
+        });
+        assert.strictEqual(report.status, "done");
+        assert.strictEqual(report.counts.invalid, (expectedCounts().invalid ?? 0) + 1);
+        assert.ok(report.skipped.invalid.includes("pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78"));
+        assert.deepStrictEqual(report.notes, [
+          { path: "pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78", message: "Validation Error: the port's GET gave no Uint8Array" },
+        ]);
+        assert.strictEqual(report.counts.written, expectedCounts().written - 1);
+      }
     });
 
     it("walks a destination and a 0.x tree over many LIST pages", async () => {
@@ -801,6 +821,57 @@ describe("migration engine", () => {
 
     it("refuses a mode it does not know", async () => {
       await assert.rejects(runMigration({ owner, port: legacyPort(), mode: "Dry" }), /mode must be "run" or "dry"/);
+    });
+
+    it("a blob never enters the wasm: a 20 MB one lands where migrate() puts it, and migrate() never sees a blob", async () => {
+      // The CommonJS engine, loaded fresh over an entry whose migrate records every path
+      const entry = require("./index.cjs");
+      const twins = () => Object.keys(require.cache).filter((f) => f.includes("/pkg/migration/"));
+      const real = entry.migrate;
+      const seen = [];
+      entry.migrate = (handle, path, bytes) => {
+        seen.push(path);
+        return real(handle, path, bytes);
+      };
+      twins().forEach((f) => delete require.cache[f]);
+      let cjs;
+      try {
+        cjs = require("./migration/index.cjs");
+      } finally {
+        entry.migrate = real;
+        twins().forEach((f) => delete require.cache[f]);
+      }
+
+      const big = new Uint8Array(randomBytes(20 * 1024 * 1024));
+      const hash = createFile(owner, big, "image/png").meta.id;
+      const blobPath = `pub/pubky.app/blobs/${hash}`;
+      const filePath = "pub/pubky.app/files/0033000000010";
+      const file = encoder.encode(
+        JSON.stringify({ name: "big.png", created_at: 1727740800000000, src: url(blobPath), content_type: "image/png", size: big.length }),
+      );
+      const port = new cjs.MemoryPort();
+      for (const [path, { input }] of rows) port.store.set(url(path), input);
+      port.store.set(url(filePath), file);
+      port.store.set(url(blobPath), big);
+      const report = await cjs.runMigration({ owner, port });
+
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(nonZero(report.counts), { ...expectedCounts(), written: expectedCounts().written + 1 });
+      assert.ok(seen.length > 0 && seen.every((p) => !p.includes("/pub/pubky.app/blobs/")), "migrate() saw a blob");
+      // Where the transform puts the bytes it is handed
+      const run = createMigration(owner);
+      migrate(run, filePath, file);
+      const [write] = migrate(run, blobPath, big).writes;
+      run.free();
+      assert.strictEqual(write.meta.url, url(`pub/social/v1/files/${hash}.png`));
+      assert.deepStrictEqual(port.store.get(write.meta.url), big);
+      // The vector tree around it migrates as it does alone
+      const alone = legacyPort();
+      await runMigration({ owner, port: alone });
+      const rest = tree(port);
+      [filePath, blobPath].forEach((p) => rest.delete(url(p)));
+      rest.delete(write.meta.url);
+      assert.deepStrictEqual(rest, tree(alone));
     });
 
     it("under require() from Node, the CommonJS twin runs the tree on its own entry to the same result", async () => {

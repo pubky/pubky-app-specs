@@ -30,6 +30,10 @@ const {
   createFollow,
   createMute,
   createFile,
+  Hasher,
+  hasherNew,
+  hasherUpdate,
+  hasherFinish,
   mimeToExt,
   essence,
   mimeToExtTable,
@@ -41,6 +45,7 @@ const {
   Migration,
   createMigration,
   migrate,
+  migrateBlob,
   deletionPaths,
   listPrefix,
   userUriBuilder,
@@ -784,6 +789,31 @@ describe("pubky-social-specs", () => {
       assert.ok(meta.url.endsWith(`${meta.id}.bin`));
     });
 
+    it("the hasher spells the id createFile gives, however the bytes are chunked", () => {
+      const bytes = new Uint8Array(Array.from({ length: 1000 }, (_, i) => (i * 7) % 256));
+      const { meta } = createFile(OTTO, bytes, "image/png");
+      for (const cuts of [[], [3], [3, 500], [1, 2, 999]]) {
+        const hasher = hasherNew();
+        assert.ok(hasher instanceof Hasher);
+        let at = 0;
+        for (const cut of [...cuts, bytes.length]) {
+          hasherUpdate(hasher, bytes.subarray(at, cut));
+          at = cut;
+        }
+        assert.strictEqual(hasherFinish(hasher), meta.id, String(cuts));
+      }
+      const pair = hasherNew();
+      hasherUpdate(pair, new Uint8Array([1]));
+      hasherUpdate(pair, new Uint8Array([2]));
+      assert.strictEqual(hasherFinish(pair), "PZBQ010FF079VVZPQG1RNFN6DR", "blake3 known answer for [1, 2]");
+      // Finishing consumes the handle
+      rejects(() => hasherUpdate(pair, new Uint8Array([3])), "Validation Error: hasherUpdate() argument 1 must be a Hasher handle");
+      rejects(() => hasherFinish(pair), "Validation Error: hasherFinish() argument 1 must be a Hasher handle");
+      rejects(() => hasherUpdate({}, bytes), "Validation Error: hasherUpdate() argument 1 must be a Hasher handle");
+      rejects(() => hasherUpdate(hasherNew(), [1, 2]), "Validation Error: hasherUpdate() argument 2 must be a Uint8Array");
+      rejects(() => hasherNew(1), "Validation Error: hasherNew() takes at most 0 arguments");
+    });
+
     it("rejects empty bytes and an unknown root", () => {
       rejects(() => createFile(OTTO, new Uint8Array([]), "image/png"), /cannot be zero/);
       rejects(() => createFile(OTTO, new Uint8Array([1]), "image/png", "pub"), /^Validation Error: unknown variant `pub`/);
@@ -1086,6 +1116,35 @@ describe("pubky-social-specs", () => {
       assert.deepStrictEqual(write.object.bytes, bytes);
     });
 
+    it("migrateBlob gives the blob's destination from its size and hash, the write without its bytes", () => {
+      const hashOf = (bytes) => {
+        const hasher = hasherNew();
+        hasherUpdate(hasher, bytes);
+        return hasherFinish(hasher);
+      };
+      let blobs = 0;
+      for (const { name, input } of corpus.vectors.filter((v) => v.kind === "blob")) {
+        const bytes = bytesOf(input);
+        const result = migrateBlob(run, input.path, bytes.length, hashOf(bytes));
+        const { writes } = migrate(run, input.path, bytes);
+        assert.deepStrictEqual(result, { writes: writes.map(({ kind, meta }) => ({ kind, meta })), dropped: [] }, name);
+        assert.ok(!("object" in result.writes[0]), name);
+        assert.deepStrictEqual(migrateBlob(run, `pubky://${owner}/${input.path}`, bytes.length, hashOf(bytes)), result, name);
+        blobs++;
+      }
+      assert.ok(blobs >= 3);
+
+      const [path, bytes] = vector("blob: same bytes");
+      const hash = hashOf(bytes);
+      assert.deepStrictEqual(migrateBlob(run, path, validationLimits.maxFileSizeBytes + 1, hash), { skip: "oversize" });
+      assert.deepStrictEqual(migrateBlob(run, path, bytes.length, hashOf(new Uint8Array([1]))), { skip: "invalid" });
+      assert.deepStrictEqual(migrateBlob(run, path, 0, hash), { skip: "invalid" });
+      assert.deepStrictEqual(migrateBlob(run, "pub/pubky.app/files/0033000000000", bytes.length, hash), { skip: "not_migrated" });
+      rejects(() => migrateBlob(run, path, 1.5, hash), "Validation Error: migrateBlob() argument 3 must be a non-negative integer");
+      rejects(() => migrateBlob(run, path, -1, hash), "Validation Error: migrateBlob() argument 3 must be a non-negative integer");
+      rejects(() => migrateBlob(run, path, `${bytes.length}`, hash), "Validation Error: migrateBlob() argument 3 must be a non-negative integer");
+    });
+
     it("a tag, a bookmark and a feed re-derive their ids; the bookmark and the feed go private", () => {
       const [tag] = migrate(run, ...vector("tag: a media target")).writes;
       assert.match(tag.meta.path, /^\/pub\/social\/v1\/tags\/[0-9A-Z]{26}\.json$/);
@@ -1143,7 +1202,8 @@ describe("pubky-social-specs", () => {
       rejects(() => createMigration("nope"), /52 ASCII characters/);
       const spent = createMigration(owner);
       spent.free();
-      assert.throws(() => migrate(spent, "pub/pubky.app/profile.json", stored({ name: "Alice" })));
+      rejects(() => migrate(spent, "pub/pubky.app/profile.json", stored({ name: "Alice" })), "Validation Error: migrate() argument 1 must be a Migration handle");
+      rejects(() => migrateBlob(spent, "pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW", 1, "x"), "Validation Error: migrateBlob() argument 1 must be a Migration handle");
     });
   });
 
