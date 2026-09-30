@@ -67,6 +67,11 @@ const MIN_TIMESTAMP_ID_MICROS: i64 = 1_727_740_800_000_000;
 pub(crate) fn hash_id_of(data: &str) -> String {
     let mut hasher = Hasher::new();
     hasher.update(data.as_bytes());
+    hash_id_from(&hasher)
+}
+
+/// The id body of whatever `hasher` has been fed, for data hashed in chunks.
+pub(crate) fn hash_id_from(hasher: &Hasher) -> String {
     let blake3_hash = hasher.finalize();
     let half_hash_length = blake3_hash.as_bytes().len() / 2;
     encode(
@@ -192,6 +197,17 @@ mod tests {
 
     struct Minter;
     impl TimestampId for Minter {}
+
+    #[test]
+    fn a_hash_fed_in_chunks_spells_the_id_of_the_whole() {
+        let data = "a media object hashed in uneven chunks";
+        for split in [0, 3, 7, data.len()] {
+            let mut hasher = Hasher::new();
+            hasher.update(&data.as_bytes()[..split]);
+            hasher.update(&data.as_bytes()[split..]);
+            assert_eq!(hash_id_from(&hasher), hash_id_of(data), "{split}");
+        }
+    }
 
     #[test]
     fn minted_ids_are_strictly_increasing_and_sort_bytewise_by_time() {

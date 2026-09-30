@@ -49,7 +49,7 @@ use crate::models::legacy_v0;
 use crate::traits::{HasIdPath, HasPath, HashId, Root, Validatable, PUB_CTX};
 use crate::{
     bookmark_filename, follow_uri_builder, post_uri_builder, resolve_deref, sanitize_tag_label,
-    user_uri_builder, PubkyId, PubkySocialAttachment, PubkySocialBookmark,
+    user_uri_builder, ParsedUri, PubkyId, PubkySocialAttachment, PubkySocialBookmark,
     PubkySocialCollectionItem, PubkySocialCollectionLayout, PubkySocialFeed, PubkySocialFeedConfig,
     PubkySocialFile, PubkySocialFollow, PubkySocialMute, PubkySocialObject, PubkySocialPost,
     PubkySocialPostKind, PubkySocialTag, PubkySocialUser, PubkySocialUserLink,
@@ -296,6 +296,39 @@ impl MigrationCtx {
     /// The extension a blob migrates under; `bin` for a blob no File names.
     fn ext_of(&self, hash: &str) -> &str {
         self.namer(hash).map_or("bin", |file| file.ext.as_str())
+    }
+
+    /// Where the v0 blob at `v0_path` migrates, from its size and the crate's id spelling of
+    /// its bytes' hash, so a caller holding a large blob never hands the bytes over: the same
+    /// rules [`transform_blob`] applies, and the owner-relative path its write would take. A
+    /// path the v0 parser does not call the owner's blob skips as `NotMigrated`.
+    pub fn blob_destination(&self, v0_path: &str, size: u64, hash: &str) -> Result<String, Skip> {
+        let legacy_v0::Resource::Blob(v0_hash) = classify(&self.owner, v0_path)? else {
+            return Err(Skip::NotMigrated);
+        };
+        let path = self.blob_path(&v0_hash, size)?;
+        // The media read-back without the bytes: they are not empty and hash to the id the
+        // reader takes from the path
+        let uri = [PROTOCOL, self.owner.as_ref(), &path].concat();
+        let named = ParsedUri::try_from(uri.as_str())
+            .ok()
+            .and_then(|parsed| parsed.resource.id());
+        if size == 0 || named.as_deref() != Some(hash) {
+            return Err(Skip::Invalid);
+        }
+        Ok(path.trim_start_matches('/').to_string())
+    }
+
+    /// A blob's destination by its v0 id: over the cap it skips before anything else, and the
+    /// extension is the namer's.
+    fn blob_path(&self, v0_hash: &str, size: u64) -> Result<String, Skip> {
+        if size > VALIDATION_LIMITS.max_file_size_bytes as u64 {
+            return Err(Skip::Oversize);
+        }
+        Ok(PubkySocialFile::create_path(&format!(
+            "{v0_hash}.{}",
+            self.ext_of(v0_hash)
+        )))
     }
 
     /// Rewrites one reference, with the name of the v0 File it went through, if any. The
@@ -733,13 +766,10 @@ fn transform_feed(feed: legacy_v0::V0Feed, ctx: &MigrationCtx) -> Result<Migrate
 /// A v0 blob `blobs/{hash}`: the same bytes at `files/{hash}.{ext}`, the extension from the
 /// run's table. The size is checked before the reader, which would hash all of it. A blob is
 /// bytes, not JSON, so whatever the reader refuses in it is `invalid`.
-fn transform_blob(hash: &str, bytes: &[u8], ctx: &MigrationCtx) -> Result<Migrated, Skipped> {
-    if bytes.len() > VALIDATION_LIMITS.max_file_size_bytes {
-        return Err(Skip::Oversize.into());
-    }
+pub fn transform_blob(hash: &str, bytes: &[u8], ctx: &MigrationCtx) -> Result<Migrated, Skipped> {
+    let path = ctx.blob_path(hash, bytes.len() as u64)?;
     <legacy_v0::V0Blob as legacy_v0::V0Validatable>::try_from(bytes, hash)
         .map_err(|message| Skipped::noted(Skip::Invalid, message))?;
-    let path = PubkySocialFile::create_path(&format!("{hash}.{}", ctx.ext_of(hash)));
     Ok(Migrated::one(ctx.read_back(&path, bytes.to_vec())?))
 }
 
@@ -1185,6 +1215,53 @@ mod tests {
         let skipped = transform(&path, &bytes[1..], &ctx()).unwrap_err();
         assert_eq!(skipped.skip, Skip::Invalid);
         assert!(skipped.note.unwrap().starts_with("Invalid ID"));
+    }
+
+    #[test]
+    fn a_blob_destination_follows_the_blob_rules_without_the_bytes() {
+        let mut ctx = ctx();
+        ctx.read_v0_file(TS, &file("image/png")).unwrap();
+        let blob = format!("pub/pubky.app/blobs/{HASH}");
+        let max = VALIDATION_LIMITS.max_file_size_bytes as u64;
+        assert_eq!(
+            ctx.blob_destination(&blob, 20, HASH),
+            Ok(format!("pub/social/v1/files/{HASH}.png"))
+        );
+        let url = format!("pubky://{OWNER}/{blob}");
+        assert_eq!(
+            ctx.blob_destination(&url, max, HASH),
+            Ok(format!("pub/social/v1/files/{HASH}.png"))
+        );
+        // Over the cap skips before the hash is looked at
+        assert_eq!(
+            ctx.blob_destination(&blob, max + 1, "other"),
+            Err(Skip::Oversize)
+        );
+        assert_eq!(
+            ctx.blob_destination(&blob, u64::MAX, HASH),
+            Err(Skip::Oversize)
+        );
+        // Bytes that do not hash to the blob's id, or no bytes at all, fail the read-back
+        let other = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
+        assert_eq!(ctx.blob_destination(&blob, 20, other), Err(Skip::Invalid));
+        assert_eq!(ctx.blob_destination(&blob, 0, HASH), Err(Skip::Invalid));
+        // An orphan no File names is bin
+        assert_eq!(
+            ctx.blob_destination(&format!("pub/pubky.app/blobs/{other}"), 20, other),
+            Ok(format!("pub/social/v1/files/{other}.bin"))
+        );
+        let theirs = "pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy";
+        for path in [
+            format!("pubky://{theirs}/{blob}"),
+            format!("pub/pubky.app/files/{TS}"),
+            "pub/pubky.app/blobs/".to_string(),
+        ] {
+            assert_eq!(
+                ctx.blob_destination(&path, 20, HASH),
+                Err(Skip::NotMigrated),
+                "{path}"
+            );
+        }
     }
 
     #[test]
