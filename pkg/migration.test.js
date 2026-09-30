@@ -1,0 +1,746 @@
+import assert from "assert";
+import { createRequire } from "node:module";
+import { init, readObject, listPrefix, transformRev, validationLimits } from "./index.js";
+import * as migration from "./migration/index.js";
+
+const { runMigration, MemoryPort, MigrationPortError, refusal, ENGINE_CAPS, MIGRATION_CAPS, BUCKETS } = migration;
+
+const require = createRequire(import.meta.url);
+const corpus = require("../vectors/semantic/v0_to_v1.json");
+const owner = corpus.owner;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+const url = (path) => `pubky://${owner}/${path}`;
+const bytesOf = (input) => encoder.encode("raw" in input ? input.raw : JSON.stringify(input.body));
+const FLAG = url("priv/social/v1/_migrated.json");
+const LEGACY = url("pub/pubky.app/");
+
+// The 0.x tree of the vectors: every File, then each vector input at its path. Several rows
+// share a path; the first one is the stored object.
+const rows = new Map();
+for (const file of corpus.files) {
+  rows.set(`pub/pubky.app/files/${file.tsid}`, { input: bytesOf(file), expected: { writes: [] } });
+}
+for (const { input, expected } of corpus.vectors) {
+  if (!rows.has(input.path)) rows.set(input.path, { input: bytesOf(input), expected });
+}
+rows.set("pub/pubky.app/settings.json", {
+  input: encoder.encode(JSON.stringify({ language: "en" })),
+  expected: { skip: "not_migrated" },
+});
+
+const legacyPort = (options) => {
+  const port = new MemoryPort(options);
+  for (const [path, { input }] of rows) port.store.set(url(path), input);
+  return port;
+};
+
+// What a run must report for the tree, from the vectors alone
+const expectedCounts = () => {
+  const counts = { written: 0 };
+  for (const [path, { expected }] of rows) {
+    if (expected.skip) counts[expected.skip] = (counts[expected.skip] ?? 0) + 1;
+    else if (!path.startsWith("pub/pubky.app/files/")) counts.written++;
+  }
+  return counts;
+};
+const nonZero = (counts) => Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0));
+
+const v1Urls = (port) =>
+  [...port.store.keys()].filter((u) => !u.startsWith(LEGACY) && u !== FLAG).sort();
+const tree = (port) => new Map([...port.store].filter(([u]) => u !== FLAG));
+const flagOf = (port) => JSON.parse(decoder.decode(port.store.get(FLAG)));
+const puts = (port) => port.calls.filter((c) => c.op === "putJson" || c.op === "putBytes");
+// Absent and null are the same member
+const withoutNulls = (value) =>
+  Array.isArray(value)
+    ? value.map(withoutNulls)
+    : value !== null && typeof value === "object" && !(value instanceof Uint8Array)
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, v]) => v !== null && v !== undefined)
+            .map(([k, v]) => [k, withoutNulls(v)]),
+        )
+      : value;
+const noSleep = () => Promise.resolve();
+// Another port over `port`'s store, with some calls answered its own way
+const delegate = (port, overrides) => ({
+  list: (prefix, cursor) => port.list(prefix, cursor),
+  get: (target) => port.get(target),
+  head: (target) => port.head(target),
+  putJson: (target, object, options) => port.putJson(target, object, options),
+  putBytes: (target, bytes, options) => port.putBytes(target, bytes, options),
+  delete: (target) => port.delete(target),
+  ...overrides,
+});
+
+describe("migration engine", () => {
+  before(async () => {
+    await init();
+  });
+
+  describe("MemoryPort", () => {
+    it("lists deep and ascending, a page of 1000 after the cursor, an empty prefix as nothing", async () => {
+      const port = new MemoryPort();
+      for (let i = 2499; i >= 0; i--) {
+        port.store.set(url(`pub/x/${String(i).padStart(4, "0")}`), new Uint8Array());
+      }
+      port.store.set(url("pub/y"), new Uint8Array());
+      const first = await port.list(url("pub/x/"));
+      assert.strictEqual(first.urls.length, 1000);
+      assert.strictEqual(first.urls[0], url("pub/x/0000"));
+      assert.strictEqual(first.next, url("pub/x/0999"));
+      const second = await port.list(url("pub/x/"), first.next);
+      assert.strictEqual(second.urls[0], url("pub/x/1000"));
+      const last = await port.list(url("pub/x/"), (await port.list(url("pub/x/"), second.next)).urls[0]);
+      assert.strictEqual(last.urls.length, 499);
+      assert.strictEqual(last.next, undefined);
+      assert.deepStrictEqual(await port.list(""), { urls: [] });
+      assert.deepStrictEqual(await port.list(url("pub/z/")), { urls: [] });
+    });
+
+    it("gets null for a missing object, throws not_found deleting one, unsupported under /priv/ when off", async () => {
+      const port = new MemoryPort({ privSupported: false });
+      assert.strictEqual(await port.get(url("pub/a")), null);
+      assert.strictEqual(await port.head(url("pub/a")), false);
+      await assert.rejects(port.delete(url("pub/a")), (e) => e instanceof MigrationPortError && e.kind === "not_found" && e.status === 404);
+      await assert.rejects(port.head(url("priv/social/v1/_migrated.json")), { kind: "unsupported" });
+      await assert.rejects(port.putJson(url("priv/social/v1/x"), {}), { kind: "unsupported" });
+      await port.putJson(url("pub/a"), { b: 1 });
+      assert.deepStrictEqual(JSON.parse(decoder.decode(await port.get(url("pub/a")))), { b: 1 });
+    });
+  });
+
+  describe("runMigration", () => {
+    it("migrates the tree: every write where the vectors put it, reading back, the 0.x tree untouched", async () => {
+      const port = legacyPort();
+      const events = [];
+      const report = await runMigration({ owner, port, onProgress: (e) => events.push(e) });
+
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.mode, "run");
+      assert.strictEqual(report.total, rows.size);
+      assert.strictEqual(report.done, rows.size);
+      assert.deepStrictEqual(nonZero(report.counts), expectedCounts());
+      const dropped = Object.fromEntries(
+        [...rows].filter(([, { expected }]) => expected.dropped?.length).map(([path, { expected }]) => [path, expected.dropped]),
+      );
+      assert.deepStrictEqual(report.droppedValues, dropped);
+      assert.strictEqual(report.dropped, Object.values(dropped).flat().length);
+
+      const expectedWrites = new Map();
+      for (const { expected } of rows.values()) {
+        for (const write of expected.writes ?? []) expectedWrites.set(url(write.path), write);
+      }
+      assert.deepStrictEqual(v1Urls(port), [...expectedWrites.keys()].sort());
+      for (const [written, expected] of expectedWrites) {
+        const { kind, object } = readObject(written, port.store.get(written));
+        if (kind === "file") {
+          assert.deepStrictEqual(object.bytes, encoder.encode(expected.raw), written);
+          continue;
+        }
+        // The vectors spell an article or collection envelope parsed
+        const read = typeof expected.body.content === "object" ? { ...object, content: JSON.parse(object.content) } : object;
+        assert.deepStrictEqual(withoutNulls(read), withoutNulls(expected.body), written);
+      }
+      for (const [path, { input }] of rows) assert.deepStrictEqual(port.store.get(url(path)), input, path);
+
+      const flag = flagOf(port);
+      assert.strictEqual(flag.transform_rev, transformRev);
+      assert.ok(Math.abs(flag.migrated_at - Date.now() * 1000) < 60e6, "microseconds, now");
+      assert.deepStrictEqual(flag.skipped, report.skipped);
+      assert.strictEqual(FLAG, `${listPrefix(owner, "private")}_migrated.json`);
+
+      const phases = [...new Set(events.map((e) => e.phase))];
+      assert.deepStrictEqual(phases, ["probe", "listing", "migrating", "flag", "done"]);
+      assert.deepStrictEqual(
+        [...new Set(events.filter((e) => e.kind).map((e) => e.kind))],
+        BUCKETS.filter((b) => b !== "profile" || rows.has("pub/pubky.app/profile.json")),
+      );
+      assert.strictEqual(events.at(-1).done, events.at(-1).total);
+    });
+
+    it("counts settings.json and last_read as not_migrated, without reading them", async () => {
+      const port = legacyPort();
+      const report = await runMigration({ owner, port });
+      assert.deepStrictEqual(report.skipped.not_migrated.sort(), ["pub/pubky.app/last_read", "pub/pubky.app/settings.json"]);
+      assert.ok(!port.calls.some((c) => c.op === "get" && c.url === url("pub/pubky.app/settings.json")));
+    });
+
+    it("a rescan writes nothing but the flag, and the flag short-circuits the next run", async () => {
+      const port = legacyPort();
+      const first = await runMigration({ owner, port });
+      const migrated = new Map(tree(port));
+
+      port.calls.length = 0;
+      const second = await runMigration({ owner, port, rescan: true });
+      assert.strictEqual(second.status, "done");
+      assert.deepStrictEqual(puts(port).map((c) => c.url), [FLAG]);
+      assert.ok(!port.calls.some((c) => c.op === "delete"));
+      assert.strictEqual(second.counts.written, 0);
+      assert.strictEqual(second.counts.already_present, first.counts.written);
+      assert.deepStrictEqual(second.skipped, first.skipped);
+      assert.deepStrictEqual(tree(port), migrated);
+
+      port.calls.length = 0;
+      const third = await runMigration({ owner, port });
+      assert.strictEqual(third.status, "already_migrated");
+      assert.deepStrictEqual(third.skipped, first.skipped);
+      assert.deepStrictEqual(port.calls.map((c) => c.op), ["head", "get"]);
+    });
+
+    it("a flag from an older transform revision is walked again", async () => {
+      const port = legacyPort();
+      await runMigration({ owner, port });
+      await port.putJson(FLAG, { migrated_at: 1, transform_rev: transformRev - 1, skipped: {} });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(flagOf(port).transform_rev, transformRev);
+    });
+
+    it("an interrupted run resumes to the same tree as one that ran through", async () => {
+      const whole = legacyPort();
+      await runMigration({ owner, port: whole });
+
+      const port = legacyPort();
+      const controller = new AbortController();
+      const stopped = await runMigration({
+        owner,
+        port,
+        signal: controller.signal,
+        onProgress: (e) => e.phase === "migrating" && e.done >= 12 && controller.abort(),
+      });
+      assert.strictEqual(stopped.status, "aborted");
+      assert.strictEqual(stopped.error.code, "ABORTED");
+      assert.ok(stopped.done < stopped.total);
+      assert.ok(!port.store.has(FLAG), "an interrupted run writes no flag");
+
+      const resumed = await runMigration({ owner, port });
+      assert.strictEqual(resumed.status, "done");
+      assert.deepStrictEqual(tree(port), tree(whole));
+      const { migrated_at: _a, ...flag } = flagOf(port);
+      const { migrated_at: _b, ...wholeFlag } = flagOf(whole);
+      assert.deepStrictEqual(flag, wholeFlag);
+    });
+
+    it("a 1.x edit made between runs survives a rescan", async () => {
+      const port = legacyPort();
+      await runMigration({ owner, port });
+      const profile = url("pub/social/v1/profile.json");
+      const tag = v1Urls(port).find((u) => u.includes("/pub/social/v1/tags/"));
+      const edited = new Map([
+        [profile, encoder.encode(JSON.stringify({ ...readObject(profile, port.store.get(profile)).object, name: "Edited" }))],
+        [tag, encoder.encode(JSON.stringify({ ...readObject(tag, port.store.get(tag)).object, ext: { kept: true } }))],
+      ]);
+      for (const [u, bytes] of edited) port.store.set(u, bytes);
+
+      await runMigration({ owner, port, rescan: true });
+      for (const [u, bytes] of edited) assert.deepStrictEqual(port.store.get(u), bytes, u);
+    });
+
+    it("a 0.x object deleted during its copy takes the copy with it", async () => {
+      const follow = url(`pub/pubky.app/follows/${corpus.vectors.find((v) => v.name.startsWith("follow:")).input.path.split("/").pop()}`);
+      const post = url("pub/pubky.app/posts/0034A0X7NJ52E");
+      let port;
+      port = legacyPort({
+        intercept: (op, target) => {
+          // One is deleted between its GET and the re-check, one before its GET
+          if ((op === "head" && target === follow) || (op === "get" && target === post)) port.store.delete(target);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.deepStrictEqual(report.skipped.deleted_mid_run.sort(), [post, follow].map((u) => u.slice(`pubky://${owner}/`.length)).sort());
+      assert.ok(!v1Urls(port).some((u) => u.includes("/follows/") || u.includes("0034A0X7NJ52E")));
+      assert.ok(port.calls.some((c) => c.op === "delete" && c.url.includes("/pub/social/v1/follows/")));
+      assert.ok(!port.calls.some((c) => c.op === "delete" && c.url.startsWith(LEGACY)), "the run deletes no 0.x object");
+    });
+
+    it("a post present only under priv/ is not copied public", async () => {
+      const port = legacyPort();
+      const draft = url("priv/social/v1/posts/0034A0X7NJ52C/0034A0X7NJ52G.json");
+      const bytes = encoder.encode(JSON.stringify({ content: "draft", kind: "note", attachments: [] }));
+      port.store.set(draft, bytes);
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.counts.already_present, 1);
+      assert.ok(!v1Urls(port).some((u) => u.includes("/pub/social/v1/posts/0034A0X7NJ52C/")));
+      assert.deepStrictEqual(port.store.get(draft), bytes);
+    });
+
+    it("a homeserver without /priv/ aborts with the message, before listing", async () => {
+      const port = legacyPort({ privSupported: false });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "PRIV_UNSUPPORTED");
+      assert.match(report.error.message, /private storage \(\/priv\/\)/);
+      assert.deepStrictEqual(port.calls.map((c) => c.op), ["head"]);
+    });
+
+    it("a flag probe the homeserver fails is IO_ERROR, not a missing /priv/", async () => {
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "head" && target === FLAG) throw refusal(500, "Internal Server Error");
+        },
+      });
+      const report = await runMigration({ owner, port, sleep: noSleep });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "IO_ERROR");
+      assert.match(report.error.message, /^probing _migrated\.json: Internal Server Error/);
+    });
+
+    it("dry mode reads and counts as a run does, and writes, re-checks and deletes nothing", async () => {
+      const real = await runMigration({ owner, port: legacyPort() });
+      const port = legacyPort();
+      const report = await runMigration({ owner, port, mode: "dry" });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.mode, "dry");
+      assert.deepStrictEqual(report.counts, real.counts);
+      assert.deepStrictEqual(report.skipped, real.skipped);
+      assert.deepStrictEqual(port.calls.filter((c) => !["list", "get"].includes(c.op)), [{ op: "head", url: FLAG }]);
+      assert.deepStrictEqual(v1Urls(port), []);
+      assert.ok(!port.store.has(FLAG));
+    });
+
+    it("a full homeserver pauses with the space the media still needs, and a later run finishes", async () => {
+      let full = true;
+      const port = legacyPort({
+        intercept: (op) => {
+          if (full && op === "putBytes") throw new MigrationPortError("quota", "Insufficient Storage", 507);
+        },
+      });
+      const paused = await runMigration({ owner, port });
+      assert.strictEqual(paused.status, "paused");
+      assert.strictEqual(paused.error.message, "The homeserver is out of space for this account.");
+      assert.strictEqual(paused.error.code, "QUOTA");
+      // Two blobs of 20 and 19 bytes by their File objects, and an orphan no File sizes
+      assert.strictEqual(paused.error.needBytes, 39);
+      assert.ok(!port.store.has(FLAG));
+
+      full = false;
+      const resumed = await runMigration({ owner, port });
+      assert.strictEqual(resumed.status, "done");
+      const whole = legacyPort();
+      await runMigration({ owner, port: whole });
+      assert.deepStrictEqual(tree(port), tree(whole));
+    });
+
+    it("needBytes counts a blob that failed to copy, and is left out when no blob is pending", async () => {
+      const blob = url("pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW");
+      const full = (op) => {
+        if (op === "putJson") throw new MigrationPortError("quota", undefined, 507);
+      };
+      const failing = legacyPort({
+        intercept: (op, target) => {
+          if (op === "get" && target === blob) throw new TypeError("fetch failed");
+          full(op);
+        },
+      });
+      const paused = await runMigration({ owner, port: failing, sleep: noSleep });
+      assert.strictEqual(paused.status, "paused");
+      assert.strictEqual(paused.error.needBytes, 20);
+
+      const done = await runMigration({ owner, port: legacyPort({ intercept: full }) });
+      assert.strictEqual(done.status, "paused");
+      assert.ok(!("needBytes" in done.error));
+    });
+
+    it("a rate limit backs off from one second, doubling to a minute, and goes on", async () => {
+      const profile = url("pub/social/v1/profile.json");
+      let limited = 8;
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "putJson" && target === profile && limited-- > 0) throw new MigrationPortError("rate_limited", undefined, 429);
+        },
+      });
+      const sleeps = [];
+      const signal = new AbortController().signal;
+      const report = await runMigration({
+        owner,
+        port,
+        signal,
+        sleep: async (ms, given) => {
+          assert.strictEqual(given, signal, "a custom sleep gets the signal, to cut the wait short");
+          sleeps.push(ms);
+        },
+      });
+      assert.deepStrictEqual(sleeps, [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000]);
+      assert.strictEqual(report.status, "done");
+      assert.ok(port.store.has(profile));
+    });
+
+    it("a network failure is retried three times, then counts io_error: no flag, and the next run retries it", async () => {
+      const follow = [...rows.keys()].find((p) => p.includes("/follows/"));
+      let down = true;
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (down && op === "get" && target === url(follow)) throw new TypeError("fetch failed");
+        },
+      });
+      const sleeps = [];
+      const report = await runMigration({ owner, port, sleep: async (ms) => void sleeps.push(ms) });
+      assert.strictEqual(report.status, "incomplete");
+      assert.strictEqual(report.done, report.total);
+      assert.deepStrictEqual(sleeps, [1000, 2000, 4000]);
+      assert.strictEqual(port.calls.filter((c) => c.op === "get" && c.url === url(follow)).length, 4);
+      assert.deepStrictEqual(report.skipped.io_error, [follow]);
+      assert.deepStrictEqual(report.notes, [{ path: follow, message: "fetch failed" }]);
+      assert.ok(!port.store.has(FLAG), "an incomplete walk is not recorded");
+
+      down = false;
+      port.calls.length = 0;
+      const next = await runMigration({ owner, port });
+      assert.strictEqual(next.status, "done");
+      assert.strictEqual(next.counts.written, 1);
+      assert.ok(port.calls.some((c) => c.op === "get" && c.url === url(follow)));
+      assert.ok(port.store.has(FLAG));
+    });
+
+    it("a File object that cannot be read stops the run before any blob is copied", async () => {
+      const file = url("pub/pubky.app/files/0033000000000");
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "get" && target === file) throw new MigrationPortError("rejected", "Forbidden", 403);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "IO_ERROR");
+      assert.ok(!port.calls.some((c) => c.op === "putBytes" || c.op === "putJson"));
+      assert.ok(!port.store.has(FLAG));
+    });
+
+    it("a File object that does not parse is only its own skip", async () => {
+      const port = legacyPort();
+      port.store.set(url("pub/pubky.app/files/0033000000008"), encoder.encode("{"));
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(report.skipped.malformed, ["pub/pubky.app/files/0033000000008"]);
+    });
+
+    it("a GET that answers not_found counts deleted_mid_run", async () => {
+      const follow = [...rows.keys()].find((p) => p.includes("/follows/"));
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "get" && target === url(follow)) throw new MigrationPortError("not_found", undefined, 404);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(report.skipped.deleted_mid_run, [follow]);
+    });
+
+    it("a re-check that fails deletes the copy, counts io_error, and the next run copies again", async () => {
+      const follow = [...rows.keys()].find((p) => p.includes("/follows/"));
+      let down = true;
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (down && op === "head" && target === url(follow)) throw new TypeError("fetch failed");
+        },
+      });
+      const report = await runMigration({ owner, port, sleep: noSleep });
+      assert.strictEqual(report.status, "incomplete");
+      assert.deepStrictEqual(report.skipped.io_error, [follow]);
+      assert.ok(!v1Urls(port).some((u) => u.includes("/follows/")), "the unchecked copy is gone");
+      down = false;
+      assert.strictEqual((await runMigration({ owner, port })).status, "done");
+      assert.ok(v1Urls(port).some((u) => u.includes("/follows/")));
+    });
+
+    it("a DELETE that fails in the race guard counts io_error and leaves no flag", async () => {
+      const follow = [...rows.keys()].find((p) => p.includes("/follows/"));
+      let port;
+      port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "head" && target === url(follow)) port.store.delete(target);
+          if (op === "delete") throw new TypeError("fetch failed");
+        },
+      });
+      const report = await runMigration({ owner, port, sleep: noSleep });
+      assert.strictEqual(report.status, "incomplete");
+      assert.deepStrictEqual(report.skipped.io_error, [follow]);
+      assert.match(report.notes[0].message, /^deleting /);
+      assert.ok(!port.store.has(FLAG));
+    });
+
+    it("a destination written between the LIST and the PUT is not clobbered, nor deleted by the race guard", async () => {
+      const profile = url("pub/social/v1/profile.json");
+      const theirs = encoder.encode(JSON.stringify({ name: "Written elsewhere" }));
+      let port;
+      port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "putJson" && target === profile) port.store.set(profile, theirs);
+          // The source goes too: what the run did not write is still not its to delete
+          if (op === "head" && target === url("pub/pubky.app/profile.json")) port.store.delete(target);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(port.store.get(profile), theirs);
+      assert.ok(report.counts.already_present >= 1);
+      assert.ok(!(report.skipped.deleted_mid_run ?? []).includes("pub/pubky.app/profile.json"));
+      assert.ok(!port.calls.some((c) => c.op === "delete" && c.url === profile));
+    });
+
+    it("two 0.x tags folding to one 1.x tag: when the first copy is undone, the second lands", async () => {
+      const [, body] = [...rows].find(([p]) => p.startsWith("pub/pubky.app/tags/"));
+      const tag = JSON.parse(decoder.decode(body.input));
+      const first = url("pub/pubky.app/tags/0034A0X7NJ540");
+      const second = url("pub/pubky.app/tags/0034A0X7NJ542");
+      let port;
+      port = new MemoryPort({
+        intercept: (op, target) => {
+          if (op === "head" && target === first) port.store.delete(first);
+        },
+      });
+      port.store.set(first, encoder.encode(JSON.stringify({ ...tag, label: "Rust" })));
+      port.store.set(second, encoder.encode(JSON.stringify({ ...tag, label: "rust" })));
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.counts.deleted_mid_run, 1);
+      assert.strictEqual(report.counts.written, 1);
+      assert.strictEqual(v1Urls(port).filter((u) => u.includes("/pub/social/v1/tags/")).length, 1);
+    });
+
+    it("media present only under priv/ still gets its public copy", async () => {
+      const port = legacyPort();
+      const blob = [...rows].find(([p]) => p.endsWith("AKSZ57W2RFKHV1EHK007FQQ8TW"))[1].input;
+      port.store.set(url("priv/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png"), blob);
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(port.store.get(url("pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png")), blob);
+    });
+
+    it("media under another extension is not the copy the references name", async () => {
+      const port = legacyPort();
+      const blob = rows.get("pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW").input;
+      const jpg = url("pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.jpg");
+      const other = encoder.encode("jpeg-bytes");
+      port.store.set(jpg, other);
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(port.store.get(jpg), other);
+      const post = readObject(url("pub/social/v1/posts/0034A0X7NJ52J/0034A0X7NJ52J.json"), port.store.get(url("pub/social/v1/posts/0034A0X7NJ52J/0034A0X7NJ52J.json"))).object;
+      const png = post.attachments[0].uri;
+      assert.strictEqual(png, url("pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png"));
+      assert.deepStrictEqual(port.store.get(png), blob);
+    });
+
+    it("media present at its exact URL counts already_present and is not written", async () => {
+      const port = legacyPort();
+      const png = url("pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png");
+      port.store.set(png, rows.get("pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW").input);
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.counts.already_present, 1);
+      assert.strictEqual(report.counts.written, expectedCounts().written - 1);
+      assert.ok(!puts(port).some((c) => c.url === png));
+    });
+
+    it("a blob over the cap skips as oversize without reaching the wasm", async () => {
+      const blob = url("pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78");
+      const port = legacyPort();
+      const huge = { length: validationLimits.maxFileSizeBytes + 1 };
+      const sized = delegate(port, {
+        get: async (target) => (target === blob ? huge : port.get(target)),
+      });
+      const report = await runMigration({ owner, port: sized });
+      assert.deepStrictEqual(report.skipped.oversize, ["pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78"]);
+      assert.ok(!v1Urls(port).some((u) => u.includes("VJAHM32NETJ12EWAAM11BQVX78")));
+    });
+
+    it("bytes the package refuses count invalid with the message", async () => {
+      const follow = url([...rows.keys()].find((p) => p.includes("/follows/")));
+      const port = legacyPort();
+      const odd = delegate(port, {
+        get: async (target) => (target === follow ? [1, 2] : port.get(target)),
+      });
+      const report = await runMigration({ owner, port: odd });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.counts.invalid, expectedCounts().invalid + 1);
+      assert.ok(report.skipped.invalid.includes(follow.slice(`pubky://${owner}/`.length)));
+      assert.match(report.notes.at(-1).message, /^Validation Error: migrate\(\) argument 3 must be a Uint8Array/);
+    });
+
+    it("walks a destination and a 0.x tree over many LIST pages", async () => {
+      const whole = legacyPort();
+      await runMigration({ owner, port: whole });
+      const port = legacyPort({ pageSize: 2 });
+      await runMigration({ owner, port });
+      assert.deepStrictEqual(tree(port), tree(whole));
+      assert.ok(port.calls.filter((c) => c.op === "list").length > rows.size / 2);
+      const again = await runMigration({ owner, port, rescan: true });
+      assert.strictEqual(again.counts.written, 0);
+    });
+
+    it("stops when a LIST answers URLs spelled another way", async () => {
+      const port = legacyPort();
+      const relative = delegate(port, {
+        list: async (prefix, cursor) => {
+          const page = await port.list(prefix, cursor);
+          return { ...page, urls: page.urls.map((u) => u.slice(`pubky://${owner}`.length)) };
+        },
+      });
+      const report = await runMigration({ owner, port: relative });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "IO_ERROR");
+      assert.match(report.error.message, /returned \/pub\/pubky\.app\//);
+    });
+
+    it("keeps at most two objects in flight", async () => {
+      let active = 0;
+      let most = 0;
+      const port = legacyPort({
+        intercept: async (op) => {
+          if (op === "list") return;
+          active++;
+          most = Math.max(most, active);
+          await new Promise((r) => setTimeout(r, 1));
+          active--;
+        },
+      });
+      await runMigration({ owner, port });
+      assert.strictEqual(most, 2);
+    });
+
+    it("two unlocked runs at once converge on the tree one run writes", async () => {
+      const whole = legacyPort();
+      await runMigration({ owner, port: whole });
+      const port = legacyPort();
+      const [a, b] = await Promise.all([runMigration({ owner, port }), runMigration({ owner, port })]);
+      assert.strictEqual(a.status, "done");
+      assert.strictEqual(b.status, "done");
+      assert.deepStrictEqual(tree(port), tree(whole));
+      assert.strictEqual(a.counts.written + b.counts.written, (await runMigration({ owner, port: legacyPort() })).counts.written);
+    });
+
+    it("a refused PUT counts put_rejected with the refusal, and the run goes on", async () => {
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (op === "putJson" && target.includes("/pub/social/v1/follows/")) throw refusal(400);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.strictEqual(report.counts.put_rejected, 1);
+      assert.match(report.notes[0].message, /rejected \(400\)/);
+      assert.ok(!v1Urls(port).some((u) => u.includes("/follows/")));
+    });
+
+    it("a 500 on a PUT is not a refusal: the run ends incomplete and the next one, without rescan, writes it", async () => {
+      const profile = url("pub/social/v1/profile.json");
+      let failing = true;
+      const port = legacyPort({
+        intercept: (op, target) => {
+          if (failing && op === "putJson" && target === profile) throw refusal(500, "Internal Server Error");
+        },
+      });
+      const report = await runMigration({ owner, port, sleep: noSleep });
+      assert.strictEqual(report.status, "incomplete");
+      assert.strictEqual(report.counts.put_rejected, 0);
+      assert.deepStrictEqual(report.skipped.io_error, ["pub/pubky.app/profile.json"]);
+      assert.ok(!port.store.has(profile));
+      assert.ok(!port.store.has(FLAG), "no completion marker over a missing object");
+
+      failing = false;
+      const next = await runMigration({ owner, port });
+      assert.strictEqual(next.status, "done");
+      assert.strictEqual(next.counts.written, 1);
+      assert.ok(port.store.has(profile));
+      assert.ok(port.store.has(FLAG));
+    });
+
+    it("refusal maps a homeserver status to the kind the run branches on", () => {
+      const kinds = [
+        [507, "quota"],
+        [429, "rate_limited"],
+        [401, "unauthorized"],
+        [403, "unauthorized"],
+        [404, "not_found"],
+        [412, "exists"],
+        [500, "network"],
+        [502, "network"],
+        [503, "network"],
+        [400, "rejected"],
+        [413, "rejected"],
+      ];
+      for (const [status, kind] of kinds) {
+        const error = refusal(status);
+        assert.ok(error instanceof MigrationPortError);
+        assert.deepStrictEqual([error.kind, error.status], [kind, status], String(status));
+      }
+    });
+
+    it("a lost session aborts", async () => {
+      const port = legacyPort({
+        intercept: (op) => {
+          if (op === "putBytes") throw new MigrationPortError("unauthorized", undefined, 401);
+        },
+      });
+      const report = await runMigration({ owner, port });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "SESSION_EXPIRED");
+      assert.ok(!port.store.has(FLAG));
+    });
+
+    it("caps that miss a scope the engine writes abort before any request; the two 1.x roots are enough", async () => {
+      assert.strictEqual(ENGINE_CAPS, "/pub/social/v1/:rw,/priv/social/v1/:rw");
+      assert.strictEqual(MIGRATION_CAPS, "/pub/social/v1/:rw,/priv/social/v1/:rw,/priv/app.pubky/v1/:rw,/pub/pubky.app/:rw");
+      // A 0.x-only session on a homeserver without /priv/ hears about its caps, not the server
+      const port = legacyPort({ privSupported: false });
+      const report = await runMigration({ owner, port, caps: "/pub/pubky.app/:rw,/pub/social/v1/:rw" });
+      assert.strictEqual(report.status, "aborted");
+      assert.strictEqual(report.error.code, "CAPS_MISSING");
+      assert.strictEqual(report.error.caps, ENGINE_CAPS);
+      assert.deepStrictEqual(port.calls, []);
+      assert.strictEqual((await runMigration({ owner, port: legacyPort(), caps: ["/pub/social/v1/:rw", "/priv/social/v1/:rw"] })).status, "done");
+      // Read-only scopes do not cover a write
+      assert.strictEqual((await runMigration({ owner, port, caps: MIGRATION_CAPS.replaceAll(":rw", ":r") })).error.code, "CAPS_MISSING");
+
+      assert.strictEqual((await runMigration({ owner, port: legacyPort(), caps: ENGINE_CAPS })).status, "done");
+      assert.strictEqual((await runMigration({ owner, port: legacyPort(), caps: MIGRATION_CAPS })).status, "done");
+      assert.strictEqual((await runMigration({ owner, port: legacyPort(), caps: "/:rw" })).status, "done");
+    });
+
+    it("runs under the lock it is given, and refuses when another holder has it", async () => {
+      const names = [];
+      const held = await runMigration({
+        owner,
+        port: legacyPort(),
+        lock: (name, fn) => {
+          names.push(name);
+          return fn(null);
+        },
+      });
+      assert.strictEqual(held.status, "aborted");
+      assert.strictEqual(held.error.code, "ALREADY_RUNNING");
+      const free = await runMigration({ owner, port: legacyPort(), lock: (_name, fn) => fn({ name: "lock" }) });
+      assert.strictEqual(free.status, "done");
+      assert.deepStrictEqual(names, [`pubky-social-specs:migration:${owner}`]);
+    });
+
+    it("refuses a mode it does not know", async () => {
+      await assert.rejects(runMigration({ owner, port: legacyPort(), mode: "Dry" }), /mode must be "run" or "dry"/);
+    });
+
+    it("under require() from Node, the CommonJS twin runs the tree on its own entry to the same result", async () => {
+      const cjs = require("./migration/index.cjs");
+      assert.deepStrictEqual(Object.keys(cjs).sort(), Object.keys(migration).sort());
+      const port = new cjs.MemoryPort();
+      for (const [path, { input }] of rows) port.store.set(url(path), input);
+      const report = await cjs.runMigration({ owner, port });
+      assert.strictEqual(report.status, "done");
+      assert.deepStrictEqual(nonZero(report.counts), expectedCounts());
+      const esm = legacyPort();
+      await runMigration({ owner, port: esm });
+      assert.deepStrictEqual(tree(port), tree(esm));
+      // An error from the other build's class still reads as its kind
+      const quota = new MemoryPort({
+        intercept: (op) => {
+          if (op === "putBytes") throw new cjs.MigrationPortError("quota", undefined, 507);
+        },
+      });
+      for (const [path, { input }] of rows) quota.store.set(url(path), input);
+      assert.strictEqual((await runMigration({ owner, port: quota })).error.code, "QUOTA");
+    });
+  });
+});

@@ -13,7 +13,9 @@ fn main() {
     // A failed step must fail the build, or a stale glue from an earlier run ships
     check("wasm-pack", build_wasm("nodejs"));
     write_data_assets().unwrap();
-    check("patch.mjs", patch());
+    check("patch.mjs", patch(None));
+    check("tsc", compile_migration());
+    check("patch.mjs migration", patch(Some("migration")));
     println!("📦 Pubky-social-specs JS binding package built successfully!");
 }
 
@@ -60,20 +62,63 @@ fn build_wasm(target: &str) -> io::Result<ExitStatus> {
     Ok(output.status)
 }
 
-fn patch() -> io::Result<ExitStatus> {
+fn patch(mode: Option<&str>) -> io::Result<ExitStatus> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 
-    println!(
-        "🩹 Lazy-loading glue and the CommonJS entry from {manifest_dir}/src/bin/patch.mjs ..."
-    );
+    match mode {
+        None => println!(
+            "🩹 Lazy-loading glue and the CommonJS entry from {manifest_dir}/src/bin/patch.mjs ..."
+        ),
+        Some(mode) => println!("🩹 CommonJS twins of {mode}/ ..."),
+    }
 
     let output = Command::new("node")
-        .args([format!("{manifest_dir}/src/bin/patch.mjs")])
+        .arg(format!("{manifest_dir}/src/bin/patch.mjs"))
+        .args(mode)
         .output()?;
 
     if !output.status.success() {
         eprintln!(
             "patch.mjs failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    Ok(output.status)
+}
+
+/// The migration engine is TypeScript; tsc emits its ES modules and declarations next to the
+/// sources. It reads the entry's declarations, so it runs after the glue is patched.
+fn compile_migration() -> io::Result<ExitStatus> {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+
+    println!("🧩 Compiling the migration engine with tsc ...");
+
+    // A module renamed or removed since the last build would otherwise ship stale
+    let migration = Path::new(&manifest_dir).join("pkg/migration");
+    for entry in fs::read_dir(&migration)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let emitted = [".js", ".cjs", ".d.ts"]
+            .iter()
+            .any(|ext| name.ends_with(ext));
+        if emitted && name != "host.d.ts" {
+            fs::remove_file(&path)?;
+        }
+    }
+
+    let output = Command::new("npx")
+        .args(["--no", "--", "tsc", "-p", "migration"])
+        .current_dir(Path::new(&manifest_dir).join("pkg"))
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "tsc failed (is `npm install` done in pkg/?): {}{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }
@@ -110,25 +155,42 @@ fn write_data_assets() -> io::Result<()> {
         .iter()
         .map(|skip| skip.as_str())
         .collect();
-    let dts = skip_reasons_dts(&reasons);
+    let migration = serde_json::json!({
+        "skipReasons": reasons,
+        "transformRev": pubky_social_specs::migrate::TRANSFORM_REV,
+    });
     write_data_asset(
-        "skipReasons",
-        &serde_json::json!(reasons),
-        &[("skipReasons", "data")],
-        &dts,
+        "migrationData",
+        &migration,
+        &[
+            ("skipReasons", "data.skipReasons"),
+            ("transformRev", "data.transformRev"),
+        ],
+        &migration_data_dts(&reasons),
     )
 }
 
 /// The union is spelled from the same list as the data, so the type and the values cannot
 /// drift apart.
-fn skip_reasons_dts(reasons: &[&str]) -> String {
+fn migration_data_dts(reasons: &[&str]) -> String {
     let union = reasons
         .iter()
         .map(|reason| format!("\"{reason}\""))
         .collect::<Vec<_>>()
         .join(" | ");
     format!(
-        "/** Why one 0.x object did not migrate. */\nexport type SkipReason = {union};\n/** Every reason, frozen, so a report counts categories without a table of its own. */\nexport declare const skipReasons: readonly SkipReason[];\ndeclare const data: readonly SkipReason[];\nexport default data;\n"
+        r#"/** Why one 0.x object did not migrate. */
+export type SkipReason = {union};
+/** Every reason, frozen, so a report counts categories without a table of its own. */
+export declare const skipReasons: readonly SkipReason[];
+/** The revision of the transforms. A run records it; a tree recorded under a lower one is walked again, which picks up what earlier revisions skipped, never rewriting a destination that exists. */
+export declare const transformRev: number;
+declare const data: {{
+  readonly skipReasons: readonly SkipReason[];
+  readonly transformRev: number;
+}};
+export default data;
+"#
     )
 }
 

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["es2022"],
+    "types": [],
+    "strict": true,
+    "declaration": true,
+    "removeComments": false,
+    "newLine": "lf"
+  },
+  "files": ["index.ts", "host.d.ts"]
+}

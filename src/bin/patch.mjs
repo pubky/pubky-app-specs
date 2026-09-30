@@ -1,11 +1,12 @@
 // Turns the wasm-bindgen nodejs output into the package's two private glue modules and
-// generates the CommonJS twin of the hand-written entry.
+// generates the CommonJS twin of the hand-written entry. `patch.mjs migration` instead
+// generates the twins of the compiled migration engine, once tsc has emitted it.
 //
 // The glue instantiates the wasm at module load; both copies get a `__wbg_init()` instead, so
 // nothing runs until the entry's `init()` asks. The ESM copy carries the wasm inline as base64
 // (browsers and bundlers load one file), the CJS copy reads the `.wasm` next to it.
 
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { readFile, readdir, writeFile, rename, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path, { dirname } from "node:path";
 
@@ -13,6 +14,36 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = path.join(__dirname, "../../pkg");
 const cargoToml = await readFile(path.join(__dirname, "../../Cargo.toml"), "utf8");
 const name = /\[package\]\nname = "(.*?)"/.exec(cargoToml)[1].replace(/-/g, "_");
+
+// The CommonJS twin of an ES module: an import becomes a require of the `.cjs` twin (a package
+// import stays, its `require` condition picks the twin), and the one closing `export { ... };`
+// becomes module.exports.
+function commonJs(source, file) {
+  const twin = (specifier) => specifier.replace(/^(\.\.?\/[\w./]+)\.js$/, "$1.cjs");
+  const cjs = source
+    .replace(
+      /^import \* as (\w+) from "([^"]+)";$/gm,
+      (_m, local, specifier) => `const ${local} = require("${twin(specifier)}");`,
+    )
+    .replace(
+      /^import \{([^}]*)\} from "([^"]+)";$/gm,
+      (_m, names, specifier) => `const {${names}} = require("${twin(specifier)}");`,
+    )
+    .replace(/^export \{([^}]*)\};$/m, (_m, names) => `module.exports = {${names}};`);
+  if (/^\s*(import|export)\b/m.test(cjs) || /require\("\.[^"]*\.js"\)/.test(cjs)) {
+    throw new Error(`patch.mjs: ${file} has an import or export its CommonJS twin cannot carry`);
+  }
+  return `"use strict";\n${cjs}`;
+}
+
+if (process.argv[2] === "migration") {
+  const dir = path.join(pkg, "migration");
+  for (const file of (await readdir(dir)).filter((f) => f.endsWith(".js"))) {
+    const source = await readFile(path.join(dir, file), "utf8");
+    await writeFile(path.join(dir, file.replace(/\.js$/, ".cjs")), commonJs(source, `migration/${file}`));
+  }
+  process.exit(0);
+}
 
 const glue = await readFile(path.join(pkg, `nodejs/${name}.js`), "utf8");
 
@@ -70,20 +101,4 @@ const dts = await readFile(path.join(pkg, `nodejs/${name}.d.ts`), "utf8");
 await writeFile(path.join(pkg, `${name}.d.ts`), `/// <reference lib="esnext.disposable" />\n${dts}`);
 await unlink(path.join(pkg, `nodejs/${name}.d.ts`));
 
-// index.cjs from index.js: relative ESM imports become requires of the .cjs twin, and the one
-// closing `export { ... };` becomes module.exports.
-const entry = await readFile(path.join(pkg, "index.js"), "utf8");
-const cjsEntry = entry
-  .replace(
-    /^import \* as (\w+) from "(\.\/[\w.]+)\.js";$/gm,
-    (_m, local, file) => `const ${local} = require("${file}.cjs");`,
-  )
-  .replace(
-    /^import \{([^}]*)\} from "(\.\/[\w.]+)\.js";$/gm,
-    (_m, names, file) => `const {${names}} = require("${file}.cjs");`,
-  )
-  .replace(/^export \{([^}]*)\};$/m, (_m, names) => `module.exports = {${names}};`);
-if (/^\s*(import|export)\b/m.test(cjsEntry)) {
-  throw new Error("patch.mjs: index.js has an import or export index.cjs cannot carry");
-}
-await writeFile(path.join(pkg, "index.cjs"), `"use strict";\n${cjsEntry}`);
+await writeFile(path.join(pkg, "index.cjs"), commonJs(await readFile(path.join(pkg, "index.js"), "utf8"), "index.js"));

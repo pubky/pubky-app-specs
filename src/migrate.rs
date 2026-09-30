@@ -50,6 +50,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
+/// The revision of these transforms, recorded by a finished run. Bump it when a transform
+/// changes what it writes: a tree recorded under a lower revision is walked again, which picks
+/// up the objects an earlier revision skipped. A walk never rewrites a destination that exists.
+pub const TRANSFORM_REV: u32 = 1;
+
 /// Why an object did not migrate. Categories, not messages, so a run can count them.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

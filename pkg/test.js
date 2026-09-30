@@ -37,6 +37,7 @@ const {
   feedId,
   legacyListPrefix,
   skipReasons,
+  transformRev,
   Migration,
   createMigration,
   migrate,
@@ -92,10 +93,14 @@ describe("before init()", () => {
     assert.ok(validMimeTypes.includes("image/png"));
   });
 
-  it("skipReasons is frozen data, the entry, the subpath and the JSON agreeing", () => {
+  it("skipReasons and transformRev are frozen data, the entry, the subpath and the JSON agreeing", () => {
     assert.ok(Object.isFrozen(skipReasons));
-    assert.deepStrictEqual([...skipReasons], require("./skipReasons.json"));
-    assert.deepStrictEqual([...require("./skipReasons.cjs").skipReasons], [...skipReasons]);
+    const json = require("./migrationData.json");
+    assert.deepStrictEqual([...skipReasons], json.skipReasons);
+    assert.deepStrictEqual([...require("./migrationData.cjs").skipReasons], [...skipReasons]);
+    assert.ok(Number.isSafeInteger(transformRev) && transformRev >= 1);
+    assert.strictEqual(transformRev, json.transformRev);
+    assert.strictEqual(require("./migrationData.cjs").transformRev, transformRev);
     for (const reason of ["malformed", "shape", "tombstone", "oversize", "invalid", "not_migrated"]) {
       assert.ok(skipReasons.includes(reason), reason);
     }

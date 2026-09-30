@@ -30,12 +30,17 @@
       "require": "./mimeTypes.cjs"
     },
     "./mimeTypes.json": "./mimeTypes.json",
-    "./skipReasons": {
-      "types": "./skipReasons.d.ts",
-      "import": "./skipReasons.js",
-      "require": "./skipReasons.cjs"
+    "./migrationData": {
+      "types": "./migrationData.d.ts",
+      "import": "./migrationData.js",
+      "require": "./migrationData.cjs"
     },
-    "./skipReasons.json": "./skipReasons.json"
+    "./migrationData.json": "./migrationData.json",
+    "./migration": {
+      "types": "./migration/index.d.ts",
+      "import": "./migration/index.js",
+      "require": "./migration/index.cjs"
+    }
   },
   "files": [
     "index.js",
@@ -54,10 +59,14 @@
     "mimeTypes.js",
     "mimeTypes.cjs",
     "mimeTypes.d.ts",
-    "skipReasons.json",
-    "skipReasons.js",
-    "skipReasons.cjs",
-    "skipReasons.d.ts"
+    "migrationData.json",
+    "migrationData.js",
+    "migrationData.cjs",
+    "migrationData.d.ts",
+    "migration/*.js",
+    "migration/*.cjs",
+    "migration/*.d.ts",
+    "!migration/host.d.ts"
   ],
   "homepage": "https://pubky.app",
   "keywords": [
@@ -76,7 +85,7 @@
   "scripts": {
     "build": "cargo run --features migrator --bin bundle_specs_npm",
     "example": "node example.js",
-    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts skipReasons.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts skipReasons.d.ts && mocha test.js"
+    "test": "tsc --noEmit --strict types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && tsc --noEmit --strict --module nodenext --moduleResolution nodenext types.d.ts validationLimits.d.ts mimeTypes.d.ts migrationData.d.ts migration/index.d.ts && mocha test.js migration.test.js"
   },
   "sideEffects": false,
   "type": "module",
