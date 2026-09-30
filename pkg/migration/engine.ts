@@ -375,7 +375,7 @@ class Run {
       if (!message.startsWith(VALIDATION_ERROR)) throw new Error(message);
       return this.#count("invalid", path, message);
     }
-    if ("skip" in result) return this.#count(result.skip, path);
+    if ("skip" in result) return this.#count(result.skip, path, result.note);
     // The port can write the whole tree, the 0.x one included, which the run must never touch
     for (const write of result.writes) {
       if (!this.#roots.some((root) => write.meta.url.startsWith(root))) {

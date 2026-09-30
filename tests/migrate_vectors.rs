@@ -7,7 +7,7 @@
 //! object on the expected side and compared parsed. Media compares byte for byte.
 #![cfg(feature = "migrator")]
 
-use pubky_social_specs::migrate::{transform, Migrated, MigrationCtx};
+use pubky_social_specs::migrate::{transform, Migrated, MigrationCtx, Skipped};
 use pubky_social_specs::traits::HashId;
 use pubky_social_specs::{PubkyId, PubkySocialObject, PubkySocialTag};
 use serde_json::{Map, Value};
@@ -76,9 +76,9 @@ fn describe(migrated: &Migrated) -> Value {
     serde_json::json!({ "writes": writes, "dropped": dropped })
 }
 
-fn check(name: &str, got: &Result<Migrated, pubky_social_specs::migrate::Skip>, expected: &Value) {
+fn check(name: &str, got: &Result<Migrated, Skipped>, expected: &Value) {
     if let Some(skip) = expected.get("skip") {
-        let got = got.as_ref().map(describe).map_err(|s| s.to_string());
+        let got = got.as_ref().map(describe).map_err(|s| s.skip.to_string());
         assert_eq!(got, Err(skip.as_str().unwrap().to_string()), "{name}");
         return;
     }
