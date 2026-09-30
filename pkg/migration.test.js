@@ -32,6 +32,8 @@ const expectedCounts = () => {
   }
   return counts;
 };
+// The notes on one 0.x path; the vectors' own skips carry notes too
+const notesOf = (report, path) => report.notes.filter((n) => n.path === path).map((n) => n.message);
 const nonZero = (counts) => Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0));
 
 const v1Urls = (port) =>
@@ -350,8 +352,8 @@ describe("migration engine", () => {
       assert.strictEqual(paused.status, "paused");
       assert.strictEqual(paused.error.message, "The homeserver is out of space for this account.");
       assert.strictEqual(paused.error.code, "QUOTA");
-      // Two blobs of 20 and 19 bytes by their File objects, and an orphan no File sizes
-      assert.strictEqual(paused.error.needBytes, 39);
+      // Three blobs of 20, 19 and 17 bytes by their File objects, and an orphan no File sizes
+      assert.strictEqual(paused.error.needBytes, 56);
       assert.ok(!port.store.has(FLAG));
 
       full = false;
@@ -421,7 +423,7 @@ describe("migration engine", () => {
       assert.deepStrictEqual(sleeps, [1000, 2000, 4000]);
       assert.strictEqual(port.calls.filter((c) => c.op === "get" && c.url === url(follow)).length, 4);
       assert.deepStrictEqual(report.skipped.io_error, [follow]);
-      assert.deepStrictEqual(report.notes, [{ path: follow, message: "fetch failed" }]);
+      assert.deepStrictEqual(notesOf(report, follow), ["fetch failed"]);
       assert.ok(!port.store.has(FLAG), "an incomplete walk is not recorded");
 
       down = false;
@@ -447,12 +449,20 @@ describe("migration engine", () => {
       assert.ok(!port.store.has(FLAG));
     });
 
-    it("a File object that does not parse is only its own skip", async () => {
+    it("a File object the 0.x reader refuses is only its own skip", async () => {
       const port = legacyPort();
-      port.store.set(url("pub/pubky.app/files/0033000000008"), encoder.encode("{"));
+      port.store.set(url("pub/pubky.app/files/003300000000A"), encoder.encode("{"));
+      // Valid but for an id from before October 2024
+      port.store.set(url("pub/pubky.app/files/0030VNRG44G00"), bytesOf(corpus.files[0]));
       const report = await runMigration({ owner, port });
       assert.strictEqual(report.status, "done");
-      assert.deepStrictEqual(report.skipped.malformed, ["pub/pubky.app/files/0033000000008"]);
+      assert.strictEqual(report.counts.malformed, (expectedCounts().malformed ?? 0) + 1);
+      assert.strictEqual(report.counts.invalid, expectedCounts().invalid + 1);
+      assert.ok(report.skipped.malformed.includes("pub/pubky.app/files/003300000000A"));
+      assert.ok(report.skipped.invalid.includes("pub/pubky.app/files/0030VNRG44G00"));
+      // The 0.x reader's refusal lands in the notes
+      const old = report.notes.find((n) => n.path === "pub/pubky.app/files/0030VNRG44G00");
+      assert.match(old.message, /timestamp must be after October 1st, 2024/);
     });
 
     it("a GET that answers not_found counts deleted_mid_run", async () => {
@@ -496,7 +506,7 @@ describe("migration engine", () => {
       const report = await runMigration({ owner, port, sleep: noSleep });
       assert.strictEqual(report.status, "incomplete");
       assert.deepStrictEqual(report.skipped.io_error, [follow]);
-      assert.match(report.notes[0].message, /^deleting /);
+      assert.match(notesOf(report, follow)[0], /^deleting /);
       assert.ok(!port.store.has(FLAG));
     });
 
@@ -520,18 +530,23 @@ describe("migration engine", () => {
     });
 
     it("two 0.x tags folding to one 1.x tag: when the first copy is undone, the second lands", async () => {
-      const [, body] = [...rows].find(([p]) => p.startsWith("pub/pubky.app/tags/"));
-      const tag = JSON.parse(decoder.decode(body.input));
-      const first = url("pub/pubky.app/tags/0034A0X7NJ540");
-      const second = url("pub/pubky.app/tags/0034A0X7NJ542");
+      // A File reference and a blob reference to the same media, under one label
+      const { input } = corpus.vectors.find((v) => v.name.startsWith("tag: a media target"));
+      const media = input.body.uri;
+      const blob = `pubky://${owner}/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW`;
+      // The 0.x id of the blob reference under that label, which the walk meets first
+      const first = url("pub/pubky.app/tags/3NKHYKFZZV3S3VKPBN7JFTNVSW");
+      const second = url(input.path);
       let port;
       port = new MemoryPort({
         intercept: (op, target) => {
           if (op === "head" && target === first) port.store.delete(first);
         },
       });
-      port.store.set(first, encoder.encode(JSON.stringify({ ...tag, label: "Rust" })));
-      port.store.set(second, encoder.encode(JSON.stringify({ ...tag, label: "rust" })));
+      const file = corpus.files.find((f) => media.endsWith(`/files/${f.tsid}`));
+      port.store.set(url(`pub/pubky.app/files/${file.tsid}`), bytesOf(file));
+      port.store.set(first, encoder.encode(JSON.stringify({ ...input.body, uri: blob })));
+      port.store.set(second, bytesOf(input));
       const report = await runMigration({ owner, port });
       assert.strictEqual(report.status, "done");
       assert.strictEqual(report.counts.deleted_mid_run, 1);
@@ -660,7 +675,7 @@ describe("migration engine", () => {
       const report = await runMigration({ owner, port });
       assert.strictEqual(report.status, "done");
       assert.strictEqual(report.counts.put_rejected, 1);
-      assert.match(report.notes[0].message, /rejected \(400\)/);
+      assert.match(notesOf(report, report.skipped.put_rejected[0])[0], /rejected \(400\)/);
       assert.ok(!v1Urls(port).some((u) => u.includes("/follows/")));
     });
 
