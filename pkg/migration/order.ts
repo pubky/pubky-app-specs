@@ -21,7 +21,7 @@ export type Bucket = (typeof BUCKETS)[number];
  * The bucket of a path relative to the 0.x namespace (`posts/X`, `profile.json`), or `null`
  * for one no pass migrates, such as `settings.json` and `last_read`.
  */
-const bucketOf = (legacyRelative: string): Bucket | null => {
+const legacyBucket = (legacyRelative: string): Bucket | null => {
   if (legacyRelative === "profile.json") return "profile";
   const slash = legacyRelative.indexOf("/");
   if (slash <= 0 || slash === legacyRelative.length - 1) return null;
@@ -39,11 +39,32 @@ const ordered = <T>(
   const groups = new Map<Bucket, T[]>(BUCKETS.map((bucket) => [bucket, []]));
   const rest: T[] = [];
   for (const item of items) {
-    const bucket = bucketOf(legacyRelative(item));
+    const bucket = legacyBucket(legacyRelative(item));
     if (bucket === null) rest.push(item);
     else groups.get(bucket)!.push(item);
   }
   return { passes: [...groups], rest };
+};
+
+// The 0.x namespace is frozen, so the path is spelled here instead of asking the wasm for it
+const LEGACY_NAMESPACE = "pub/pubky.app/";
+
+/**
+ * The pass that walks a stored object, by its owner-relative path (`pub/pubky.app/posts/X`,
+ * with or without a leading `/`) or its `pubky://` URL: what an app counts over a LIST to
+ * preview a migration without running it. `"rest"` is an object no pass migrates, which a run
+ * counts `not_migrated`, or a path outside the 0.x tree.
+ */
+const bucketOf = (ownerRelativePathOrUrl: string): Bucket | "rest" => {
+  let path = ownerRelativePathOrUrl;
+  if (path.startsWith("pubky://")) {
+    const slash = path.indexOf("/", "pubky://".length);
+    path = slash === -1 ? "" : path.slice(slash + 1);
+  } else if (path.startsWith("/")) {
+    path = path.slice(1);
+  }
+  if (!path.startsWith(LEGACY_NAMESPACE)) return "rest";
+  return legacyBucket(path.slice(LEGACY_NAMESPACE.length)) ?? "rest";
 };
 
 export { BUCKETS, bucketOf, ordered };
