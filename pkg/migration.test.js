@@ -2,33 +2,20 @@ import assert from "assert";
 import { createRequire } from "node:module";
 import { init, readObject, listPrefix, transformRev, validationLimits } from "./index.js";
 import * as migration from "./migration/index.js";
+import { corpus, legacyTree, bytesOf } from "./migration.fixture.js";
 
-const { runMigration, MemoryPort, MigrationPortError, refusal, ENGINE_CAPS, MIGRATION_CAPS, BUCKETS } = migration;
+const { runMigration, MemoryPort, MigrationPortError, refusal, ENGINE_CAPS, MIGRATION_CAPS, BUCKETS, bucketOf } = migration;
 
 const require = createRequire(import.meta.url);
-const corpus = require("../vectors/semantic/v0_to_v1.json");
 const owner = corpus.owner;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const url = (path) => `pubky://${owner}/${path}`;
-const bytesOf = (input) => encoder.encode("raw" in input ? input.raw : JSON.stringify(input.body));
 const FLAG = url("priv/social/v1/_migrated.json");
 const LEGACY = url("pub/pubky.app/");
 
-// The 0.x tree of the vectors: every File, then each vector input at its path. Several rows
-// share a path; the first one is the stored object.
-const rows = new Map();
-for (const file of corpus.files) {
-  rows.set(`pub/pubky.app/files/${file.tsid}`, { input: bytesOf(file), expected: { writes: [] } });
-}
-for (const { input, expected } of corpus.vectors) {
-  if (!rows.has(input.path)) rows.set(input.path, { input: bytesOf(input), expected });
-}
-rows.set("pub/pubky.app/settings.json", {
-  input: encoder.encode(JSON.stringify({ language: "en" })),
-  expected: { skip: "not_migrated" },
-});
+const rows = new Map([...legacyTree()].map(([path, row]) => [path, { input: bytesOf(row), expected: row.expected }]));
 
 const legacyPort = (options) => {
   const port = new MemoryPort(options);
@@ -105,10 +92,61 @@ describe("migration engine", () => {
       assert.strictEqual(await port.get(url("pub/a")), null);
       assert.strictEqual(await port.head(url("pub/a")), false);
       await assert.rejects(port.delete(url("pub/a")), (e) => e instanceof MigrationPortError && e.kind === "not_found" && e.status === 404);
-      await assert.rejects(port.head(url("priv/social/v1/_migrated.json")), { kind: "unsupported" });
+      await assert.rejects(port.head(url("priv/social/v1/_migrated.json")), { kind: "unsupported", status: 403 });
       await assert.rejects(port.putJson(url("priv/social/v1/x"), {}), { kind: "unsupported" });
       await port.putJson(url("pub/a"), { b: 1 });
       assert.deepStrictEqual(JSON.parse(decoder.decode(await port.get(url("pub/a")))), { b: 1 });
+    });
+  });
+
+  describe("bucketOf", () => {
+    it("names the pass of every 0.x type, by path or URL, and rest for what no pass takes", () => {
+      const cases = [
+        ["pub/pubky.app/files/0033000000002", "files"],
+        ["pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW", "blobs"],
+        ["pub/pubky.app/posts/0034A0X7NJ52C", "posts"],
+        ["pub/pubky.app/tags/8Z8CWH8NVYQY39ZEBFGKQWWEKG", "tags"],
+        ["pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy", "follows"],
+        ["pub/pubky.app/profile.json", "profile"],
+        ["pub/pubky.app/feeds/8Z8CWH8NVYQY39ZEBFGKQWWEKG", "feeds"],
+        ["pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG", "bookmarks"],
+        ["pub/pubky.app/mutes/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy", "mutes"],
+        ["pub/pubky.app/settings.json", "rest"],
+        ["pub/pubky.app/last_read", "rest"],
+        ["pub/pubky.app/profile/x", "rest"],
+        ["pub/pubky.app/unknown/x", "rest"],
+        ["pub/pubky.app/posts/", "rest"],
+        ["pub/social/v1/posts/0034A0X7NJ52C/0034A0X7NJ52C.json", "rest"],
+        ["priv/social/v1/_migrated.json", "rest"],
+        ["pub/pubky.appx/posts/0034A0X7NJ52C", "rest"],
+        ["", "rest"],
+      ];
+      for (const [path, bucket] of cases) {
+        assert.strictEqual(bucketOf(path), bucket, path);
+        assert.strictEqual(bucketOf(`/${path}`), bucket, `/${path}`);
+        assert.strictEqual(bucketOf(url(path)), bucket, url(path));
+      }
+      assert.strictEqual(bucketOf(`pubky://${owner}`), "rest");
+      assert.deepStrictEqual(new Set(cases.map(([, b]) => b)), new Set([...BUCKETS, "rest"]));
+    });
+
+    it("counts a tree the way a run walks it", async () => {
+      const port = legacyPort();
+      const counts = {};
+      for (const u of port.store.keys()) counts[bucketOf(u)] = (counts[bucketOf(u)] ?? 0) + 1;
+      const walked = {};
+      let last;
+      await runMigration({
+        owner,
+        port,
+        onProgress: (e) => {
+          if (e.phase !== "migrating") return;
+          const key = e.kind ?? "rest";
+          if (e.done !== last) walked[key] = (walked[key] ?? 0) + 1;
+          last = e.done;
+        },
+      });
+      assert.deepStrictEqual(walked, counts);
     });
   });
 
@@ -716,6 +754,34 @@ describe("migration engine", () => {
       const free = await runMigration({ owner, port: legacyPort(), lock: (_name, fn) => fn({ name: "lock" }) });
       assert.strictEqual(free.status, "done");
       assert.deepStrictEqual(names, [`pubky-social-specs:migration:${owner}`]);
+    });
+
+    it("refuses a write outside the 1.x roots before any PUT, as a fault in the package", async () => {
+      const entry = require("pubky-social-specs");
+      const migrate = entry.migrate;
+      // The CommonJS engine reads the entry's exports when it loads, so a fresh load takes the fake
+      const fresh = () => {
+        for (const key of Object.keys(require.cache)) if (/[\\/]migration[\\/]/.test(key)) delete require.cache[key];
+        return require("./migration/index.cjs");
+      };
+      // A transform that sends each copy over its own 0.x source
+      entry.migrate = (handle, source, bytes) => {
+        const result = migrate(handle, source, bytes);
+        for (const write of result.writes ?? []) write.meta = { ...write.meta, url: source };
+        return result;
+      };
+      try {
+        const cjs = fresh();
+        const port = new cjs.MemoryPort();
+        for (const [path, { input }] of rows) port.store.set(url(path), input);
+        const before = new Map(port.store);
+        await assert.rejects(cjs.runMigration({ owner, port }), /a write to pubky:\/\/\w+\/pub\/pubky\.app\/.*, outside pubky:\/\/\w+\/pub\/social\/v1\/ and pubky:\/\/\w+\/priv\/social\/v1\//);
+        assert.ok(!port.calls.some((c) => ["putJson", "putBytes", "delete"].includes(c.op)));
+        assert.deepStrictEqual(port.store, before);
+      } finally {
+        entry.migrate = migrate;
+        fresh();
+      }
     });
 
     it("refuses a mode it does not know", async () => {
