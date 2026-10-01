@@ -616,6 +616,28 @@
       }
     },
     {
+      "name": "blob: bytes that do not hash to the id in the path are refused, never copied",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        "raw": "not the bytes that id names"
+      },
+      "expected": {
+        "skip": "invalid"
+      }
+    },
+    {
+      "name": "blob: no bytes at all are refused",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78",
+        "raw": ""
+      },
+      "expected": {
+        "skip": "invalid"
+      }
+    },
+    {
       "name": "file: a v0 File object is read into the run and writes nothing",
       "kind": "file",
       "input": {

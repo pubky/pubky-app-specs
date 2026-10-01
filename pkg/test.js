@@ -1123,16 +1123,24 @@ describe("pubky-social-specs", () => {
         return hasherFinish(hasher);
       };
       let blobs = 0;
-      for (const { name, input } of corpus.vectors.filter((v) => v.kind === "blob")) {
+      let refused = 0;
+      for (const { name, input, expected } of corpus.vectors.filter((v) => v.kind === "blob")) {
         const bytes = bytesOf(input);
         const result = migrateBlob(run, input.path, bytes.length, hashOf(bytes));
-        const { writes } = migrate(run, input.path, bytes);
-        assert.deepStrictEqual(result, { writes: writes.map(({ kind, meta }) => ({ kind, meta })), dropped: [] }, name);
+        const byBytes = migrate(run, input.path, bytes);
+        if ("skip" in expected) {
+          // Both doors refuse the same way; the note is each door's own
+          assert.strictEqual(result.skip, expected.skip, name);
+          assert.strictEqual(byBytes.skip, expected.skip, name);
+          refused++;
+          continue;
+        }
+        assert.deepStrictEqual(result, { writes: byBytes.writes.map(({ kind, meta }) => ({ kind, meta })), dropped: [] }, name);
         assert.ok(!("object" in result.writes[0]), name);
         assert.deepStrictEqual(migrateBlob(run, `pubky://${owner}/${input.path}`, bytes.length, hashOf(bytes)), result, name);
         blobs++;
       }
-      assert.ok(blobs >= 3);
+      assert.ok(blobs >= 3 && refused >= 2);
 
       const [path, bytes] = vector("blob: same bytes");
       const hash = hashOf(bytes);
