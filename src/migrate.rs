@@ -365,17 +365,18 @@ impl MigrationCtx {
     }
 
     /// Serializes, checks the size cap, and reads the result back through the v1 reader.
-    fn emit<T: Validatable>(&self, path: &str, object: &T) -> Result<(String, Vec<u8>), Skip> {
-        let bytes = serde_json::to_vec(object).map_err(|_| Skip::Invalid)?;
+    fn emit<T: Validatable>(&self, path: &str, object: &T) -> Result<(String, Vec<u8>), Skipped> {
+        let bytes = serde_json::to_vec(object).map_err(|e| Skipped::noted(Skip::Invalid, e))?;
         if bytes.len() > T::MAX_BYTES {
-            return Err(Skip::Oversize);
+            return Err(Skip::Oversize.into());
         }
         self.read_back(path, bytes)
     }
 
-    fn read_back(&self, path: &str, bytes: Vec<u8>) -> Result<(String, Vec<u8>), Skip> {
+    /// The v1 reader's refusal is the note, so a run can say why the output was refused.
+    fn read_back(&self, path: &str, bytes: Vec<u8>) -> Result<(String, Vec<u8>), Skipped> {
         let uri = [PROTOCOL, self.owner.as_ref(), path].concat();
-        PubkySocialObject::from_uri(&uri, &bytes).map_err(|_| Skip::Invalid)?;
+        PubkySocialObject::from_uri(&uri, &bytes).map_err(|e| Skipped::noted(Skip::Invalid, e))?;
         Ok((path.trim_start_matches('/').to_string(), bytes))
     }
 }
@@ -684,7 +685,7 @@ fn transform_bookmark(
 ) -> Result<Migrated, Skipped> {
     let target = ctx.rewrite(&bookmark.uri).uri;
     let created_at = safe_int(bookmark.created_at)?;
-    let filename = bookmark_filename(&target).map_err(|_| Skip::Invalid)?;
+    let filename = bookmark_filename(&target).map_err(|e| Skipped::noted(Skip::Invalid, e))?;
     let bookmark = PubkySocialBookmark {
         created_at,
         target: filename.starts_with('~').then_some(target),
@@ -713,7 +714,7 @@ fn transform_feed(feed: legacy_v0::V0Feed, ctx: &MigrationCtx) -> Result<Migrate
         same_wire(&config.sort)?,
         content,
     )
-    .map_err(|_| Skip::Invalid)?;
+    .map_err(|e| Skipped::noted(Skip::Invalid, e))?;
     let feed = PubkySocialFeed {
         feed: config,
         name: frozen_trim(&feed.name).to_string(),
@@ -721,7 +722,9 @@ fn transform_feed(feed: legacy_v0::V0Feed, ctx: &MigrationCtx) -> Result<Migrate
         created_at: safe_int(feed.created_at)?,
         extra: Default::default(),
     };
-    let id = feed.derive_id().map_err(|_| Skip::Invalid)?;
+    let id = feed
+        .derive_id()
+        .map_err(|e| Skipped::noted(Skip::Invalid, e))?;
     let path = PubkySocialFeed::create_path_in(Root::Priv, &id);
     Ok(Migrated::one(ctx.emit(&path, &feed)?))
 }
