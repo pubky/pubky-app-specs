@@ -52,7 +52,7 @@ For a full homeserver flow, see [`examples/create_user.rs`](https://github.com/p
 | `migrator` | The 0.x to v1 transforms       |
 
 ```toml
-pubky-social-specs = { version = "1.0.0-alpha.4", features = ["openapi"] }
+pubky-social-specs = { version = "1.0.0-alpha.5", features = ["openapi"] }
 ```
 
 `migrator` adds the `migrate` module: functions that take one owner's `pub/pubky.app/` objects as bytes and return the `social/v1` objects to write, with references rewritten, media dereferenced through the 0.x File objects, content-addressed ids re-derived, and every output read back through the v1 reader before it is returned. An object that cannot migrate is skipped with a counted category, never repaired. Every transform works from the object the frozen 0.x reader stores for the path at its own id, and an object is skipped when the frozen 0.x reader refuses it; a skip carries what the refusing parser or reader said as its `note`. The functions are pure but for one clock: the 0.x reader bounds a TimestampId by the time, so an object refused for a future id on one run is accepted on a later run. Only a client that runs the migration needs it, so it is off by default for the crate; the npm package is built with it, since that package is what the browser migrator runs.
