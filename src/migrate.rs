@@ -63,7 +63,9 @@ use std::fmt;
 /// The revision of these transforms, recorded by a finished run. Bump it when a transform
 /// changes what it writes: a tree recorded under a lower revision is walked again, which picks
 /// up the objects an earlier revision skipped. A walk never rewrites a destination that exists.
-pub const TRANSFORM_REV: u32 = 1;
+/// Revision 2: the transforms read through the frozen 0.x reader, which writes a `[DELETED]`
+/// profile as `anonymous` and a few objects revision 1 skipped or spelled otherwise.
+pub const TRANSFORM_REV: u32 = 2;
 
 /// Why an object did not migrate. Categories, not messages, so a run can count them.
 #[non_exhaustive]
