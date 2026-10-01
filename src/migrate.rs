@@ -302,7 +302,8 @@ impl MigrationCtx {
     /// input is trimmed first: v0's own writer trimmed, and a migrator owes canonical spelling.
     fn rewrite(&self, uri: &str) -> Rewritten {
         use legacy_v0::Resource;
-        let uri = frozen_trim(uri);
+        let folded = fold_scheme(frozen_trim(uri));
+        let uri = folded.as_str();
         if !uri.starts_with("pubky") {
             let canonical = if uri.starts_with("http://") || uri.starts_with("https://") {
                 canonicalize_web_uri(uri)
@@ -740,6 +741,23 @@ fn transform_blob(hash: &str, bytes: &[u8], ctx: &MigrationCtx) -> Result<Migrat
         .map_err(|message| Skipped::noted(Skip::Invalid, message))?;
     let path = PubkySocialFile::create_path(&format!("{hash}.{}", ctx.ext_of(hash)));
     Ok(Migrated::one(ctx.read_back(&path, bytes.to_vec())?))
+}
+
+/// A scheme is case-insensitive, and the 0.x reader kept a bookmark target or a cover image as
+/// written, so the fold the external arm applies to its scheme happens before dispatch for every
+/// arm. Anything that is not scheme-shaped before the first colon is left alone.
+fn fold_scheme(uri: &str) -> String {
+    let Some(colon) = uri.find(':') else {
+        return uri.to_string();
+    };
+    let (scheme, rest) = uri.split_at(colon);
+    let mut chars = scheme.chars();
+    let shaped = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'));
+    if !shaped {
+        return uri.to_string();
+    }
+    [&scheme.to_ascii_lowercase(), rest].concat()
 }
 
 /// Any v0 object by its owner-relative path (`pub/pubky.app/...`), classified by the v0

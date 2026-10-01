@@ -547,6 +547,27 @@
       }
     },
     {
+      "name": "bookmark: an uppercase scheme the 0.x reader kept as written folds before the web gate",
+      "kind": "bookmark",
+      "input": {
+        "path": "pub/pubky.app/bookmarks/J4G59AY78JXYC7S2FFAD51QPN0",
+        "body": {
+          "uri": "HTTPS://EXAMPLE.COM/Upper",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/bookmarks/aHR0cHM6Ly9FWEFNUExFLkNPTS9VcHBlcg.json",
+            "body": {
+              "created_at": 1727740800000000
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "blob: same bytes at files/{hash}.{ext}, the extension from the lowest File id naming it",
       "kind": "blob",
       "input": {
