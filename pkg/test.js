@@ -1145,8 +1145,9 @@ describe("pubky-social-specs", () => {
       const [path, bytes] = vector("blob: same bytes");
       const hash = hashOf(bytes);
       assert.deepStrictEqual(migrateBlob(run, path, validationLimits.maxFileSizeBytes + 1, hash), { skip: "oversize" });
-      assert.deepStrictEqual(migrateBlob(run, path, bytes.length, hashOf(new Uint8Array([1]))), { skip: "invalid" });
-      assert.deepStrictEqual(migrateBlob(run, path, 0, hash), { skip: "invalid" });
+      const unhashed = { skip: "invalid", note: "blob bytes do not hash to the id in the path" };
+      assert.deepStrictEqual(migrateBlob(run, path, bytes.length, hashOf(new Uint8Array([1]))), unhashed);
+      assert.deepStrictEqual(migrateBlob(run, path, 0, hash), unhashed);
       assert.deepStrictEqual(migrateBlob(run, "pub/pubky.app/files/0033000000000", bytes.length, hash), { skip: "not_migrated" });
       rejects(() => migrateBlob(run, path, 1.5, hash), "Validation Error: migrateBlob() argument 3 must be a non-negative integer");
       rejects(() => migrateBlob(run, path, -1, hash), "Validation Error: migrateBlob() argument 3 must be a non-negative integer");

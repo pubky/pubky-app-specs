@@ -1012,6 +1012,15 @@ mod migration {
     /// `{writes, dropped}`, each write as `readObject` reads it plus its `meta`, or `{skip}`
     /// with the category and, when the reader that refused it said why, its `note`. A File
     /// object is read into the run and writes nothing, so walk `files/` first.
+    /// A skip as the JS caller reads it: `{skip, note?}`.
+    fn skipped_js(skipped: &crate::migrate::Skipped) -> Result<JsValue, JsError> {
+        let mut result = serde_json::json!({ "skip": skipped.skip.as_str() });
+        if let Some(note) = &skipped.note {
+            result["note"] = note.clone().into();
+        }
+        to_js(&result)
+    }
+
     #[wasm_bindgen]
     pub fn migrate(
         migration: &mut Migration,
@@ -1020,13 +1029,7 @@ mod migration {
     ) -> Result<JsValue, JsError> {
         let migrated = match migration.ctx.migrate(v0_path, bytes) {
             Ok(migrated) => migrated,
-            Err(skipped) => {
-                let mut result = serde_json::json!({ "skip": skipped.skip.as_str() });
-                if let Some(note) = skipped.note {
-                    result["note"] = note.into();
-                }
-                return to_js(&result);
-            }
+            Err(skipped) => return skipped_js(&skipped),
         };
         let owner = migration.ctx.owner();
         let writes = js_sys::Array::new();
@@ -1059,7 +1062,7 @@ mod migration {
         }
         let path = match migration.ctx.blob_destination(v0_path, size as u64, hash) {
             Ok(path) => path,
-            Err(skip) => return to_js(&serde_json::json!({ "skip": skip.as_str() })),
+            Err(skipped) => return skipped_js(&skipped),
         };
         let write = write_js(migration.ctx.owner(), &path, None)?;
         object_of(&[

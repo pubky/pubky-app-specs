@@ -627,8 +627,8 @@ describe("migration engine", () => {
         assert.strictEqual(report.status, "done");
         assert.strictEqual(report.counts.invalid, (expectedCounts().invalid ?? 0) + 1);
         assert.ok(report.skipped.invalid.includes("pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78"));
-        assert.deepStrictEqual(report.notes, [
-          { path: "pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78", message: "Validation Error: the port's GET gave no Uint8Array" },
+        assert.deepStrictEqual(notesOf(report, "pub/pubky.app/blobs/VJAHM32NETJ12EWAAM11BQVX78"), [
+          "Validation Error: the port's GET gave no Uint8Array",
         ]);
         assert.strictEqual(report.counts.written, expectedCounts().written - 1);
       }
@@ -800,11 +800,13 @@ describe("migration engine", () => {
         return require("./migration/index.cjs");
       };
       // A transform that sends each copy over its own 0.x source
-      entry.migrate = (handle, source, bytes) => {
-        const result = migrate(handle, source, bytes);
+      const migrateBlob = entry.migrateBlob;
+      const astray = (source, result) => {
         for (const write of result.writes ?? []) write.meta = { ...write.meta, url: source };
         return result;
       };
+      entry.migrate = (handle, source, bytes) => astray(source, migrate(handle, source, bytes));
+      entry.migrateBlob = (handle, source, size, hash) => astray(source, migrateBlob(handle, source, size, hash));
       try {
         const cjs = fresh();
         const port = new cjs.MemoryPort();
@@ -815,6 +817,7 @@ describe("migration engine", () => {
         assert.deepStrictEqual(port.store, before);
       } finally {
         entry.migrate = migrate;
+        entry.migrateBlob = migrateBlob;
         fresh();
       }
     });

@@ -302,9 +302,14 @@ impl MigrationCtx {
     /// its bytes' hash, so a caller holding a large blob never hands the bytes over: the same
     /// rules [`transform_blob`] applies, and the owner-relative path its write would take. A
     /// path the v0 parser does not call the owner's blob skips as `NotMigrated`.
-    pub fn blob_destination(&self, v0_path: &str, size: u64, hash: &str) -> Result<String, Skip> {
+    pub fn blob_destination(
+        &self,
+        v0_path: &str,
+        size: u64,
+        hash: &str,
+    ) -> Result<String, Skipped> {
         let legacy_v0::Resource::Blob(v0_hash) = classify(&self.owner, v0_path)? else {
-            return Err(Skip::NotMigrated);
+            return Err(Skip::NotMigrated.into());
         };
         let path = self.blob_path(&v0_hash, size)?;
         // The media read-back without the bytes: they are not empty and hash to the id the
@@ -314,7 +319,10 @@ impl MigrationCtx {
             .ok()
             .and_then(|parsed| parsed.resource.id());
         if size == 0 || named.as_deref() != Some(hash) {
-            return Err(Skip::Invalid);
+            return Err(Skipped::noted(
+                Skip::Invalid,
+                "blob bytes do not hash to the id in the path",
+            ));
         }
         Ok(path.trim_start_matches('/').to_string())
     }
@@ -1235,16 +1243,22 @@ mod tests {
         // Over the cap skips before the hash is looked at
         assert_eq!(
             ctx.blob_destination(&blob, max + 1, "other"),
-            Err(Skip::Oversize)
+            Err(Skip::Oversize.into())
         );
         assert_eq!(
             ctx.blob_destination(&blob, u64::MAX, HASH),
-            Err(Skip::Oversize)
+            Err(Skip::Oversize.into())
         );
         // Bytes that do not hash to the blob's id, or no bytes at all, fail the read-back
         let other = "8Z8CWH8NVYQY39ZEBFGKQWWEKG";
-        assert_eq!(ctx.blob_destination(&blob, 20, other), Err(Skip::Invalid));
-        assert_eq!(ctx.blob_destination(&blob, 0, HASH), Err(Skip::Invalid));
+        assert_eq!(
+            ctx.blob_destination(&blob, 20, other).map_err(|s| s.skip),
+            Err(Skip::Invalid)
+        );
+        assert_eq!(
+            ctx.blob_destination(&blob, 0, HASH).map_err(|s| s.skip),
+            Err(Skip::Invalid)
+        );
         // An orphan no File names is bin
         assert_eq!(
             ctx.blob_destination(&format!("pub/pubky.app/blobs/{other}"), 20, other),
@@ -1258,7 +1272,7 @@ mod tests {
         ] {
             assert_eq!(
                 ctx.blob_destination(&path, 20, HASH),
-                Err(Skip::NotMigrated),
+                Err(Skip::NotMigrated.into()),
                 "{path}"
             );
         }

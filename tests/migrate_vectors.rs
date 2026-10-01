@@ -171,8 +171,10 @@ fn a_blob_destination_agrees_with_the_blob_transform() {
         let transformed = transform(path, &bytes, &ctx)
             .map(|migrated| migrated.writes.into_iter().map(|(path, _)| path).collect());
         assert_eq!(
-            destination.map(|path| vec![path]),
-            transformed,
+            destination
+                .map(|path| vec![path])
+                .map_err(|skipped| skipped.skip),
+            transformed.map_err(|skipped| skipped.skip),
             "{}",
             vector["name"]
         );
