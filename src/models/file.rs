@@ -1,8 +1,7 @@
 use crate::constants::social_path;
 use crate::mime::mime_to_ext;
-use crate::traits::{Root, ValidationError};
+use crate::traits::{hash_id_from, Root, ValidationError};
 use crate::{limits::VALIDATION_LIMITS, traits::HashId};
-use base32::{encode, Alphabet};
 use blake3::Hasher;
 
 /// Advisory client hint only; gates nothing. The upload pipeline maps ANY declared type via
@@ -85,17 +84,9 @@ impl HashId for PubkySocialFile {
     }
 
     fn create_id(&self) -> String {
-        // Create a Blake3 hash of the file bytes
         let mut hasher = Hasher::new();
         hasher.update(&self.0);
-        let blake3_hash = hasher.finalize();
-
-        // Get the first half of the hash bytes
-        let half_hash_length = blake3_hash.as_bytes().len() / 2;
-        let half_hash = &blake3_hash.as_bytes()[..half_hash_length];
-
-        // Encode the first half of the hash in Base32 using the Crockford alphabet
-        encode(Alphabet::Crockford, half_hash)
+        hash_id_from(&hasher)
     }
 }
 

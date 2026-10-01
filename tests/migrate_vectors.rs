@@ -9,7 +9,7 @@
 
 use pubky_social_specs::migrate::{transform, Migrated, MigrationCtx, Skipped};
 use pubky_social_specs::traits::HashId;
-use pubky_social_specs::{PubkyId, PubkySocialObject, PubkySocialTag};
+use pubky_social_specs::{PubkyId, PubkySocialFile, PubkySocialObject, PubkySocialTag};
 use serde_json::{Map, Value};
 
 fn corpus() -> Value {
@@ -151,6 +151,36 @@ fn every_output_reads_back_through_the_v1_reader() {
         }
     }
     assert!(written >= 20, "too few outputs were checked: {written}");
+}
+
+/// A blob's destination from its size and hash is the path its bytes migrate to, and a
+/// blob that skips skips the same way.
+#[test]
+fn a_blob_destination_agrees_with_the_blob_transform() {
+    let corpus = corpus();
+    let ctx = context(&corpus);
+    let mut blobs = 0;
+    for vector in corpus["vectors"].as_array().unwrap() {
+        if vector["kind"] != "blob" {
+            continue;
+        }
+        let input = &vector["input"];
+        let (path, bytes) = (input["path"].as_str().unwrap(), bytes_of(input));
+        let hash = PubkySocialFile(bytes.clone()).create_id();
+        let destination = ctx.blob_destination(path, bytes.len() as u64, &hash);
+        let transformed = transform(path, &bytes, &ctx)
+            .map(|migrated| migrated.writes.into_iter().map(|(path, _)| path).collect());
+        assert_eq!(
+            destination
+                .map(|path| vec![path])
+                .map_err(|skipped| skipped.skip),
+            transformed.map_err(|skipped| skipped.skip),
+            "{}",
+            vector["name"]
+        );
+        blobs += 1;
+    }
+    assert!(blobs >= 3, "the blob rows are gone: {blobs}");
 }
 
 /// Each vector's kind names the transform its path reaches, so a row cannot test one

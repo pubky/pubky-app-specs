@@ -2,6 +2,10 @@ import {
   init,
   createMigration,
   migrate,
+  migrateBlob,
+  hasherNew,
+  hasherUpdate,
+  hasherFinish,
   stableId,
   resolveDeref,
   validationLimits,
@@ -10,7 +14,13 @@ import {
   legacyListPrefix,
   listPrefix,
 } from "pubky-social-specs";
-import type { Dropped, MigrateResult, MigratedWrite, Migration } from "pubky-social-specs";
+import type {
+  Dropped,
+  MigrateBlobResult,
+  MigrateResult,
+  MigratedWrite,
+  Migration,
+} from "pubky-social-specs";
 import { portErrorKind } from "./port.js";
 import type { MigrationPort, PortErrorKind } from "./port.js";
 import { ordered } from "./order.js";
@@ -47,6 +57,8 @@ const NETWORK_RETRIES = 3;
 const FIRST_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
 const VALIDATION_ERROR = "Validation Error:";
+// Blobs are hashed in chunks of this size, so the wasm holds a chunk and never a blob
+const HASH_CHUNK = 4 * 1024 * 1024;
 
 const MESSAGES = {
   ALREADY_RUNNING: "A migration of this account is already running in another tab.",
@@ -152,6 +164,27 @@ const keyOf = (path: string): string => {
  */
 const claimKey = (write: MigratedWrite): string =>
   write.kind === "file" ? write.meta.url : keyOf(write.meta.path);
+
+/** The media id of `bytes`, fed to the wasm a view at a time. */
+const hashOf = (bytes: Uint8Array): string => {
+  const hasher = hasherNew();
+  for (let at = 0; at < bytes.length; at += HASH_CHUNK) {
+    hasherUpdate(hasher, bytes.subarray(at, at + HASH_CHUNK));
+  }
+  return hasherFinish(hasher);
+};
+
+/**
+ * A blob's writes carry the bytes the run already holds, so its copy is the one PUT of that
+ * array and its read-back is the hash that named the destination.
+ */
+const blobResult = (result: MigrateBlobResult, bytes: Uint8Array): MigrateResult =>
+  "skip" in result
+    ? result
+    : {
+        writes: result.writes.map((write) => ({ ...write, object: { bytes } })),
+        dropped: result.dropped,
+      };
 
 const LANDED = Promise.resolve(true);
 
@@ -362,13 +395,21 @@ class Run {
       return this.#count("io_error", path, bytes.message);
     }
     if (bytes === null || isFailure(bytes)) return this.#count("deleted_mid_run", path);
+    // A blob is sliced here before the wasm sees it, so the entry's byte check comes first
+    if (bucket === "blobs" && !(ArrayBuffer.isView(bytes) && bytes.BYTES_PER_ELEMENT === 1)) {
+      return this.#count("invalid", path, `${VALIDATION_ERROR} the port's GET gave no Uint8Array`);
+    }
     if (bucket === "blobs" && bytes.length > validationLimits.maxFileSizeBytes) {
       return this.#count("oversize", path);
     }
 
     let result: MigrateResult;
     try {
-      result = migrate(this.#handle!, url, bytes);
+      // A blob never enters the wasm: a copy there would stay for the rest of the run
+      result =
+        bucket === "blobs"
+          ? blobResult(migrateBlob(this.#handle!, url, bytes.length, hashOf(bytes)), bytes)
+          : migrate(this.#handle!, url, bytes);
     } catch (error) {
       const message = messageOf(error);
       // The rules refused the object; anything else is a fault in this package

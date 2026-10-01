@@ -843,6 +843,37 @@ pub fn create_file(
     created(file_object(&made.file)?, meta)
 }
 
+/// A media id computed a chunk at a time, for bytes too large to copy into the wasm whole.
+/// Opaque to JS; `hasherFinish` consumes it. The migration engine is its caller, so it ships
+/// with the migrator.
+#[cfg(feature = "migrator")]
+#[wasm_bindgen]
+pub struct Hasher {
+    inner: blake3::Hasher,
+}
+
+#[cfg(feature = "migrator")]
+#[wasm_bindgen(js_name = hasherNew)]
+pub fn hasher_new() -> Hasher {
+    Hasher {
+        inner: blake3::Hasher::new(),
+    }
+}
+
+/// Feeds the next chunk; only the chunk is copied in.
+#[cfg(feature = "migrator")]
+#[wasm_bindgen(js_name = hasherUpdate)]
+pub fn hasher_update(hasher: &mut Hasher, chunk: &[u8]) {
+    hasher.inner.update(chunk);
+}
+
+/// The id of everything fed, spelled as `createFile` spells `meta.id`.
+#[cfg(feature = "migrator")]
+#[wasm_bindgen(js_name = hasherFinish)]
+pub fn hasher_finish(hasher: Hasher) -> String {
+    crate::traits::hash_id_from(&hasher.inner)
+}
+
 /// The path extension a declared type maps to; `"bin"` for anything unmapped or malformed.
 #[wasm_bindgen(js_name = mimeToExt)]
 pub fn mime_to_ext(declared: &str) -> String {
@@ -955,7 +986,7 @@ pub fn feed_uri_builder(author_id: String, feed_id: String) -> Result<String, Js
 // ---------------------------------------------------------------------------------------------
 
 #[cfg(feature = "migrator")]
-pub use migration::{create_migration, migrate, Migration};
+pub use migration::{create_migration, migrate, migrate_blob, Migration};
 
 #[cfg(feature = "migrator")]
 mod migration {
@@ -981,6 +1012,15 @@ mod migration {
     /// `{writes, dropped}`, each write as `readObject` reads it plus its `meta`, or `{skip}`
     /// with the category and, when the reader that refused it said why, its `note`. A File
     /// object is read into the run and writes nothing, so walk `files/` first.
+    /// A skip as the JS caller reads it: `{skip, note?}`.
+    fn skipped_js(skipped: &crate::migrate::Skipped) -> Result<JsValue, JsError> {
+        let mut result = serde_json::json!({ "skip": skipped.skip.as_str() });
+        if let Some(note) = &skipped.note {
+            result["note"] = note.clone().into();
+        }
+        to_js(&result)
+    }
+
     #[wasm_bindgen]
     pub fn migrate(
         migration: &mut Migration,
@@ -989,18 +1029,12 @@ mod migration {
     ) -> Result<JsValue, JsError> {
         let migrated = match migration.ctx.migrate(v0_path, bytes) {
             Ok(migrated) => migrated,
-            Err(skipped) => {
-                let mut result = serde_json::json!({ "skip": skipped.skip.as_str() });
-                if let Some(note) = skipped.note {
-                    result["note"] = note.into();
-                }
-                return to_js(&result);
-            }
+            Err(skipped) => return skipped_js(&skipped),
         };
         let owner = migration.ctx.owner();
         let writes = js_sys::Array::new();
         for (path, bytes) in migrated.writes {
-            writes.push(&write_js(owner, &path, bytes)?);
+            writes.push(&write_js(owner, &path, Some(bytes))?);
         }
         let dropped: Vec<String> = migrated.dropped.iter().map(ToString::to_string).collect();
         object_of(&[
@@ -1009,14 +1043,48 @@ mod migration {
         ])
     }
 
+    /// A 0.x blob by its path, its size and `hasherFinish` over its bytes, which stay with
+    /// the caller: a blob up to the media cap copied into the wasm grows its memory for the
+    /// rest of the run. `{writes: [{kind: "file", meta}], dropped: []}`, the caller PUTting
+    /// its own bytes at `meta.url`, or `{skip}` as `migrate` gives for the same bytes.
+    #[wasm_bindgen(js_name = migrateBlob)]
+    pub fn migrate_blob(
+        migration: &Migration,
+        v0_path: &str,
+        size: f64,
+        hash: &str,
+    ) -> Result<JsValue, JsError> {
+        // A JS number: a fraction or a negative is no size; one past u64 saturates, over the cap
+        if !(size >= 0.0 && size.fract() == 0.0) {
+            return Err(fail(
+                "Validation Error: a blob size is a non-negative integer",
+            ));
+        }
+        let path = match migration.ctx.blob_destination(v0_path, size as u64, hash) {
+            Ok(path) => path,
+            Err(skipped) => return skipped_js(&skipped),
+        };
+        let write = write_js(migration.ctx.owner(), &path, None)?;
+        object_of(&[
+            ("writes", &js_sys::Array::of1(&write).into()),
+            ("dropped", &js_sys::Array::new().into()),
+        ])
+    }
+
     /// A write as `readObject` reads it back, with where it goes, so after the PUT the
     /// engine holds what a later GET would give. Media is wrapped as it is: its bytes passed
     /// the same gate in the transform, and hashing them again would double the cost of a blob.
-    fn write_js(owner: &PubkyId, path: &str, bytes: Vec<u8>) -> Result<JsValue, JsError> {
+    /// Without bytes the write is only where they go, for media the caller holds.
+    fn write_js(owner: &PubkyId, path: &str, bytes: Option<Vec<u8>>) -> Result<JsValue, JsError> {
         let url = [PROTOCOL, owner.as_ref(), "/", path].concat();
         let parsed = ParsedUri::try_from(url.as_str())
             .map_err(|_| fail("Validation Error: unreachable, the transform read this path"))?;
         let id = parsed.resource.id().unwrap_or_default();
+        let meta = to_js(&Meta::new(owner, &id, format!("/{path}")))?;
+        let Some(bytes) = bytes else {
+            let kind = JsValue::from_str(ObjectKind::File.wire_name());
+            return object_of(&[("kind", &kind), ("meta", &meta)]);
+        };
         let object = match parsed.resource {
             Resource::File(_) => PubkySocialObject::File(PubkySocialFile(bytes)),
             _ => PubkySocialObject::from_uri_owned(&url, bytes).map_err(|_| {
@@ -1026,7 +1094,7 @@ mod migration {
         object_of(&[
             ("kind", &JsValue::from_str(object.kind().wire_name())),
             ("object", &object_js(&object)?),
-            ("meta", &to_js(&Meta::new(owner, &id, format!("/{path}")))?),
+            ("meta", &meta),
         ])
     }
 }
