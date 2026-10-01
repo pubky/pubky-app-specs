@@ -265,7 +265,7 @@ class Run {
         const flagObject = {
           migrated_at: Date.now() * 1000,
           transform_rev: transformRev,
-          skipped: this.#skipped,
+          skipped: this.#skippedSorted(),
         };
         const put = await this.#attempt(() => this.#port.putJson(flagUrl, flagObject));
         if (isFailure(put)) {
@@ -375,7 +375,7 @@ class Run {
       if (!message.startsWith(VALIDATION_ERROR)) throw new Error(message);
       return this.#count("invalid", path, message);
     }
-    if ("skip" in result) return this.#count(result.skip, path);
+    if ("skip" in result) return this.#count(result.skip, path, result.note);
     // The port can write the whole tree, the 0.x one included, which the run must never touch
     for (const write of result.writes) {
       if (!this.#roots.some((root) => write.meta.url.startsWith(root))) {
@@ -550,6 +550,12 @@ class Run {
     return this.#count("written", path);
   }
 
+  // Objects reach their outcome in a racy order, two at a time; the flag and the report list
+  // them sorted so two runs over one tree write the same bytes
+  #skippedSorted(): Partial<Record<Outcome, string[]>> {
+    return Object.fromEntries(Object.entries(this.#skipped).map(([outcome, paths]) => [outcome, [...paths].sort()]));
+  }
+
   #count(outcome: Outcome, path: string, note?: string): Outcome {
     this.#counts[outcome]++;
     if (outcome !== "written" && outcome !== "already_present") {
@@ -589,7 +595,7 @@ class Run {
       counts: { ...this.#counts },
       dropped: this.#dropped,
       droppedValues: this.#droppedValues,
-      skipped: this.#skipped,
+      skipped: this.#skippedSorted(),
       notes: this.#notes,
       ...(error ? { error } : {}),
     };

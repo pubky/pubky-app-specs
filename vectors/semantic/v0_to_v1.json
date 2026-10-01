@@ -40,6 +40,16 @@
         "content_type": "image/png",
         "size": 20
       }
+    },
+    {
+      "tsid": "0033000000008",
+      "body": {
+        "name": "padded.png",
+        "created_at": 1727740800000000,
+        "src": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/MBJ45JZNRNPZJEEJM8B6B7EZS8",
+        "content_type": " image/png ",
+        "size": 17
+      }
     }
   ],
   "vectors": [
@@ -217,7 +227,7 @@
       }
     },
     {
-      "name": "long post: the title is the first line with text, trimmed, truncated to 100 code points, trimmed again",
+      "name": "long post: the reader trims the content, the title is its first line, truncated to 100 code points, trimmed again",
       "kind": "post",
       "input": {
         "path": "pub/pubky.app/posts/0034A0X7NJ52P",
@@ -237,7 +247,7 @@
               "kind": "article",
               "content": {
                 "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "body": "\n  \naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  bcdef\nthe body"
+                "body": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  bcdef\nthe body"
               },
               "attachments": []
             }
@@ -288,7 +298,7 @@
       }
     },
     {
-      "name": "long post with no line of text and nothing else a note could carry skips",
+      "name": "long post with no line of text and nothing else a note could carry skips (an empty attachment list, which the 0.x reader accepts)",
       "kind": "post",
       "input": {
         "path": "pub/pubky.app/posts/0034A0X7NJ52T",
@@ -297,7 +307,7 @@
           "kind": "long",
           "parent": null,
           "embed": null,
-          "attachments": null
+          "attachments": []
         }
       },
       "expected": {
@@ -406,7 +416,7 @@
       }
     },
     {
-      "name": "unknown post kind",
+      "name": "unknown post kind: the 0.x reader refuses it",
       "kind": "post",
       "input": {
         "path": "pub/pubky.app/posts/0034A0X7NJ52Y",
@@ -419,7 +429,7 @@
         }
       },
       "expected": {
-        "skip": "unknown_post_kind"
+        "skip": "invalid"
       }
     },
     {
@@ -518,7 +528,7 @@
       "name": "bookmark: a target over 187 bytes takes the overflow form and rides in the content",
       "kind": "bookmark",
       "input": {
-        "path": "pub/pubky.app/bookmarks/8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        "path": "pub/pubky.app/bookmarks/37BP77VM6ASXMVCNMD0BRPGXPM",
         "body": {
           "uri": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "created_at": 1727740800000000
@@ -531,6 +541,27 @@
             "body": {
               "created_at": 1727740800000000,
               "target": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "bookmark: an uppercase scheme the 0.x reader kept as written folds before the web gate",
+      "kind": "bookmark",
+      "input": {
+        "path": "pub/pubky.app/bookmarks/J4G59AY78JXYC7S2FFAD51QPN0",
+        "body": {
+          "uri": "HTTPS://EXAMPLE.COM/Upper",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "priv/social/v1/bookmarks/aHR0cHM6Ly9FWEFNUExFLkNPTS9VcHBlcg.json",
+            "body": {
+              "created_at": 1727740800000000
             }
           }
         ]
@@ -602,7 +633,7 @@
       }
     },
     {
-      "name": "profile: display text trimmed, a blank status absent, a media image dereferenced",
+      "name": "profile: display text trimmed, a blank status absent, a media image dereferenced, a link as the reader re-serialized it",
       "kind": "user",
       "input": {
         "path": "pub/pubky.app/profile.json",
@@ -630,7 +661,7 @@
               "links": [
                 {
                   "title": "Home",
-                  "url": "https://alice.example"
+                  "url": "https://alice.example/"
                 }
               ]
             }
@@ -639,7 +670,7 @@
       }
     },
     {
-      "name": "profile: an image and a link the v1 gates refuse are dropped and reported, the profile survives",
+      "name": "profile: an image and a link the 0.x reader accepts and the v1 gates refuse are dropped and reported, the profile survives",
       "kind": "user",
       "input": {
         "path": "pub/pubky.app/profile.json",
@@ -669,7 +700,7 @@
               "links": [
                 {
                   "title": "Web",
-                  "url": "https://web.example"
+                  "url": "https://web.example/"
                 }
               ]
             }
@@ -685,7 +716,7 @@
       "name": "feed: private, id re-derived, tags folded deduplicated and sorted, a blank label and an empty list dropped as v0 read them, short renamed, name and icon carried",
       "kind": "feed",
       "input": {
-        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "path": "pub/pubky.app/feeds/3F9XC46YVTWFCQFM5N9PFASTYC",
         "body": {
           "feed": {
             "tags": [
@@ -732,7 +763,7 @@
       "name": "feed: a legacy feed with no icon and no filters, a wot reach and a domain filter",
       "kind": "feed",
       "input": {
-        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "path": "pub/pubky.app/feeds/HEF9M00TXH2DDE4X8HDJJFTQ5R",
         "body": {
           "feed": {
             "tags": null,
@@ -774,7 +805,7 @@
       "name": "feed with unknown content: no derivable id",
       "kind": "feed",
       "input": {
-        "path": "pub/pubky.app/feeds/5F2NDB2HJGJ2HJBY6MPQ0H5R0G",
+        "path": "pub/pubky.app/feeds/7Q6F95WC9GBHEQPVYS30Y4MS2R",
         "body": {
           "feed": {
             "tags": null,
@@ -835,7 +866,7 @@
       "name": "tag: target rewritten, label folded, id re-derived",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "path": "pub/pubky.app/tags/THQGMPHGA5R4CC07PX9BZNYMKM",
         "body": {
           "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/posts/0034A0X7NJ52A",
           "label": "  Rust ",
@@ -859,7 +890,7 @@
       "name": "tag: a web target is not rewritten",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "path": "pub/pubky.app/tags/QKP95D1SNK2RB1YG19EQXB8G00",
         "body": {
           "uri": "https://example.com/page",
           "label": "web",
@@ -883,7 +914,7 @@
       "name": "tag: a media target is dereferenced",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/86805FC1CSFZD4W6HZ09S24QWG",
+        "path": "pub/pubky.app/tags/Y7Y52NN7SC9Q0YA2DP76NAB3TG",
         "body": {
           "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/files/0033000000000",
           "label": "pic",
@@ -904,21 +935,14 @@
       }
     },
     {
-      "name": "a duplicate key keeps its last value",
+      "name": "a duplicate key: the 0.x reader cannot read it",
       "kind": "follow",
       "input": {
         "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
         "raw": "{\"created_at\":1,\"created_at\":1727740800000000}"
       },
       "expected": {
-        "writes": [
-          {
-            "path": "pub/social/v1/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy.json",
-            "body": {
-              "created_at": 1727740800000000
-            }
-          }
-        ]
+        "skip": "shape"
       }
     },
     {
@@ -933,7 +957,7 @@
       }
     },
     {
-      "name": "bytes that are not a JSON object skip",
+      "name": "bytes that are not JSON: the parser cannot read them",
       "kind": "follow",
       "input": {
         "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
@@ -941,6 +965,24 @@
       },
       "expected": {
         "skip": "malformed"
+      }
+    },
+    {
+      "name": "a JSON array the 0.x reader takes as a follow migrates like any follow it accepts",
+      "kind": "follow",
+      "input": {
+        "path": "pub/pubky.app/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy",
+        "raw": "[1727740800000000]"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/follows/pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy.json",
+            "body": {
+              "created_at": 1727740800000000
+            }
+          }
+        ]
       }
     },
     {
@@ -957,7 +999,7 @@
       }
     },
     {
-      "name": "tombstone post: a [DELETED] content is the v0 deletion marker and never becomes a live object",
+      "name": "tombstone post: the 0.x reader refuses a [DELETED] content, so it never becomes a live object",
       "kind": "post",
       "input": {
         "path": "pub/pubky.app/posts/0034A0X7NJ530",
@@ -970,11 +1012,11 @@
         }
       },
       "expected": {
-        "skip": "tombstone"
+        "skip": "invalid"
       }
     },
     {
-      "name": "tombstone profile: a [DELETED] name is the v0 deletion marker",
+      "name": "tombstone profile: the 0.x reader reads a [DELETED] name as anonymous, and that is what migrates",
       "kind": "user",
       "input": {
         "path": "pub/pubky.app/profile.json",
@@ -987,7 +1029,14 @@
         }
       },
       "expected": {
-        "skip": "tombstone"
+        "writes": [
+          {
+            "path": "pub/social/v1/profile.json",
+            "body": {
+              "name": "anonymous"
+            }
+          }
+        ]
       }
     },
     {
@@ -1072,20 +1121,20 @@
       "name": "tag: the owner's blob reference takes the media spelling",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ536",
+        "path": "pub/pubky.app/tags/RZ59MD6R4SQZ0TCKK6R75W5C24",
         "body": {
           "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/blobs/AKSZ57W2RFKHV1EHK007FQQ8TW",
-          "label": "pic",
+          "label": "blob",
           "created_at": 1727740800000000
         }
       },
       "expected": {
         "writes": [
           {
-            "path": "pub/social/v1/tags/RWAN47EWPX7RW7SKWT6YX11BP8.json",
+            "path": "pub/social/v1/tags/1NPGCZ5Z0PV0CE5Z95NY93WNK8.json",
             "body": {
               "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/files/AKSZ57W2RFKHV1EHK007FQQ8TW.png",
-              "label": "pic",
+              "label": "blob",
               "created_at": 1727740800000000
             }
           }
@@ -1096,7 +1145,7 @@
       "name": "tag: a legacy path the v0 parser calls unknown stays as written",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ538",
+        "path": "pub/pubky.app/tags/H9P421FAS5BFF4S9HPFGNRZRRC",
         "body": {
           "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/widgets/0032SSN7Q4EVG",
           "label": "odd",
@@ -1117,10 +1166,10 @@
       }
     },
     {
-      "name": "tag: the short pubky spelling canonicalizes to the full form before the rewrite",
+      "name": "tag: the short pubky spelling is not a URL to the 0.x reader, which refuses the tag",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ53A",
+        "path": "pub/pubky.app/tags/B4PJ0PSSEDB26RD35RDQ8QS9N4",
         "body": {
           "uri": "pubkyoperrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
           "label": "short",
@@ -1128,23 +1177,14 @@
         }
       },
       "expected": {
-        "writes": [
-          {
-            "path": "pub/social/v1/tags/X4ZWJ5Z8WBVJYMRSNHEYV356ER.json",
-            "body": {
-              "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/social/v1/posts/0032SSN7Q4EVG",
-              "label": "short",
-              "created_at": 1727740800000000
-            }
-          }
-        ]
+        "skip": "invalid"
       }
     },
     {
       "name": "tag: a pubky reference nothing can canonicalize stays as written and the reader refuses it",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ53C",
+        "path": "pub/pubky.app/tags/0MT4D09162STJ2KKJ5W9HBZ4GW",
         "body": {
           "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG?x=1",
           "label": "bad",
@@ -1159,7 +1199,7 @@
       "name": "tag: a target that is the owner's v0 feed keeps the legacy spelling, since feeds migrate private under a new id",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ53E",
+        "path": "pub/pubky.app/tags/AY9PVJ6P7SN10CC4YQNDTFCM1C",
         "body": {
           "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/feeds/0032SSN7Q4EVG",
           "label": "fav",
@@ -1183,7 +1223,7 @@
       "name": "tag: a target that is a v0 tag keeps the legacy spelling, since the v1 tag id is not derivable from it",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ53G",
+        "path": "pub/pubky.app/tags/DJZFW3JKP1XA0ZQ5DPPC8HCY3C",
         "body": {
           "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/tags/0034A0X7NJ536",
           "label": "meta",
@@ -1207,7 +1247,7 @@
       "name": "tag: a target that is a v0 follow takes the v1 follow spelling, .json leaf included",
       "kind": "tag",
       "input": {
-        "path": "pub/pubky.app/tags/0034A0X7NJ53J",
+        "path": "pub/pubky.app/tags/DM99G5X30XEQTCNPTTV8CWR1RG",
         "body": {
           "uri": "pubky://pxnu33x7jtpx9ar1ytsi4yxbp6a5o36gwhffs8zoxmbuptici1jy/pub/pubky.app/follows/operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo",
           "label": "mutual",
@@ -1252,6 +1292,95 @@
             }
           }
         ]
+      }
+    },
+    {
+      "name": "tag: a stored id the 0.x reader refuses skips as invalid, never re-derived",
+      "kind": "tag",
+      "input": {
+        "path": "pub/pubky.app/tags/8Z8CWH8NVYQY39ZEBFGKQWWEKG",
+        "body": {
+          "uri": "pubky://operrr8wsbpr3ue9d4qj41ge1kcc6r7fdiy6o3ugjrrhi4y77rdo/pub/pubky.app/posts/0032SSN7Q4EVG",
+          "label": "cool",
+          "created_at": 1727740800000000
+        }
+      },
+      "expected": {
+        "skip": "invalid"
+      }
+    },
+    {
+      "name": "profile: an empty image the 0.x reader refuses skips as invalid, it is not dropped",
+      "kind": "user",
+      "input": {
+        "path": "pub/pubky.app/profile.json",
+        "body": {
+          "name": "Erin",
+          "bio": null,
+          "image": "",
+          "links": null,
+          "status": null
+        }
+      },
+      "expected": {
+        "skip": "invalid"
+      }
+    },
+    {
+      "name": "tombstone profile, padded: the reader trims the name before it reads [DELETED] as anonymous",
+      "kind": "user",
+      "input": {
+        "path": "pub/pubky.app/profile.json",
+        "body": {
+          "name": " [DELETED] ",
+          "bio": null,
+          "image": null,
+          "links": null,
+          "status": null
+        }
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/profile.json",
+            "body": {
+              "name": "anonymous"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "blob: a padded content type comes trimmed from the reader and names the extension",
+      "kind": "blob",
+      "input": {
+        "path": "pub/pubky.app/blobs/MBJ45JZNRNPZJEEJM8B6B7EZS8",
+        "raw": "padded type bytes"
+      },
+      "expected": {
+        "writes": [
+          {
+            "path": "pub/social/v1/files/MBJ45JZNRNPZJEEJM8B6B7EZS8.png",
+            "raw": "padded type bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "long post with no text and no attachment list: the 0.x reader refuses it",
+      "kind": "post",
+      "input": {
+        "path": "pub/pubky.app/posts/0034A0X7NJ54A",
+        "body": {
+          "content": "  \n\t\n  ",
+          "kind": "long",
+          "parent": null,
+          "embed": null,
+          "attachments": null
+        }
+      },
+      "expected": {
+        "skip": "invalid"
       }
     }
   ]

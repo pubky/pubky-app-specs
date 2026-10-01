@@ -180,8 +180,8 @@ export type MigratedWrite = ReadObject & { meta: Meta };
 // Spelled by hand; it follows the Rust `Dropped` in `src/migrate.rs`.
 export type Dropped = "profile_image" | `profile_link[${number}]`;
 
-/** What one 0.x object became, or why it did not. */
-export type MigrateResult = { writes: MigratedWrite[]; dropped: Dropped[] } | { skip: SkipReason };
+/** What one 0.x object became, or why it did not; `note` is present when the 0.x reader or the JSON parser refused the object, or the 0.x path parser its path, and says why. */
+export type MigrateResult = { writes: MigratedWrite[]; dropped: Dropped[] } | { skip: SkipReason; note?: string };
 
 // ---- the entry ----
 

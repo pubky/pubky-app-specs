@@ -55,6 +55,17 @@ pub use models::post::{
 pub use models::tag::PubkyAppTag;
 pub use models::user::{PubkyAppUser, PubkyAppUserLink};
 pub use models::PubkyAppObject;
+
+/// v0-neutral names for the frozen types the migrator reads through, so no code outside this
+/// module spells a pre-rename identifier. Crate-internal: the frozen types have one public path.
+pub(crate) use models::{
+    blob::PubkyAppBlob as V0Blob, bookmark::PubkyAppBookmark as V0Bookmark,
+    feed::PubkyAppFeed as V0Feed, file::PubkyAppFile as V0File, follow::PubkyAppFollow as V0Follow,
+    mute::PubkyAppMute as V0Mute, post::PubkyAppCollectionContent as V0CollectionContent,
+    post::PubkyAppPost as V0Post, post::PubkyAppPostKind as V0PostKind, tag::PubkyAppTag as V0Tag,
+    user::PubkyAppUser as V0User,
+};
+pub(crate) use traits::Validatable as V0Validatable;
 pub use uri::{
     base_uri_builder, blob_uri_builder, bookmark_uri_builder, feed_uri_builder, file_uri_builder,
     follow_uri_builder, is_pubky_scheme, last_read_uri_builder, mute_uri_builder, post_uri_builder,

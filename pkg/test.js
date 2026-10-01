@@ -101,7 +101,7 @@ describe("before init()", () => {
     assert.ok(Number.isSafeInteger(transformRev) && transformRev >= 1);
     assert.strictEqual(transformRev, json.transformRev);
     assert.strictEqual(require("./migrationData.cjs").transformRev, transformRev);
-    for (const reason of ["malformed", "shape", "tombstone", "oversize", "invalid", "not_migrated"]) {
+    for (const reason of ["malformed", "shape", "oversize", "invalid", "not_migrated"]) {
       assert.ok(skipReasons.includes(reason), reason);
     }
   });
@@ -1039,7 +1039,10 @@ describe("pubky-social-specs", () => {
         // The full URL a LIST returns is the same input
         assert.deepStrictEqual(migrate(run, `pubky://${owner}/${input.path}`, bytesOf(input)), result, name);
         if (expected.skip) {
-          assert.deepStrictEqual(result, { skip: expected.skip }, name);
+          const { skip, note, ...rest } = result;
+          assert.strictEqual(skip, expected.skip, name);
+          assert.ok(note === undefined || typeof note === "string", name);
+          assert.deepStrictEqual(rest, {}, name);
           assert.ok(skipReasons.includes(result.skip), name);
           seen.add(result.skip);
           continue;
@@ -1057,8 +1060,8 @@ describe("pubky-social-specs", () => {
           assert.deepStrictEqual(readObject(meta.url, body), { kind, object }, name);
         }
       }
-      // shape is a File that does not read, oversize a blob over 100 MB: neither is a vector
-      const expected = skipReasons.filter((r) => r !== "shape" && r !== "oversize");
+      // oversize is a blob over 100 MB, no vector; the Rust tests reach it through transform
+      const expected = skipReasons.filter((r) => r !== "oversize");
       assert.deepStrictEqual([...seen].sort(), [...expected].sort());
     });
 
@@ -1098,14 +1101,22 @@ describe("pubky-social-specs", () => {
       const result = migrate(run, ...vector("profile: an image and a link"));
       assert.deepStrictEqual(result.dropped, ["profile_image", "profile_link[0]"]);
       assert.strictEqual(result.writes[0].object.image, null);
-      assert.deepStrictEqual(result.writes[0].object.links, [{ title: "Web", url: "https://web.example" }]);
+      assert.deepStrictEqual(result.writes[0].object.links, [{ title: "Web", url: "https://web.example/" }]);
     });
 
-    it("a tombstone, an unknown kind and a bad object skip; nothing throws", () => {
-      assert.deepStrictEqual(migrate(run, ...vector("tombstone post")), { skip: "tombstone" });
-      assert.deepStrictEqual(migrate(run, ...vector("unknown post kind")), { skip: "unknown_post_kind" });
+    it("what the 0.x reader stored migrates and what it refuses skips; nothing throws", () => {
+      assert.strictEqual(migrate(run, ...vector("tombstone profile")).writes[0].object.name, "anonymous");
+      assert.deepStrictEqual(migrate(run, ...vector("tombstone post")), {
+        skip: "invalid",
+        note: "Validation Error: Content cannot be the reserved keyword '[DELETED]'",
+      });
+      assert.deepStrictEqual(migrate(run, ...vector("unknown post kind")), { skip: "invalid", note: "Validation Error: post kind is unknown" });
       const follow = `pub/pubky.app/follows/${RIO}`;
-      assert.deepStrictEqual(migrate(run, follow, new TextEncoder().encode("not json")), { skip: "malformed" });
+      const bad = migrate(run, follow, new TextEncoder().encode("not json"));
+      assert.strictEqual(bad.skip, "malformed");
+      assert.match(bad.note, /expected ident/);
+      const array = migrate(run, follow, new TextEncoder().encode("[1727740800000000]"));
+      assert.strictEqual(array.writes[0].object.created_at, 1727740800000000);
       assert.deepStrictEqual(migrate(run, "pub/pubky.app/last_read", stored({})), { skip: "not_migrated" });
       // Another owner's tree is not this run's to migrate
       assert.deepStrictEqual(migrate(run, `pubky://${RIO}/pub/pubky.app/profile.json`, stored({ name: "Alice" })), { skip: "not_migrated" });
@@ -1120,9 +1131,9 @@ describe("pubky-social-specs", () => {
       foreign.free();
     });
 
-    it("a File that does not read skips, and its references stay as written", () => {
+    it("a File the 0.x reader refuses skips, and its references stay as written", () => {
       const spare = createMigration(owner);
-      assert.deepStrictEqual(migrate(spare, "pub/pubky.app/files/0033000000000", stored({ name: 1 })), { skip: "shape" });
+      assert.strictEqual(migrate(spare, "pub/pubky.app/files/0033000000000", stored({ name: 1 })).skip, "shape");
       const [write] = migrate(spare, ...vector("tag: a media target")).writes;
       assert.strictEqual(write.object.uri, `pubky://${owner}/pub/pubky.app/files/0033000000000`);
       spare.free();
