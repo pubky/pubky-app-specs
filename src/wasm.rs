@@ -844,12 +844,15 @@ pub fn create_file(
 }
 
 /// A media id computed a chunk at a time, for bytes too large to copy into the wasm whole.
-/// Opaque to JS; `hasherFinish` consumes it.
+/// Opaque to JS; `hasherFinish` consumes it. The migration engine is its caller, so it ships
+/// with the migrator.
+#[cfg(feature = "migrator")]
 #[wasm_bindgen]
 pub struct Hasher {
     inner: blake3::Hasher,
 }
 
+#[cfg(feature = "migrator")]
 #[wasm_bindgen(js_name = hasherNew)]
 pub fn hasher_new() -> Hasher {
     Hasher {
@@ -858,12 +861,14 @@ pub fn hasher_new() -> Hasher {
 }
 
 /// Feeds the next chunk; only the chunk is copied in.
+#[cfg(feature = "migrator")]
 #[wasm_bindgen(js_name = hasherUpdate)]
 pub fn hasher_update(hasher: &mut Hasher, chunk: &[u8]) {
     hasher.inner.update(chunk);
 }
 
 /// The id of everything fed, spelled as `createFile` spells `meta.id`.
+#[cfg(feature = "migrator")]
 #[wasm_bindgen(js_name = hasherFinish)]
 pub fn hasher_finish(hasher: Hasher) -> String {
     crate::traits::hash_id_from(&hasher.inner)
